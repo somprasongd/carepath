@@ -400,6 +400,19 @@ func TestConsoleServed(t *testing.T) {
 	if !strings.Contains(string(raw), "Mock HIS Console") {
 		t.Fatalf("/console body does not look like the console page")
 	}
+	// Service selection is dropdown-based (no free-text typos): the page must
+	// carry the service catalog the pickers populate from.
+	if !strings.Contains(string(raw), "SERVICE_CATALOG") {
+		t.Fatal("/console body is missing the SERVICE_CATALOG the pickers use")
+	}
+	for _, code := range []string{"REGISTRATION", "SCREENING", "DOCTOR", "LAB", "PHARMACY", "XRAY", "CT"} {
+		if !strings.Contains(string(raw), `"`+code+`"`) {
+			t.Fatalf("/console catalog is missing %q", code)
+		}
+	}
+	if strings.Contains(string(raw), `id="new-codes"`) {
+		t.Fatal("/console still has the free-text new-codes input")
+	}
 
 	req, _ = http.NewRequest(http.MethodGet, "/", nil)
 	resp, err = app.Test(req)
