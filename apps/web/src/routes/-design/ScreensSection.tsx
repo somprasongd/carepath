@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react'
 import { NavigateScreen } from '../patient/-NavigateScreen'
+import { StaffAuthProvider } from '@/auth/StaffAuthProvider'
 import { LoginScreen } from '../-LoginScreen'
 import { Overview } from '../staff/-Overview'
 import { Queue } from '../staff/-Queue'
@@ -46,22 +48,22 @@ export function ScreensSection() {
       <SubHead>เจ้าหน้าที่ · มือถือ</SubHead>
       <div className="ds-frames">
         <ScreenFrame title="ภาพรวม" {...MOBILE}>
-          <Overview />
+          <StaffSession><Overview /></StaffSession>
         </ScreenFrame>
         <ScreenFrame title="ผังจุดบริการ" {...MOBILE}>
-          <ServicePoints />
+          <StaffSession><ServicePoints /></StaffSession>
         </ScreenFrame>
       </div>
 
       <SubHead>เจ้าหน้าที่ · เดสก์ท็อป (คอนโซลหน้าเคาน์เตอร์)</SubHead>
       <div className="ds-frames">
         <ScreenFrame title="ภาพรวม" {...DESKTOP}>
-          <Overview />
+          <StaffSession><Overview /></StaffSession>
         </ScreenFrame>
       </div>
       <div className="ds-frames mt-6">
         <ScreenFrame title="ผังจุดบริการ" {...DESKTOP}>
-          <ServicePoints />
+          <StaffSession><ServicePoints /></StaffSession>
         </ScreenFrame>
       </div>
 
@@ -70,32 +72,41 @@ export function ScreensSection() {
       </SubHead>
       <div className="ds-frames">
         <ScreenFrame title="เข้าสู่ระบบ · เลือกบทบาท" {...MOBILE}>
-          <LoginScreen onSignIn={() => {}} />
+          <StaffSession><LoginScreen /></StaffSession>
         </ScreenFrame>
         <ScreenFrame title="แผนการดูแล (Pathway Template)" {...MOBILE}>
-          <PathwayTemplates />
+          <StaffSession><PathwayTemplates /></StaffSession>
         </ScreenFrame>
         <ScreenFrame title="เรียกคิว" {...MOBILE}>
-          <Queue />
+          <StaffSession><Queue /></StaffSession>
         </ScreenFrame>
       </div>
 
       <SubHead>เจ้าหน้าที่ · เข้าสู่ระบบ, แผนการดูแล, เรียกคิว · เดสก์ท็อป</SubHead>
       <div className="ds-frames">
         <ScreenFrame title="เข้าสู่ระบบ · เลือกบทบาท" {...DESKTOP}>
-          <LoginScreen onSignIn={() => {}} />
+          <StaffSession><LoginScreen /></StaffSession>
         </ScreenFrame>
       </div>
       <div className="ds-frames mt-6">
         <ScreenFrame title="แผนการดูแล (Pathway Template)" {...DESKTOP}>
-          <PathwayTemplates />
+          <StaffSession><PathwayTemplates /></StaffSession>
         </ScreenFrame>
       </div>
       <div className="ds-frames mt-6">
         <ScreenFrame title="เรียกคิว" {...DESKTOP}>
-          <Queue />
+          <StaffSession><Queue /></StaffSession>
         </ScreenFrame>
       </div>
     </Section>
   )
+}
+
+/**
+ * The gallery renders the real login form, which reads the staff auth
+ * context; the provider is stubbed in so the frame shows the signed-out
+ * state (submitting would hit the live API and land on its error line).
+ */
+function StaffSession({ children }: { children: ReactNode }) {
+  return <StaffAuthProvider>{children}</StaffAuthProvider>
 }

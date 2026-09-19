@@ -23,8 +23,8 @@ import {
   servicePointLoad,
   type ServicePointLoad,
 } from '@/mocks/demo-data'
+import { useStaffAuth } from '@/auth/StaffAuthContext'
 import { StaffShell } from './-StaffShell'
-import { staffRole } from './-nav'
 
 const columns: Column<ServicePointLoad>[] = [
   { key: 'point', header: 'จุดบริการ', render: (sp) => <ZoneChip zone={sp.zone}>{sp.code}</ZoneChip> },
@@ -48,9 +48,10 @@ const columns: Column<ServicePointLoad>[] = [
  */
 export function Overview() {
   const busiest = servicePointLoad.find((sp) => sp.load === 'busy')
+  const { identity } = useStaffAuth()
 
   return (
-    <StaffShell trailing={<RefPill>{staffRole}</RefPill>}>
+    <StaffShell trailing={<RefPill>{identity?.displayName ?? 'เจ้าหน้าที่'}</RefPill>}>
       <div className="mb-0.5 flex items-start justify-between @7xl:mb-7">
         <div>
           <PageTitle className={staffTitle}>ภาพรวมการไหลของผู้ป่วยวันนี้</PageTitle>

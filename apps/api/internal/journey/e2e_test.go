@@ -206,7 +206,8 @@ func TestIngestToPlanEndToEnd(t *testing.T) {
 	// through the real HTTP-backed journey service, the plan refreshes
 	// synchronously, and the command lands in the audit table.
 	view, err = journeys.TransitionStep(ctx, "VISIT-E2E", "CLINIC:MED:1",
-		journey.TransitionCommand{CommandID: "E2E-CMD-1", To: journey.CommandToStarted}, "e2e-test")
+		journey.TransitionCommand{CommandID: "E2E-CMD-1", To: journey.CommandToStarted}, "e2e-test",
+		journey.Actor{UserID: "user-e2e", Username: "e2e"})
 	if err != nil {
 		t.Fatalf("TransitionStep STARTED: %v", err)
 	}
@@ -214,7 +215,8 @@ func TestIngestToPlanEndToEnd(t *testing.T) {
 		t.Fatalf("clinic after STARTED = %s, want STARTED", s.Status)
 	}
 	view, err = journeys.TransitionStep(ctx, "VISIT-E2E", "CLINIC:MED:1",
-		journey.TransitionCommand{CommandID: "E2E-CMD-2", To: journey.CommandToCompleted}, "e2e-test")
+		journey.TransitionCommand{CommandID: "E2E-CMD-2", To: journey.CommandToCompleted}, "e2e-test",
+		journey.Actor{UserID: "user-e2e", Username: "e2e"})
 	if err != nil {
 		t.Fatalf("TransitionStep COMPLETED: %v", err)
 	}

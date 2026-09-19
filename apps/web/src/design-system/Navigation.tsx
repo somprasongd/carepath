@@ -44,10 +44,12 @@ export function BottomTabBar({ items, activeId, onSelect, className }: NavProps)
 export type SideRailProps = NavProps & {
   /** Who is signed in, e.g. "ประชาสัมพันธ์". */
   role: string
+  /** Shown as a sign-out button under the role card when the session is real. */
+  onSignOut?: () => void
 }
 
 /** Staff desktop: the same 4 destinations as a fixed 220px rail. */
-export function SideRail({ items, activeId, onSelect, role, className }: SideRailProps) {
+export function SideRail({ items, activeId, onSelect, role, onSignOut, className }: SideRailProps) {
   return (
     <nav
       className={cn(
@@ -86,6 +88,15 @@ export function SideRail({ items, activeId, onSelect, role, className }: SideRai
       <div className="rounded-[10px] bg-neutral px-3 py-2.5">
         <div className="mb-0.5 text-[10px] text-ink-muted">เข้าสู่ระบบในฐานะ</div>
         <div className="font-sans text-body-sm font-bold text-ink">{role}</div>
+        {onSignOut && (
+          <button
+            type="button"
+            className="mt-2 cursor-pointer border-0 bg-none p-0 font-sans text-caption font-semibold text-ink-muted underline underline-offset-2 hover:text-ink"
+            onClick={onSignOut}
+          >
+            ออกจากระบบ
+          </button>
+        )}
       </div>
     </nav>
   )

@@ -1,16 +1,24 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { Navigate, createFileRoute } from '@tanstack/react-router'
+import { StaffAuthProvider } from '@/auth/StaffAuthProvider'
+import { useStaffAuth } from '@/auth/StaffAuthContext'
 import { LoginScreen } from './-LoginScreen'
 
-/** Staff/admin/executive entry point. Patients never see this — they enter via LINE. */
+/** Staff/admin entry point. Patients never see this — they enter via LINE. */
 export const Route = createFileRoute('/login')({
-  component: LoginRoute,
+  component: () => (
+    <div className="h-dvh">
+      <StaffAuthProvider>
+        <LoginRoute />
+      </StaffAuthProvider>
+    </div>
+  ),
 })
 
+// Already signed in (a session restored from the kept refresh token)? Straight
+// to the console — the form is for everyone else.
 function LoginRoute() {
-  const navigate = useNavigate()
-  return (
-    <div className="h-dvh">
-      <LoginScreen onSignIn={(landing) => navigate({ to: landing })} />
-    </div>
-  )
+  const { status } = useStaffAuth()
+  if (status === 'authenticated') return <Navigate to="/staff/queue" replace />
+  if (status === 'loading') return null
+  return <LoginScreen />
 }

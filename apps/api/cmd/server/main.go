@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -15,6 +16,8 @@ import (
 	"github.com/swaggo/swag"
 
 	_ "carepath/apps/api/docs"
+	"carepath/apps/api/internal/auth"
+	authpostgres "carepath/apps/api/internal/auth/postgres"
 	"carepath/apps/api/internal/his/httpclient"
 	"carepath/apps/api/internal/his/ingest"
 	ingestpostgres "carepath/apps/api/internal/his/ingest/postgres"
@@ -111,6 +114,24 @@ func run(ctx context.Context, log *slog.Logger) error {
 	sessionTTL := envDuration("SESSION_TTL", 24*time.Hour)
 	sessions := session.NewService(sessionpostgres.New(database), lineVerifier, allowDemoAuth, sessionTTL)
 
+	// Staff/admin auth (ADR-0010): argon2id passwords, a stateless 15-minute
+	// JWT access token, and a rotating single-use refresh token. JWT_SECRET
+	// has no default on purpose — an unset secret mints a random key at boot
+	// (tokens then die with the process) and says so, instead of silently
+	// sharing one hardcoded key with every deployment.
+	jwtSecret := []byte(os.Getenv("JWT_SECRET"))
+	if len(jwtSecret) == 0 {
+		jwtSecret = make([]byte, 32)
+		if _, err := rand.Read(jwtSecret); err != nil {
+			return fmt.Errorf("generate boot-time JWT secret: %w", err)
+		}
+		log.Warn("JWT_SECRET not set; using a random boot-time key — tokens will not survive a restart")
+	}
+	accessTokenTTL := envDuration("ACCESS_TOKEN_TTL", 15*time.Minute)
+	refreshTokenTTL := envDuration("REFRESH_TOKEN_TTL", 168*time.Hour)
+	authService := auth.NewService(authpostgres.New(database), database,
+		auth.NewTokenIssuer(jwtSecret, accessTokenTTL), refreshTokenTTL)
+
 	app := fiber.New()
 	app.Use(logger.Middleware(log))
 	app.Use(func(c fiber.Ctx) error {
@@ -139,7 +160,18 @@ func run(ctx context.Context, log *slog.Logger) error {
 	})
 
 	session.NewHandler(sessions).Register(app.Group("/api/v1"))
-	journey.NewHandler(journeys).Register(app.Group("/api/v1"))
+	authHandler := auth.NewHandler(authService)
+	authHandler.Register(app.Group("/api/v1"))
+	// /auth/me sits behind the same guard as the staff surfaces: any
+	// authenticated staff user, no particular role. The guard is per-route,
+	// never group-level — fiber group middleware on /api/v1 would seal the
+	// patient routes too.
+	authHandler.RegisterMe(app.Group("/api/v1"), auth.RequireRole(authService))
+	// The staff commands and the monitor read require STAFF or ADMIN; the
+	// patient journey read and every other route above stay open
+	// (ADR-0010 §7 — a blanket guard would break the patient screens).
+	journey.NewHandler(journeys).Register(app.Group("/api/v1"),
+		auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin))
 	servicepoint.NewHandler(servicePoints).Register(app.Group("/api/v1"))
 	locationHandler := location.NewHandler(locations)
 	locationHandler.Register(app.Group("/api/v1"))

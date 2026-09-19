@@ -109,10 +109,9 @@ ordered step list, which it does not (ADR-0009). They were deprecated when the
 contract first moved to the planner model and removed once nothing depended on
 them any longer — superseded fully by `GET /api/v1/journeys/{visitId}`.
 
-Implemented today: health, auth session (patient), the journey projection with
-step transitions and the clinic round override, the staff visit monitor, and
-the service point reads (with places/floors resolved from Postgres). The route
-and location endpoints remain intentionally documented as the next build
-slices. **Staff authentication (`/api/v1/auth/login|refresh|logout|me`) is
-specified in the contract and ADR-0010 but not yet implemented** — the staff
-endpoints above still answer without a token until the `auth` module lands.
+Implemented today: health, auth session (patient), staff authentication
+(`login`/`refresh`/`logout`/`me` per ADR-0010 — the staff visit monitor, step
+transitions, and the clinic round override now require a `STAFF`/`ADMIN`
+access token), the journey projection, the service point reads (with places/floors
+resolved from Postgres), the navigation route API, and the location
+report/read endpoints (QR + Zigbee simulator).
