@@ -27,8 +27,9 @@ type Floor struct {
 // Place is a physical place on a floor plan, identified by the stable SVG
 // place id (e.g. REG-01) that also keys the navigation graphs in
 // packages/floorplans. X/Y are floor-local SVG units of the place's entry
-// node; EntryNodeID references that node — a plain string until the graph
-// model lands (#26). Floor is resolved on read.
+// node; EntryNodeID references that node in the navigation graph
+// (nav_node, #26) as a floor-prefixed global id, e.g. I-1301/node-reception.
+// Floor is resolved on read.
 type Place struct {
 	ID          string   `json:"id"`
 	FloorID     string   `json:"floorId"`

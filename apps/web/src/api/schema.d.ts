@@ -591,7 +591,7 @@ export interface components {
             placeId: string;
             place?: components["schemas"]["Place"] | null;
         };
-        /** @description A physical place on a floor plan, keyed by the stable SVG place id that also keys the navigation graphs in packages/floorplans. x/y are floor-local SVG units of the place's entry node; entryNodeId references that node in the floor graph (a plain string until the graph model lands in */
+        /** @description A physical place on a floor plan, keyed by the stable SVG place id that also keys the navigation graphs in packages/floorplans. x/y are floor-local SVG units of the place's entry node; entryNodeId references that node in the navigation graph (#26) as a floor-prefixed global id, e.g. I-1301/node-reception. */
         Place: {
             id: string;
             floorId: string;
