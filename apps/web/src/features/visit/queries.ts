@@ -1,5 +1,5 @@
-import { queryOptions, useQuery } from '@tanstack/react-query'
-import { ApiError, apiGet } from '@/api/client'
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError, apiGet, apiPost } from '@/api/client'
 import type { components } from '@/api/schema'
 
 // Every queryFn here throws ApiError, so hooks can read `error.status`.
@@ -61,4 +61,32 @@ export function journeyQueryOptions(visitId: string) {
 
 export function useJourney(visitId: string) {
   return useQuery(journeyQueryOptions(visitId))
+}
+
+/** The statuses the staff controls can command (#38) — both HIS-legal forwards. */
+export type StepTargetStatus = Extract<
+  components['schemas']['TransitionRequest']['to'],
+  'STARTED' | 'COMPLETED'
+>
+
+/**
+ * Staff step controls (#38): transition one step via the application API —
+ * never the DB — tagging the audit trail with source "staff-web". The HIS
+ * remains the system of record; the 200 body is the refreshed journey, so
+ * the detail cache is written directly and the list just needs invalidating.
+ */
+export function useTransitionStep(visitId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { sequence: number; to: StepTargetStatus }) =>
+      apiPost<Journey>(
+        `/api/v1/journeys/${encodeURIComponent(visitId)}/steps/${input.sequence}/transition`,
+        { to: input.to, source: 'staff-web' },
+      ),
+    onSuccess: (journey) => {
+      queryClient.setQueryData(journeyQueryOptions(visitId).queryKey, journey)
+      void queryClient.invalidateQueries({ queryKey: ['staff', 'visits'] })
+    },
+  })
 }

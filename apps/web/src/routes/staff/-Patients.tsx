@@ -3,18 +3,22 @@ import { useQuery } from '@tanstack/react-query'
 import { Button, InfoNote, Meta, PageTitle, staffTitle } from '@/design-system'
 import {
   journeyQueryOptions,
+  stepAction,
+  transitionErrorText,
   useStaffVisits,
+  useTransitionStep,
 } from '@/features/visit'
+import { StepTransitionControls } from '@/features/visit/components/StepTransitionControls'
 import { StaffVisitDetail } from '@/features/visit/components/StaffVisitDetail'
 import { StaffVisitList } from '@/features/visit/components/StaffVisitList'
-import type { JourneyStep } from '@/features/visit'
 import { StaffShell } from './-StaffShell'
 
 /**
  * ผู้ป่วยวันนี้ · the staff visit monitor (#37): every projected visit on
  * the left, the selected visit's full journey on the right. Reads the
  * CarePath projection via the staff list + journey endpoints — on a phone
- * the list and the detail swap instead of sitting side by side.
+ * the list and the detail swap instead of sitting side by side. The per-step
+ * controls (#38) command transitions through the application API.
  */
 export function Patients() {
   const visits = useStaffVisits()
@@ -26,6 +30,7 @@ export function Patients() {
     ...journeyQueryOptions(selectedId ?? ''),
     enabled: selectedId !== null,
   })
+  const transition = useTransitionStep(selectedId ?? '')
 
   const refreshing = visits.isFetching || detail.isFetching
 
@@ -79,7 +84,25 @@ export function Patients() {
                 <StaffVisitDetail
                   journey={detail.data}
                   onBack={() => setExplicitId(null)}
-                  renderStepActions={stepControlsPlaceholder}
+                  renderStepActions={(step) => (
+                    <StepTransitionControls
+                      action={stepAction(step.status)}
+                      pending={
+                        transition.isPending && transition.variables?.sequence === step.sequence
+                      }
+                      errorText={
+                        transition.isError && transition.variables?.sequence === step.sequence
+                          ? transitionErrorText(
+                              transition.error.status,
+                              transition.error.message,
+                            )
+                          : null
+                      }
+                      onTransition={(to) =>
+                        transition.mutate({ sequence: step.sequence, to })
+                      }
+                    />
+                  )}
                 />
               ) : detail.isError ? (
                 <InfoNote>
@@ -94,19 +117,5 @@ export function Patients() {
         )}
       </div>
     </StaffShell>
-  )
-}
-
-/**
- * #37 AC4: the per-step control slot exists and is reachable; the live
- * start/complete buttons land with #38 — an honest placeholder, not a fake
- * button.
- */
-function stepControlsPlaceholder(step: JourneyStep) {
-  if (step.status !== 'READY' && step.status !== 'STARTED') return null
-  return (
-    <Meta className="m-0 w-fit rounded-sm bg-zone-support px-2 py-1">
-      ปุ่มเปลี่ยนสถานะเปิดใช้งานในขั้นถัดไป (#38)
-    </Meta>
   )
 }
