@@ -167,6 +167,98 @@
                 }
             }
         },
+        "/api/v1/journeys/{visitId}/location": {
+            "get": {
+                "description": "The latest recorded location observation of the visit (QR scan, Zigbee fix, manual pick) — the canonical start point for routing.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "location"
+                ],
+                "summary": "Get the visit's current location",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit ID",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/location.Observation"
+                        }
+                    },
+                    "404": {
+                        "description": "no location recorded for this visit yet",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Records a location fix for the visit and makes it the current location. The raw payload is the scanned string (a CarePath location QR carries a place reference only — never patient data); the server resolves it through the matching provider to a canonical navigation node and returns the recorded observation.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "location"
+                ],
+                "summary": "Report a scanned location fix",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit ID",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Scanned fix: source (e.g. QR) and raw payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/location.reportRequestBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/location.Observation"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid body, unknown source, or a fix that does not resolve to a known location",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/journeys/{visitId}/steps/{stepKey}/transition": {
             "post": {
                 "description": "Staff command that sets one step's status directly (ADR-0009 — CarePath owns step status; never forwarded to the HIS) and returns the refreshed journey with the plan recomputed. commandId is an optional idempotency key; source names the acting surface for the audit trail.",
@@ -507,6 +599,61 @@
                     "type": "string"
                 },
                 "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "location.Observation": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number"
+                },
+                "floorId": {
+                    "type": "string"
+                },
+                "nodeId": {
+                    "type": "string"
+                },
+                "observedAt": {
+                    "type": "string"
+                },
+                "source": {
+                    "$ref": "#/definitions/location.Source"
+                },
+                "visitId": {
+                    "type": "string"
+                },
+                "zone": {
+                    "type": "string"
+                }
+            }
+        },
+        "location.Source": {
+            "type": "string",
+            "enum": [
+                "QR",
+                "ZIGBEE",
+                "MANUAL"
+            ],
+            "x-enum-comments": {
+                "SourceManual": "fallback/debug: a human-picked node",
+                "SourceQR": "MVP baseline: a scanned CarePath QR code",
+                "SourceZigbee": "phase 2: positioning service over Zigbee tags"
+            },
+            "x-enum-varnames": [
+                "SourceQR",
+                "SourceZigbee",
+                "SourceManual"
+            ]
+        },
+        "location.reportRequestBody": {
+            "type": "object",
+            "properties": {
+                "raw": {
+                    "type": "string"
+                },
+                "source": {
                     "type": "string"
                 }
             }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.6.0
+  version: 0.7.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -180,6 +180,60 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/journeys/{visitId}/location:
+    get:
+      description: The visit's current location — the latest recorded
+        location observation (QR scan today; Zigbee or manual later). This
+        is the canonical start point for routing.
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Current location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationObservation'
+        '404':
+          description: No location recorded for this visit yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      description: Report a scanned location fix for the visit and record it
+        as the current location. The raw payload is the scanned string — a
+        CarePath location QR carries a place reference only, never patient
+        data; the server resolves it to a canonical navigation node via the
+        source's provider (ADR-0004).
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationReportRequest'
+      responses:
+        '200':
+          description: The recorded observation, now the current location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationObservation'
+        '400':
+          description: Invalid body, unknown source, or a fix that does not
+            resolve to a known location
           content:
             application/json:
               schema:
@@ -468,3 +522,34 @@ components:
         sessionToken: { type: string }
         identity: { $ref: '#/components/schemas/Identity' }
         expiresAt: { type: string, format: date-time }
+    LocationObservation:
+      type: object
+      description: The normalized current-location result every provider
+        resolves onto (ADR-0004). nodeId is the canonical navigation node
+        ("<floorId>/<localId>"); zone and confidence are optional — exact
+        sources such as QR leave them unset.
+      required: [visitId, nodeId, floorId, source, observedAt]
+      properties:
+        visitId: { type: string }
+        nodeId: { type: string }
+        floorId: { type: string }
+        zone:
+          type: [string, 'null']
+          description: Positioning zone from the navigation graph, e.g. PUBLIC, OPD.
+        source:
+          type: string
+          description: Which provider produced the fix — QR, ZIGBEE, or MANUAL.
+        confidence:
+          type: [number, 'null']
+          description: 0..1 for probabilistic sources (Zigbee); null for exact ones.
+        observedAt: { type: string, format: date-time }
+    LocationReportRequest:
+      type: object
+      description: One scanned fix. raw is the payload exactly as scanned —
+        opaque to the client; the server's provider resolves it.
+      required: [source, raw]
+      properties:
+        source:
+          type: string
+          description: Provider source to resolve through, e.g. QR.
+        raw: { type: string }
