@@ -40,6 +40,9 @@ export function App() {
         <div className="eyebrow">CarePath</div>
         <h1>เส้นทางการรับบริการของคุณ</h1>
         <p>ตัวอย่าง MVP ที่อ่าน Visit จาก Mock HIS และแปลงขั้นตอนถัดไปเป็นจุดบริการใน CarePath</p>
+        <p>
+          <a href="/design">ดูระบบดีไซน์และหน้าจออ้างอิงที่ /design →</a>
+        </p>
       </section>
 
       {error && <div className="card error">เชื่อมต่อ API ไม่สำเร็จ: {error}</div>}

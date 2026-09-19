@@ -1,0 +1,267 @@
+/*
+ * CarePath styles entry point — the single place design tokens are declared.
+ *
+ * Pipeline: DESIGN.md (spec) → this file → Tailwind utilities + shadcn/ui.
+ * The old design-system/tokens.css is gone; every value it carried lives here
+ * exactly once. Zone colours must stay byte-identical to the `:root` block in
+ * packages/floorplans/floors/*.svg — the app chrome and the hospital signage
+ * are one system (ADR-0003).
+ *
+ * Four blocks below, in order:
+ *   1. :root          raw palette + the shadcn semantic names mapped onto it
+ *   2. @theme         values Tailwind must emit as custom properties
+ *   3. @theme inline  colours, resolved through the :root names above
+ *   4. :root shim     legacy --cp-* names, all derived — delete at step 3
+ */
+
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* ── 1. Palette ───────────────────────────────────────────────────────── */
+
+:root {
+  /* Core */
+  --primary: #ff7a00;
+  --primary-tint: #fff1e2;
+  --primary-edge: #f4c894;
+  --secondary: #0b6e99;
+  --secondary-tint: #e3f1f7;
+  --secondary-edge: #cfe6ef;
+  --ink: #1f2b33;
+  --ink-muted: #66727d;
+  --neutral: #f4f6f5;
+  --surface: #ffffff;
+  --line: #dde3e3;
+  --success: #1f7a5c;
+  --success-tint: #e7f5ef;
+  --warning: #9a5310;
+  --warning-tint: #fff1e2;
+
+  /* Zone tints — byte-identical to the floor-plan SVGs */
+  --zone-public: #fff7df;
+  --zone-public-edge: #d8c98f;
+  --zone-opd: #dcecff;
+  --zone-opd-edge: #a8c6ea;
+  --zone-diagnostic: #e7e0ff;
+  --zone-diagnostic-edge: #b6a6e0;
+  --zone-pharmacy: #e4f7df;
+  --zone-pharmacy-edge: #9fcf8e;
+  --zone-rehab: #fff1c9;
+  --zone-rehab-edge: #e0c477;
+  --zone-ipd: #dff5f4;
+  --zone-ipd-edge: #8fc9c4;
+  --zone-support: #eceff2;
+  --zone-support-edge: #c4cbd0;
+
+  /*
+   * shadcn/ui semantic names. Generated components in design-system/ui only
+   * ever reference these, so re-skinning shadcn means editing this block —
+   * never editing a generated file.
+   */
+  --background: var(--neutral);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  /* Dark ink on orange: white measures 2.6:1 here, ink ~5.5:1. */
+  --primary-foreground: var(--ink);
+  --secondary-foreground: var(--surface);
+  --muted: var(--neutral);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--secondary-tint);
+  --accent-foreground: var(--secondary);
+  /* DESIGN.md has no red — warning brown is the strongest alert tone we own. */
+  --destructive: var(--warning);
+  --destructive-foreground: var(--surface);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--secondary);
+  /* shadcn components that read var(--radius) directly land on CarePath `lg`. */
+  --radius: 16px;
+}
+
+/* ── 2. Emitted theme ─────────────────────────────────────────────────── */
+
+@theme {
+  /*
+   * Space Grotesk has no Thai glyphs — Noto Sans Thai is the deliberate
+   * fallback so a mixed string ("คิวที่ 12") keeps numerals in the signage
+   * face and Thai prose in the prose face.
+   */
+  --font-sans: 'Noto Sans Thai', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-code: 'Space Grotesk', 'Noto Sans Thai', system-ui, sans-serif;
+
+  --text-display-stat: 34px;
+  --text-display-stat--line-height: 1.1;
+  --text-display-stat--font-weight: 700;
+  --text-h1: 26px;
+  --text-h1--line-height: 1.28;
+  --text-h1--font-weight: 700;
+  --text-h2: 16px;
+  --text-h2--line-height: 1.3;
+  --text-h2--font-weight: 700;
+  --text-body-md: 14px;
+  --text-body-md--line-height: 1.6;
+  --text-body-md--font-weight: 400;
+  --text-body-sm: 13px;
+  --text-body-sm--line-height: 1.5;
+  --text-body-sm--font-weight: 400;
+  --text-label-code: 13px;
+  --text-label-code--line-height: 1;
+  --text-label-code--font-weight: 700;
+  --text-caption: 12px;
+  --text-caption--line-height: 1.4;
+  --text-caption--font-weight: 500;
+  --text-button: 16px;
+  --text-button--line-height: 1;
+  --text-button--font-weight: 700;
+
+  /*
+   * shadcn normally derives these from var(--radius); CarePath names them
+   * outright, so don't paste shadcn's calc() block back in on the next `add`.
+   */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+  /* The patient's current step — the card they are "holding" right now. */
+  --radius-ticket: 4px 16px 16px 16px;
+
+  /* Screen gutters. Everything else uses Tailwind's 4px numeric scale. */
+  --spacing-gutter: 20px;
+  --spacing-gutter-desktop: 40px;
+
+  /* Only for things that really float over scrolling content. */
+  --shadow-bar: 0 -10px 24px rgba(31, 43, 51, 0.08);
+  --shadow-sheet: 0 -12px 30px rgba(31, 43, 51, 0.1);
+}
+
+/* ── 3. Colour utilities ──────────────────────────────────────────────── */
+
+@theme inline {
+  --color-primary: var(--primary);
+  --color-primary-tint: var(--primary-tint);
+  --color-primary-edge: var(--primary-edge);
+  --color-secondary: var(--secondary);
+  --color-secondary-tint: var(--secondary-tint);
+  --color-secondary-edge: var(--secondary-edge);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-neutral: var(--neutral);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-success: var(--success);
+  --color-success-tint: var(--success-tint);
+  --color-warning: var(--warning);
+  --color-warning-tint: var(--warning-tint);
+
+  --color-zone-public: var(--zone-public);
+  --color-zone-public-edge: var(--zone-public-edge);
+  --color-zone-opd: var(--zone-opd);
+  --color-zone-opd-edge: var(--zone-opd-edge);
+  --color-zone-diagnostic: var(--zone-diagnostic);
+  --color-zone-diagnostic-edge: var(--zone-diagnostic-edge);
+  --color-zone-pharmacy: var(--zone-pharmacy);
+  --color-zone-pharmacy-edge: var(--zone-pharmacy-edge);
+  --color-zone-rehab: var(--zone-rehab);
+  --color-zone-rehab-edge: var(--zone-rehab-edge);
+  --color-zone-ipd: var(--zone-ipd);
+  --color-zone-ipd-edge: var(--zone-ipd-edge);
+  --color-zone-support: var(--zone-support);
+  --color-zone-support-edge: var(--zone-support-edge);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+/* ── 4. Transition shim ───────────────────────────────────────────────── */
+
+/*
+ * design-system/components.css (987 lines) and pages/design/design-page.css
+ * (405 lines) still read --cp-*. Every name here derives from a token above —
+ * nothing is re-typed, so there is still one source of truth. This block dies
+ * with the last .css file that needs it, at step 3 of the Tailwind migration.
+ */
+:root {
+  --cp-primary: var(--primary);
+  --cp-primary-tint: var(--primary-tint);
+  --cp-primary-edge: var(--primary-edge);
+  --cp-secondary: var(--secondary);
+  --cp-secondary-tint: var(--secondary-tint);
+  --cp-secondary-edge: var(--secondary-edge);
+  --cp-ink: var(--ink);
+  --cp-ink-muted: var(--ink-muted);
+  --cp-neutral: var(--neutral);
+  --cp-surface: var(--surface);
+  --cp-line: var(--line);
+  --cp-success: var(--success);
+  --cp-success-tint: var(--success-tint);
+  --cp-warning: var(--warning);
+  --cp-warning-tint: var(--warning-tint);
+
+  --cp-zone-public: var(--zone-public);
+  --cp-zone-public-edge: var(--zone-public-edge);
+  --cp-zone-opd: var(--zone-opd);
+  --cp-zone-opd-edge: var(--zone-opd-edge);
+  --cp-zone-diagnostic: var(--zone-diagnostic);
+  --cp-zone-diagnostic-edge: var(--zone-diagnostic-edge);
+  --cp-zone-pharmacy: var(--zone-pharmacy);
+  --cp-zone-pharmacy-edge: var(--zone-pharmacy-edge);
+  --cp-zone-rehab: var(--zone-rehab);
+  --cp-zone-rehab-edge: var(--zone-rehab-edge);
+  --cp-zone-ipd: var(--zone-ipd);
+  --cp-zone-ipd-edge: var(--zone-ipd-edge);
+  --cp-zone-support: var(--zone-support);
+  --cp-zone-support-edge: var(--zone-support-edge);
+
+  --cp-font-sans: var(--font-sans);
+  --cp-font-code: var(--font-code);
+
+  --cp-text-display-stat: var(--text-display-stat--font-weight) var(--text-display-stat) / var(--text-display-stat--line-height) var(--font-code);
+  --cp-text-h1: var(--text-h1--font-weight) var(--text-h1) / var(--text-h1--line-height) var(--font-sans);
+  --cp-text-h2: var(--text-h2--font-weight) var(--text-h2) / var(--text-h2--line-height) var(--font-sans);
+  --cp-text-body-md: var(--text-body-md--font-weight) var(--text-body-md) / var(--text-body-md--line-height) var(--font-sans);
+  --cp-text-body-sm: var(--text-body-sm--font-weight) var(--text-body-sm) / var(--text-body-sm--line-height) var(--font-sans);
+  --cp-text-label-code: var(--text-label-code--font-weight) var(--text-label-code) / var(--text-label-code--line-height) var(--font-code);
+  --cp-text-caption: var(--text-caption--font-weight) var(--text-caption) / var(--text-caption--line-height) var(--font-sans);
+  --cp-text-button: var(--text-button--font-weight) var(--text-button) / var(--text-button--line-height) var(--font-code);
+
+  --cp-radius-sm: var(--radius-sm);
+  --cp-radius-md: var(--radius-md);
+  --cp-radius-lg: var(--radius-lg);
+  --cp-radius-xl: var(--radius-xl);
+  --cp-radius-full: var(--radius-full);
+  --cp-radius-ticket: var(--radius-ticket);
+
+  /* CarePath's named spacing is Tailwind's 4px scale under another name. */
+  --cp-space-xs: calc(var(--spacing) * 1);
+  --cp-space-sm: calc(var(--spacing) * 2);
+  --cp-space-md: calc(var(--spacing) * 3);
+  --cp-space-lg: calc(var(--spacing) * 4);
+  --cp-space-xl: calc(var(--spacing) * 5);
+  --cp-space-2xl: calc(var(--spacing) * 6);
+  --cp-space-3xl: calc(var(--spacing) * 8);
+  --cp-space-4xl: calc(var(--spacing) * 10);
+  --cp-gutter: var(--spacing-gutter);
+  --cp-gutter-desktop: var(--spacing-gutter-desktop);
+
+  --cp-shadow-bar: var(--shadow-bar);
+  --cp-shadow-sheet: var(--shadow-sheet);
+}
