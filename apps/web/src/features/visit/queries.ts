@@ -35,8 +35,25 @@ export function useStaffVisits() {
 }
 
 /**
+ * Whether the journey can still change. A completed or cancelled visit is
+ * final — mirrors `visitOutcome` in journey.ts, kept local because that
+ * module already imports types from this one.
+ */
+function journeyIsFinal(journey: Journey): boolean {
+  return journey.status === 'CANCELLED' || journey.completed
+}
+
+/**
  * The journey plan CarePath derived for one visit (ADR-0009) — the patient
  * screens' single data source and the staff detail view.
+ *
+ * #36 realtime via polling (the issue's MVP bar: the simplest, most stable
+ * option for the hackathon). The journey refetches every 15s — matching the
+ * location poll — so step changes made by HIS or staff appear on the patient
+ * screens without a reload, and stop once the visit is final. The key is
+ * shared by the journey and navigate screens, and TanStack's structural
+ * sharing keeps an unchanged payload from re-rendering the rail, so updates
+ * land in one place instead of duplicating UI state (AC2).
  */
 export function journeyQueryOptions(visitId: string) {
   return queryOptions({
@@ -44,6 +61,8 @@ export function journeyQueryOptions(visitId: string) {
     queryFn: () =>
       apiGet<Journey>(`/api/v1/journeys/${encodeURIComponent(visitId)}`),
     staleTime: 15_000,
+    refetchInterval: (query) =>
+      query.state.data && journeyIsFinal(query.state.data) ? false : 15_000,
   })
 }
 
