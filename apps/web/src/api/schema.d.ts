@@ -149,6 +149,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Resolves the Authorization Bearer session token to the identity behind it. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Current session identity */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Identity"];
+                    };
+                };
+                /** @description Session not found or expired */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** @description Exchanges a LINE ID token (source "line"), or a demo identity (source "demo", only when the server has ALLOW_DEMO_AUTH enabled), for an opaque CarePath session token. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateSessionRequest"];
+                };
+            };
+            responses: {
+                /** @description Session created */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreateSessionResponse"];
+                    };
+                };
+                /** @description Invalid request body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Invalid identity token, or demo auth disabled */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/navigation/route": {
         parameters: {
             query?: never;
@@ -228,6 +315,25 @@ export interface components {
             status: string;
             steps: components["schemas"]["VisitStep"][];
             next?: components["schemas"]["NextStep"];
+        };
+        /** @description A verified external identity behind a CarePath session. */
+        Identity: {
+            /** @enum {string} */
+            source: "line" | "demo";
+            externalId: string;
+            displayName?: string;
+        };
+        CreateSessionRequest: {
+            /** @enum {string} */
+            source: "line" | "demo";
+            /** @description The LINE ID token. Ignored (may be empty) for source "demo". */
+            idToken: string;
+        };
+        CreateSessionResponse: {
+            sessionToken: string;
+            identity: components["schemas"]["Identity"];
+            /** Format: date-time */
+            expiresAt: string;
         };
     };
     responses: never;
