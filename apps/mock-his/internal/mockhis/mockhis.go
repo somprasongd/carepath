@@ -9,11 +9,14 @@
 package mockhis
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"carepath/apps/mock-his/internal/platform/logger"
 )
 
 // Canonical visit statuses (contract schema VisitStatus).
@@ -227,7 +230,7 @@ type OpenVisitOrder struct{ OrderType, OrderName, OrderedByClinic string }
 // Every fact is announced as canonical events (visit.opened, order.placed
 // per pre-visit order) so downstream consumers see the visit through the
 // contract only.
-func (s *Store) OpenVisit(patientRef, patientName, visitType string, clinics []OpenVisitClinic, orders []OpenVisitOrder) (Visit, *Error) {
+func (s *Store) OpenVisit(ctx context.Context, patientRef, patientName, visitType string, clinics []OpenVisitClinic, orders []OpenVisitOrder) (Visit, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -264,11 +267,18 @@ func (s *Store) OpenVisit(patientRef, patientName, visitType string, clinics []O
 			return Visit{}, err
 		}
 	}
+	logger.FromContext(ctx).Info("visit opened",
+		"visit_id", v.VisitID,
+		"patient_ref", v.PatientRef,
+		"visit_type", v.VisitType,
+		"clinics", len(v.Clinics),
+		"orders", len(v.Orders),
+	)
 	return *copyVisit(v), nil
 }
 
 // AddClinic assigns an additional clinic to an ACTIVE visit.
-func (s *Store) AddClinic(visitID, clinicCode, clinicName string) (Visit, *Error) {
+func (s *Store) AddClinic(ctx context.Context, visitID, clinicCode, clinicName string) (Visit, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -284,11 +294,15 @@ func (s *Store) AddClinic(visitID, clinicCode, clinicName string) (Visit, *Error
 	}
 	v.Clinics = append(v.Clinics, Clinic{Code: clinicCode, Name: clinicName})
 	s.append(EventVisitUpdated, v, map[string]any{"clinics": v.Clinics})
+	logger.FromContext(ctx).Info("clinic added",
+		"visit_id", visitID,
+		"clinic_code", clinicCode,
+	)
 	return *copyVisit(v), nil
 }
 
 // PlaceOrder places an order against an ACTIVE visit.
-func (s *Store) PlaceOrder(visitID, orderType, orderName, orderedByClinic string) (Order, *Error) {
+func (s *Store) PlaceOrder(ctx context.Context, visitID, orderType, orderName, orderedByClinic string) (Order, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -303,6 +317,12 @@ func (s *Store) PlaceOrder(visitID, orderType, orderName, orderedByClinic string
 	if err != nil {
 		return Order{}, err
 	}
+	logger.FromContext(ctx).Info("order placed",
+		"visit_id", visitID,
+		"order_ref", order.OrderRef,
+		"order_type", order.OrderType,
+		"order_name", order.OrderName,
+	)
 	return *order, nil
 }
 
@@ -345,7 +365,7 @@ func (s *Store) findOrder(orderRef string) (*Visit, int, *Error) {
 }
 
 // MarkPerformed marks an order as performed — the procedure happened.
-func (s *Store) MarkPerformed(orderRef string) (Order, *Error) {
+func (s *Store) MarkPerformed(ctx context.Context, orderRef string) (Order, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -360,12 +380,16 @@ func (s *Store) MarkPerformed(orderRef string) (Order, *Error) {
 	v.Orders[i].Status = OrderPerformed
 	v.Orders[i].PerformedAt = &now
 	s.append(EventOrderPerformed, v, map[string]any{"orderRef": orderRef, "performedAt": now})
+	logger.FromContext(ctx).Info("order performed",
+		"visit_id", v.VisitID,
+		"order_ref", orderRef,
+	)
 	return v.Orders[i], nil
 }
 
 // MarkResulted marks an order's result as reported. Only valid once
 // PERFORMED — a result cannot exist before the procedure did.
-func (s *Store) MarkResulted(orderRef string) (Order, *Error) {
+func (s *Store) MarkResulted(ctx context.Context, orderRef string) (Order, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -380,11 +404,15 @@ func (s *Store) MarkResulted(orderRef string) (Order, *Error) {
 	v.Orders[i].Status = OrderResulted
 	v.Orders[i].ResultedAt = &now
 	s.append(EventOrderResulted, v, map[string]any{"orderRef": orderRef, "resultedAt": now})
+	logger.FromContext(ctx).Info("order resulted",
+		"visit_id", v.VisitID,
+		"order_ref", orderRef,
+	)
 	return v.Orders[i], nil
 }
 
 // CancelOrder cancels an order that has not yet resulted.
-func (s *Store) CancelOrder(orderRef string) (Order, *Error) {
+func (s *Store) CancelOrder(ctx context.Context, orderRef string) (Order, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -397,12 +425,16 @@ func (s *Store) CancelOrder(orderRef string) (Order, *Error) {
 	}
 	v.Orders[i].Status = OrderCancelled
 	s.append(EventOrderCancelled, v, map[string]any{"orderRef": orderRef})
+	logger.FromContext(ctx).Info("order cancelled",
+		"visit_id", v.VisitID,
+		"order_ref", orderRef,
+	)
 	return v.Orders[i], nil
 }
 
 // CompleteEncounter announces that the given clinic is finished examining
 // the patient for this round (ADR-0009 §4).
-func (s *Store) CompleteEncounter(visitID, clinicCode string) (Visit, *Error) {
+func (s *Store) CompleteEncounter(ctx context.Context, visitID, clinicCode string) (Visit, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -422,11 +454,15 @@ func (s *Store) CompleteEncounter(visitID, clinicCode string) (Visit, *Error) {
 	}
 	now := s.now()
 	s.append(EventEncounterCompleted, v, map[string]any{"clinicCode": clinicCode, "completedAt": now})
+	logger.FromContext(ctx).Info("encounter completed",
+		"visit_id", visitID,
+		"clinic_code", clinicCode,
+	)
 	return *copyVisit(v), nil
 }
 
 // CompleteVisit completes an ACTIVE visit.
-func (s *Store) CompleteVisit(visitID string) (Visit, *Error) {
+func (s *Store) CompleteVisit(ctx context.Context, visitID string) (Visit, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -439,6 +475,9 @@ func (s *Store) CompleteVisit(visitID string) (Visit, *Error) {
 	}
 	v.Status = VisitCompleted
 	s.append(EventVisitClosed, v, map[string]any{"status": v.Status})
+	logger.FromContext(ctx).Info("visit completed",
+		"visit_id", visitID,
+	)
 	return *copyVisit(v), nil
 }
 
@@ -446,7 +485,7 @@ func (s *Store) CompleteVisit(visitID string) (Visit, *Error) {
 // cancelled (canonical order.cancelled each) and the visit itself becomes
 // CANCELLED (canonical visit.closed). Cancelling an already-CANCELLED visit
 // is a no-op; a COMPLETED visit cannot be cancelled.
-func (s *Store) CancelVisit(visitID string) (Visit, *Error) {
+func (s *Store) CancelVisit(ctx context.Context, visitID string) (Visit, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -461,14 +500,20 @@ func (s *Store) CancelVisit(visitID string) (Visit, *Error) {
 		return Visit{}, &Error{Kind: ErrConflict, Msg: "visit is COMPLETED and cannot be cancelled"}
 	}
 
+	cancelled := 0
 	for i := range v.Orders {
 		if v.Orders[i].Status == OrderPlaced || v.Orders[i].Status == OrderPerformed {
 			v.Orders[i].Status = OrderCancelled
 			s.append(EventOrderCancelled, v, map[string]any{"orderRef": v.Orders[i].OrderRef})
+			cancelled++
 		}
 	}
 	v.Status = VisitCancelled
 	s.append(EventVisitClosed, v, map[string]any{"status": v.Status})
+	logger.FromContext(ctx).Info("visit cancelled",
+		"visit_id", visitID,
+		"orders_cancelled", cancelled,
+	)
 	return *copyVisit(v), nil
 }
 
