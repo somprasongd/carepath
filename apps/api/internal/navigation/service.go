@@ -2,14 +2,15 @@ package navigation
 
 import "context"
 
-// Service is the only entry point other modules may call — the routing
-// slice (#27) builds its shortest path on these reads. Its methods take a
-// plain ctx: when the caller opened a transaction, repository calls made
-// here join it through that ctx.
+// Service is the only entry point other modules may call. Route computes
+// the shortest path on top of the graph reads. Its methods take a plain
+// ctx: when the caller opened a transaction, repository calls made here
+// join it through that ctx.
 type Service interface {
 	GetNode(ctx context.Context, nodeID string) (NavNode, error)
 	ListNodes(ctx context.Context) ([]NavNode, error)
 	ListEdges(ctx context.Context) ([]NavEdge, error)
+	Route(ctx context.Context, fromNodeID, toNodeID string, opts RouteOptions) (Route, error)
 }
 
 type service struct {
@@ -30,4 +31,19 @@ func (s *service) ListNodes(ctx context.Context) ([]NavNode, error) {
 
 func (s *service) ListEdges(ctx context.Context) ([]NavEdge, error) {
 	return s.repo.ListEdges(ctx)
+}
+
+// Route loads the whole graph (a few dozen rows) and runs the shortest-path
+// search over it in memory; errors from the reads pass through unchanged so
+// their classification survives.
+func (s *service) Route(ctx context.Context, fromNodeID, toNodeID string, opts RouteOptions) (Route, error) {
+	nodes, err := s.repo.ListNodes(ctx)
+	if err != nil {
+		return Route{}, err
+	}
+	edges, err := s.repo.ListEdges(ctx)
+	if err != nil {
+		return Route{}, err
+	}
+	return shortestRoute(nodes, edges, fromNodeID, toNodeID, opts)
 }

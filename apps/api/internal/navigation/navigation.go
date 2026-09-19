@@ -16,6 +16,11 @@ import (
 // ErrNodeNotFound is returned when no node matches the lookup.
 var ErrNodeNotFound = apperr.New(apperr.KindNotFound, "navigation node not found")
 
+// ErrNoRoute is returned when both endpoints exist on the graph but no
+// walkable path connects them — possibly because AccessibleOnly filtered
+// out every connection.
+var ErrNoRoute = apperr.New(apperr.KindNotFound, "no route between the given nodes")
+
 // NavNode is one walkable point of the hospital: a floor, a coordinate in
 // that floor's SVG space, and what kind of point it is. ID is globally
 // unique as "<floorId>/<localId>" (the JSON/SVG node ids are floor-local —
@@ -43,6 +48,23 @@ type NavEdge struct {
 	EdgeType   string  `json:"edgeType"` // CORRIDOR, ELEVATOR, STAIRS
 	Distance   float64 `json:"distance"`
 	Accessible bool    `json:"accessible"`
+}
+
+// Route is the ordered shortest path between two nodes: Nodes[0] is the
+// origin, Nodes[len(Nodes)-1] the destination, and Segments[i] is the edge
+// walked from Nodes[i] to Nodes[i+1]. TotalDistance sums the segment costs
+// in authored SVG units, not metres.
+type Route struct {
+	Nodes         []NavNode `json:"nodes"`
+	Segments      []NavEdge `json:"segments"`
+	TotalDistance float64   `json:"totalDistance"`
+}
+
+// RouteOptions tweaks route computation: AccessibleOnly skips edges flagged
+// not accessible (the stairs transitions), so wheelchair routes detour via
+// the elevator instead.
+type RouteOptions struct {
+	AccessibleOnly bool
 }
 
 // Repo is the persistence port of this module. Only this package's postgres
