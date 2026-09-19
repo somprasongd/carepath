@@ -871,11 +871,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Not implemented yet — reserved for the navigation module. */
+        /** @description Shortest walkable route for the SVG overlay (#29). `from` is the current location's navigation node id — the nodeId of a location observation (e.g. I-1301/node-reception) — and `to` is the destination service point's code (same key as /api/v1/service-points/{code}); the server resolves it to the place's entry node before routing. */
         get: {
             parameters: {
                 query: {
+                    /** @description Globally unique navigation node id ("<floorId>/<localId>"). */
                     from: string;
+                    /** @description Destination service point code, e.g. PHARMACY. */
                     to: string;
                 };
                 header?: never;
@@ -884,12 +886,32 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Navigation route */
+                /** @description Ordered route — nodes[0] is the origin, the last node the destination */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["NavigationRoute"];
+                    };
+                };
+                /** @description Missing or empty from/to */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Unknown node or service point, destination without a mapped place, or no walkable path */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
                 };
             };
         };
@@ -905,8 +927,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Error envelope shared by all endpoints. code is the machine-readable apperr kind ("invalid", "unauthorized", "forbidden", "not_found", "conflict", "upstream", "internal") the frontend branches on; error is the human-safe message. */
         Error: {
             error: string;
+            code: string;
         };
         /** @description Staff/admin credentials (ADR-0010). The demo deployment seeds admin/demo (ADMIN) and staff/demo (STAFF) — demo credentials only. */
         LoginRequest: {
@@ -944,6 +968,35 @@ export interface components {
             displayName: string;
             /** @description Role codes granted to this user (ADR-0010 §5). The console derives its landing screen and visible actions from these — a user never picks their own role. */
             roles: ("ADMIN" | "STAFF")[];
+        };
+        /** @description Ordered shortest path between two nodes (#28). Nodes[0] is the origin, the last node the destination, and segments[i] is the edge walked from nodes[i] to nodes[i+1]; totalDistance sums the segment costs in authored SVG units, not metres. */
+        NavigationRoute: {
+            nodes: components["schemas"]["NavNode"][];
+            segments: components["schemas"]["NavEdge"][];
+            totalDistance: number;
+        };
+        /** @description One walkable point of the hospital. x/y are floor-local SVG units, so the overlay groups consecutive nodes by floorId and draws a polyline per floor. */
+        NavNode: {
+            id: string;
+            floorId: string;
+            x: number;
+            y: number;
+            /**
+             * @description What kind of walkable point this is.
+             * @enum {string}
+             */
+            nodeType: "ENTRANCE" | "PLACE_ENTRY" | "CORRIDOR" | "ELEVATOR" | "STAIRS";
+            zone?: string;
+        };
+        /** @description One directed walk between neighbouring nodes; edgeType carries the turn-by-turn cue (corridor vs elevator vs stairs). Two-way walks are two segments. */
+        NavEdge: {
+            id: string;
+            fromNodeId: string;
+            toNodeId: string;
+            /** @enum {string} */
+            edgeType: "CORRIDOR" | "ELEVATOR" | "STAIRS";
+            distance: number;
+            accessible: boolean;
         };
         /** @description Links a service code to a physical Place in the hospital map. Place is the resolved destination (place + floor); null when the place is not in the map yet — the same explicit unmapped state as a null servicePoint on a journey step (#24). */
         ServicePoint: {

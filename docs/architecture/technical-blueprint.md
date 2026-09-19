@@ -87,7 +87,7 @@ apps/api/
     │   └── postgres/       # app_user / role / user_role / refresh_token
     ├── hospitalmap/        # buildings/floors/places/zones read model
     │   └── postgres/
-    ├── navigation/         # walkable graph read model: NavNode/NavEdge (ADR-0002)
+    ├── navigation/         # walkable graph read model: NavNode/NavEdge (ADR-0002), shortest-path routing, and the route HTTP handler (#28; destination service points resolve through the servicepoint module's Service)
     │   └── postgres/
     └── location/           # location provider port + canonical observations (ADR-0004)
         ├── qr/             # QR provider: scanned place URLs → entry nodes
@@ -116,7 +116,7 @@ record the actor on audited commands (NFR-09). Configuration: `JWT_SECRET`
 (unset → a random key per boot, with a warning), `ACCESS_TOKEN_TTL` (15m),
 `REFRESH_TOKEN_TTL` (168h).
 
-Error model: modules expose domain error variables built with `apperr.New(kind, message)` (`internal/platform/apperr`); kinds map to statuses 400 invalid, 401 unauthorized, 403 forbidden, 404 not found, 409 conflict, 500 internal, 502 upstream. Only `httpx.Error` (the HTTP boundary) performs the mapping and logging — internal (500) causes are masked to a generic client message while the detail stays in the request log.
+Error model: modules expose domain error variables built with `apperr.New(kind, message)` (`internal/platform/apperr`); kinds map to statuses 400 invalid, 401 unauthorized, 403 forbidden, 404 not found, 409 conflict, 500 internal, 502 upstream. Only `httpx.Error` (the HTTP boundary) performs the mapping and logging — internal (500) causes are masked to a generic client message while the detail stays in the request log. The error envelope carries both a human-safe message and a machine-readable `code` (the kind string, e.g. `not_found`) clients branch on.
 
 ## Core runtime chain
 

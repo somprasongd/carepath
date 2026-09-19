@@ -383,6 +383,60 @@
                 }
             }
         },
+        "/api/v1/navigation/route": {
+            "get": {
+                "description": "Shortest walkable route for the SVG overlay. from is the current location's navigation node id — the nodeId of a location observation (e.g. I-1301/node-reception); to is the destination service point's code, which the server resolves to the place's entry node before routing.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "navigation"
+                ],
+                "summary": "Get the walking route to a service point",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Current location node id (e.g. I-1301/node-reception)",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination service point code (e.g. PHARMACY)",
+                        "name": "to",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/navigation.Route"
+                        }
+                    },
+                    "400": {
+                        "description": "missing from or to",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "unknown node or service point, destination without a mapped place, or no walkable path",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/service-points": {
             "get": {
                 "description": "Active service points with their resolved place and floor — the service → destination mapping patients navigate by and staff see in the console.",
@@ -556,6 +610,10 @@
         "httpx.ErrorResponse": {
             "type": "object",
             "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "not_found"
+                },
                 "error": {
                     "type": "string",
                     "example": "visit not found"
@@ -731,6 +789,74 @@
                 "status": {
                     "type": "string",
                     "example": "ok"
+                }
+            }
+        },
+        "navigation.NavEdge": {
+            "type": "object",
+            "properties": {
+                "accessible": {
+                    "type": "boolean"
+                },
+                "distance": {
+                    "type": "number"
+                },
+                "edgeType": {
+                    "description": "CORRIDOR, ELEVATOR, STAIRS",
+                    "type": "string"
+                },
+                "fromNodeId": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "toNodeId": {
+                    "type": "string"
+                }
+            }
+        },
+        "navigation.NavNode": {
+            "type": "object",
+            "properties": {
+                "floorId": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "nodeType": {
+                    "description": "ENTRANCE, PLACE_ENTRY, CORRIDOR, ELEVATOR, STAIRS",
+                    "type": "string"
+                },
+                "x": {
+                    "type": "number"
+                },
+                "y": {
+                    "type": "number"
+                },
+                "zone": {
+                    "type": "string"
+                }
+            }
+        },
+        "navigation.Route": {
+            "type": "object",
+            "properties": {
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/navigation.NavNode"
+                    }
+                },
+                "segments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/navigation.NavEdge"
+                    }
+                },
+                "totalDistance": {
+                    "type": "number"
                 }
             }
         },

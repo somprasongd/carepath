@@ -73,8 +73,10 @@ func run(ctx context.Context, log *slog.Logger) error {
 
 	// Current location (#32/#33): scanned QR fixes, manual picks, and the
 	// demo Zigbee simulator resolve through their provider onto a canonical
-	// navigation node and become the visit's routing start point.
-	navigationGraph := navigation.NewService(navigationpostgres.New(database))
+	// navigation node and become the visit's routing start point. The same
+	// graph serves the route API (#28), which resolves the destination
+	// service point through the servicepoint module.
+	navigationGraph := navigation.NewService(navigationpostgres.New(database), servicePoints)
 	locations, err := location.NewService(locationpostgres.New(database), navigationGraph,
 		qr.New(hospitalMap), manual.New(), zigbee.New(navigationGraph))
 	if err != nil {
@@ -140,6 +142,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	locationHandler := location.NewHandler(locations)
 	locationHandler.Register(app.Group("/api/v1"))
 	locationHandler.RegisterDemo(app.Group("/api/v1"))
+	navigation.NewHandler(navigationGraph).Register(app.Group("/api/v1"))
 
 	return app.Listen(":" + envOrDefault("PORT", "8080"))
 }

@@ -46,7 +46,12 @@ func (f *fakeGraph) ListNodes(context.Context) ([]navigation.NavNode, error) { r
 func (f *fakeGraph) ListEdges(context.Context) ([]navigation.NavEdge, error) { return nil, nil }
 
 // Route is never called by the provider; it only satisfies the interface.
+// Same for RouteToServicePoint (#28).
 func (f *fakeGraph) Route(context.Context, string, string, navigation.RouteOptions) (navigation.Route, error) {
+	return navigation.Route{}, nil
+}
+
+func (f *fakeGraph) RouteToServicePoint(context.Context, string, string, navigation.RouteOptions) (navigation.Route, error) {
 	return navigation.Route{}, nil
 }
 
