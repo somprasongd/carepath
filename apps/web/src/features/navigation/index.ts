@@ -1,5 +1,7 @@
 export {
+  currentLocationLabel,
   routeBounds,
+  routeOriginOnFloor,
   routePolylinesByFloor,
   turnByTurnSteps,
   type NavigationRoute,

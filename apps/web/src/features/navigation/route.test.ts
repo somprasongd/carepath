@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { routeBounds, routePolylinesByFloor, turnByTurnSteps, type NavEdge, type NavNode } from './route'
+import {
+  currentLocationLabel,
+  routeBounds,
+  routeOriginOnFloor,
+  routePolylinesByFloor,
+  turnByTurnSteps,
+  type NavEdge,
+  type NavNode,
+} from './route'
 
 function node(floorId: string, x: number, y: number): NavNode {
   return { id: `${floorId}/n-${x}-${y}`, floorId, x, y, nodeType: 'CORRIDOR' }
@@ -150,5 +158,45 @@ describe('routeBounds', () => {
   it('is null with no points', () => {
     expect(routeBounds([])).toBeNull()
     expect(routeBounds([[]])).toBeNull()
+  })
+})
+
+describe('routeOriginOnFloor', () => {
+  it('is the first node when the route starts on the displayed floor', () => {
+    expect(
+      routeOriginOnFloor([node('I-1301', 150, 190), node('I-1301', 885, 190)], 'I-1301'),
+    ).toEqual({ x: 150, y: 190 })
+  })
+
+  it('is null when the route starts on another floor — the mark would lie', () => {
+    expect(
+      routeOriginOnFloor([node('I-1302', 300, 240), node('I-1301', 885, 190)], 'I-1301'),
+    ).toBeNull()
+  })
+
+  it('is null with no nodes', () => {
+    expect(routeOriginOnFloor([], 'I-1301')).toBeNull()
+  })
+})
+
+describe('currentLocationLabel', () => {
+  const floorLabel = (floorId: string) => (floorId === 'I-1301' ? 'ชั้น 1' : floorId)
+
+  it('states the floor and an exact source without a zone', () => {
+    expect(
+      currentLocationLabel({ floorId: 'I-1301', zone: null, source: 'QR' }, floorLabel),
+    ).toBe('ตำแหน่งปัจจุบัน · ชั้น 1 · สแกน QR')
+  })
+
+  it('carries the zone and source for a probabilistic fix', () => {
+    expect(
+      currentLocationLabel({ floorId: 'I-1301', zone: 'PUBLIC', source: 'ZIGBEE' }, floorLabel),
+    ).toBe('ตำแหน่งปัจจุบัน · ชั้น 1 · โซน PUBLIC · Zigbee')
+  })
+
+  it('never surfaces an unknown provider name', () => {
+    expect(
+      currentLocationLabel({ floorId: 'I-1301', zone: null, source: 'SMOKE_SIGNAL' }, floorLabel),
+    ).toBe('ตำแหน่งปัจจุบัน · ชั้น 1')
   })
 })

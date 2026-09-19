@@ -65,10 +65,13 @@ export type FloorPlanDestination = {
  * in SVG units; how it is derived from a route lives in features/navigation.
  * Each line is drawn with the asset's own route classes so the overlay and
  * the plan read as one system, with a route-dot marking where the patient
- * stands (the first point of the first line).
+ * stands (the first point of the first line). `origin` (#35) upgrades that
+ * dot to a labelled "you are here" mark in the secondary colour — pass it
+ * only when the patient really is on the displayed floor.
  */
 export type FloorPlanRoute = {
   lines: { x: number; y: number }[][]
+  origin?: { x: number; y: number }
 }
 
 export type FloorPlanMapProps = {
@@ -303,8 +306,9 @@ function appendPin(floor: SVGGElement, pin: { x: number; y: number }, name: stri
  * `.route`/`.route-dot` classes (rounded orange caps, dotted endpoints) and
  * its `arrow` marker, so the overlay matches the plan's shape language
  * instead of styling over it; the sample `#route-layer` stays hidden —
- * this group is the live one. The first line's first point is where the
- * patient stands, marked with a route-dot.
+ * this group is the live one. Where the patient stands is a plain route-dot,
+ * or — when the caller passes `origin` — the labelled "you are here" mark
+ * from appendOriginMark.
  */
 function drawRoute(floor: SVGGElement, route: FloorPlanRoute): SVGGElement | null {
   const lines = route.lines.filter((line) => line.length > 0)
@@ -318,15 +322,66 @@ function drawRoute(floor: SVGGElement, route: FloorPlanRoute): SVGGElement | nul
     g.append(polyline)
   }
 
-  const origin = lines[0][0]
-  const dot = document.createElementNS(SVG_NS, 'circle')
-  dot.setAttribute('class', 'route-dot')
-  dot.setAttribute('cx', String(origin.x))
-  dot.setAttribute('cy', String(origin.y))
-  dot.setAttribute('r', '10')
-  g.append(dot)
+  if (route.origin) {
+    g.append(originMark(route.origin))
+  } else {
+    const origin = lines[0][0]
+    const dot = document.createElementNS(SVG_NS, 'circle')
+    dot.setAttribute('class', 'route-dot')
+    dot.setAttribute('cx', String(origin.x))
+    dot.setAttribute('cy', String(origin.y))
+    dot.setAttribute('r', '10')
+    g.append(dot)
+  }
 
   floor.append(g)
+  return g
+}
+
+/**
+ * The patient's position (#35): the destination pin's shape language in the
+ * secondary colour — halo + dot + label above the point, so "คุณอยู่ที่นี่"
+ * never collides with a destination label below it.
+ */
+function originMark(point: { x: number; y: number }): SVGGElement {
+  const g = document.createElementNS(SVG_NS, 'g')
+  g.setAttribute('transform', `translate(${point.x} ${point.y})`)
+
+  const halo = document.createElementNS(SVG_NS, 'circle')
+  halo.setAttribute('r', '30')
+  halo.setAttribute('fill', 'var(--secondary)')
+  halo.setAttribute('opacity', '0.18')
+  const dot = document.createElementNS(SVG_NS, 'circle')
+  dot.setAttribute('r', '12')
+  dot.setAttribute('fill', 'var(--secondary)')
+  dot.setAttribute('stroke', 'var(--surface)')
+  dot.setAttribute('stroke-width', '6')
+  g.append(halo, dot)
+
+  const labelHeight = 34
+  const label = 'คุณอยู่ที่นี่'
+  const labelWidth = Math.max(120, label.length * 12 + 28)
+  const box = document.createElementNS(SVG_NS, 'g')
+  box.setAttribute('transform', `translate(0 ${-40 - labelHeight})`)
+  const background = document.createElementNS(SVG_NS, 'rect')
+  background.setAttribute('x', String(-labelWidth / 2))
+  background.setAttribute('width', String(labelWidth))
+  background.setAttribute('height', String(labelHeight))
+  background.setAttribute('rx', '10')
+  background.setAttribute('fill', 'var(--surface)')
+  background.setAttribute('stroke', 'var(--secondary)')
+  background.setAttribute('stroke-width', '2')
+  const text = document.createElementNS(SVG_NS, 'text')
+  text.setAttribute('y', String(labelHeight / 2))
+  text.setAttribute('text-anchor', 'middle')
+  text.setAttribute('dominant-baseline', 'central')
+  text.setAttribute('font-family', "'Noto Sans Thai', Tahoma, sans-serif")
+  text.setAttribute('font-size', '22')
+  text.setAttribute('font-weight', '700')
+  text.setAttribute('fill', 'var(--ink)')
+  text.textContent = label
+  box.append(background, text)
+  g.append(box)
   return g
 }
 
