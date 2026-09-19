@@ -6,8 +6,20 @@ package his
 
 import (
 	"context"
+	"time"
 
 	"carepath/apps/api/internal/platform/apperr"
+)
+
+// Canonical event types of the integration contract (mock-his.yaml schema
+// EventType). A real HIS adapter translates vendor event names onto these.
+const (
+	EventVisitOpened      = "visit.opened"
+	EventVisitUpdated     = "visit.updated"
+	EventServiceRequested = "service.requested"
+	EventServiceStarted   = "service.started"
+	EventServiceCompleted = "service.completed"
+	EventServiceCancelled = "service.cancelled"
 )
 
 // ErrVisitNotFound is returned when the HIS reports no visit for the given ID.
@@ -33,8 +45,43 @@ type Visit struct {
 	Steps      []VisitStep `json:"steps"`
 }
 
+// Event is the canonical HIS event envelope (ADR-0008): transport-agnostic —
+// today delivered by the pull feed, later possibly by webhook or message.
+// EventID is HIS-assigned and the idempotency key for consumers.
+type Event struct {
+	EventID    string         `json:"eventId"`
+	OccurredAt time.Time      `json:"occurredAt"`
+	VisitID    string         `json:"visitId"`
+	PatientRef string         `json:"patientRef"`
+	Type       string         `json:"type"`
+	Payload    map[string]any `json:"payload"`
+}
+
+// Validate reports whether the envelope carries the fields every canonical
+// event must have, independent of its type-specific payload.
+func (e Event) Validate() error {
+	switch {
+	case e.EventID == "":
+		return apperr.New(apperr.KindInvalid, "event envelope missing eventId")
+	case e.VisitID == "":
+		return apperr.New(apperr.KindInvalid, "event envelope missing visitId")
+	case e.Type == "":
+		return apperr.New(apperr.KindInvalid, "event envelope missing type")
+	}
+	return nil
+}
+
+// EventPage is one page of the append-only event feed, oldest first.
+// NextAfter is the cursor for the next page; empty when there are no more
+// events.
+type EventPage struct {
+	Events    []Event `json:"events"`
+	NextAfter string  `json:"nextAfter"`
+}
+
 // Client is the HIS port. The HIS is an external system, so implementations
 // must not participate in CarePath database transactions.
 type Client interface {
 	GetVisit(ctx context.Context, visitID string) (Visit, error)
+	Events(ctx context.Context, after string, limit int) (EventPage, error)
 }

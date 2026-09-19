@@ -36,6 +36,10 @@ func (f *fakeHIS) GetVisit(_ context.Context, _ string) (his.Visit, error) {
 	return f.visit, f.err
 }
 
+func (f *fakeHIS) Events(_ context.Context, _ string, _ int) (his.EventPage, error) {
+	return his.EventPage{}, nil
+}
+
 type fakeServicepoint struct {
 	gotCtx context.Context
 	code   string
