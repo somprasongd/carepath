@@ -1,3 +1,7 @@
 export * from './components/AttentionCard'
+export * from './components/StaffStatusBadge'
+export * from './components/StaffVisitDetail'
+export * from './components/StaffVisitList'
 export * from './queries'
 export * from './journey'
+export * from './staff'

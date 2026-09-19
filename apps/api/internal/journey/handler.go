@@ -22,6 +22,9 @@ func NewHandler(service Service) *Handler {
 // Register mounts the journey routes under the given /api/v1 router.
 func (h *Handler) Register(router fiber.Router) {
 	router.Get("/journeys/:visitId", h.getJourney)
+	// Staff-facing reads live under /staff so the NFR-08 auth guard (#43)
+	// can cover the whole group.
+	router.Get("/staff/visits", h.listVisits)
 	router.Post("/journeys/:visitId/steps/:sequence/transition", h.transitionStep)
 }
 
@@ -51,6 +54,23 @@ func (h *Handler) getJourney(c fiber.Ctx) error {
 		return httpx.Error(c, err)
 	}
 	return c.JSON(view)
+}
+
+// listVisits godoc
+//
+//	@Summary		List visits for the staff monitor
+//	@Description	Every projected journey, freshest sync first — the same per-visit shape as the single-journey read (ordered steps, resolved service points, deterministic current/next). Reads the CarePath projection only; a visit not yet ingested is absent until its first event lands.
+//	@Tags			staff
+//	@Produce		json
+//	@Success		200	{array}	journey.View
+//	@Failure		500	{object}	httpx.ErrorResponse	"internal server error"
+//	@Router			/api/v1/staff/visits [get]
+func (h *Handler) listVisits(c fiber.Ctx) error {
+	views, err := h.service.ListJourneys(c.Context())
+	if err != nil {
+		return httpx.Error(c, err)
+	}
+	return c.JSON(views)
 }
 
 // transitionStep godoc

@@ -352,6 +352,28 @@ paths:
       summary: Get a service point by code
       tags:
       - service-points
+  /api/v1/staff/visits:
+    get:
+      description: Every projected journey, freshest sync first — the same per-visit
+        shape as the single-journey read (ordered steps, resolved service points,
+        deterministic current/next). Reads the CarePath projection only; a visit not
+        yet ingested is absent until its first event lands.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/journey.View'
+            type: array
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: List visits for the staff monitor
+      tags:
+      - staff
   /api/v1/visits/{visitId}:
     get:
       description: Returns the HIS visit enriched with the next actionable step and

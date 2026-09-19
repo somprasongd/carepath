@@ -52,6 +52,9 @@ type CommandAudit struct {
 type Repo interface {
 	UpsertVisit(ctx context.Context, visit Visit) error
 	GetVisit(ctx context.Context, visitID string) (Visit, error)
+	// ListVisits returns every projected visit with its steps, freshest
+	// sync first — ordering is part of the port's contract (#37).
+	ListVisits(ctx context.Context) ([]Visit, error)
 	MarkEventApplied(ctx context.Context, eventID, visitID string) error
 	EventApplied(ctx context.Context, eventID string) (bool, error)
 	InsertCommandAudit(ctx context.Context, audit CommandAudit) error
