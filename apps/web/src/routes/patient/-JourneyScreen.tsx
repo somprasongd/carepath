@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useAuth } from '@/auth/AuthContext'
 import {
   AppBar,
   Button,
@@ -37,13 +38,20 @@ export function JourneyScreen({
   visitId: string
   onNavigate?: () => void
 }) {
+  const { identity } = useAuth()
   const { data: visit, isPending, isError, error, refetch } = useVisit(visitId)
 
   // Early returns keep `children` undefined in the success path so the shell
   // falls back to the rail — a `false` fragment child would suppress it.
   if (isPending) {
     return (
-      <JourneyShell visitRef={visitId} steps={[]} next={null} onNavigate={onNavigate}>
+      <JourneyShell
+        visitRef={visitId}
+        steps={[]}
+        next={null}
+        onNavigate={onNavigate}
+        displayName={identity?.displayName}
+      >
         <Meta>กำลังโหลดขั้นตอนของคุณ…</Meta>
       </JourneyShell>
     )
@@ -51,7 +59,13 @@ export function JourneyScreen({
 
   if (isError) {
     return (
-      <JourneyShell visitRef={visitId} steps={[]} next={null} onNavigate={onNavigate}>
+      <JourneyShell
+        visitRef={visitId}
+        steps={[]}
+        next={null}
+        onNavigate={onNavigate}
+        displayName={identity?.displayName}
+      >
         <Card radius="md" padding="md">
           <div className="mb-2.5 font-sans text-body-md text-ink">
             {visitLoadErrorMessage(error)}
@@ -80,6 +94,7 @@ export function JourneyScreen({
           : null
       }
       onNavigate={onNavigate}
+      displayName={identity?.displayName}
     />
   )
 }
@@ -89,6 +104,7 @@ export function JourneyShell({
   steps,
   next,
   onNavigate,
+  displayName,
   children,
 }: {
   visitRef: string
@@ -96,6 +112,8 @@ export function JourneyShell({
   /** The sticky CTA; null when nothing is actionable (visit finished). */
   next: { value: string; cta: string } | null
   onNavigate?: () => void
+  /** LINE display name, when signed in via LIFF; omitted on /design's static reference. */
+  displayName?: string
   /** Loading/error state replaces the rail. */
   children?: ReactNode
 }) {
@@ -108,6 +126,7 @@ export function JourneyShell({
         <Lead className="mb-7 max-w-[300px]">
           ติดตามขั้นตอนของคุณ แล้วไปยังจุดบริการถัดไปได้จากปุ่มด้านล่าง
         </Lead>
+        {displayName && <Meta className="-mt-5 mb-7">เข้าสู่ระบบด้วยไลน์ · {displayName}</Meta>}
 
         {children ?? <JourneyRail steps={steps} />}
       </ScreenBody>
