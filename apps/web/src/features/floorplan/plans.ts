@@ -17,6 +17,22 @@ export function floorPlanFor(floorId: string): string | null {
 }
 
 /**
+ * Thai label for a floor the app can show on a plan ("ชั้น 1"). Journey
+ * places carry their floor's code from the API, but route nodes only know
+ * floorId — this bridges the two for cross-floor turn cues (#29). Same
+ * static scope as PLANS: the floors with a plan asset.
+ */
+export function floorLabelFor(floorId: string): string {
+  const code = FLOOR_CODES[floorId]
+  return code ? `ชั้น ${code}` : floorId
+}
+
+const FLOOR_CODES: Record<string, string> = {
+  'I-1301': '1',
+  'I-1302': '2',
+}
+
+/**
  * Whether the plan really carries this place — rooms and nav nodes both
  * hold data-place-id, so one hit is enough. This guards the honest
  * "ยังไม่รองรับเส้นทาง" state when the map model knows a place the plan
