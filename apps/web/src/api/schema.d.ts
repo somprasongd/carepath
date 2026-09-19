@@ -290,6 +290,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/journeys/{visitId}/steps/{sequence}/transition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Command: transition one service step's status. Forwards the command to the HIS — the system of record (ADR-0008) — and returns the refreshed journey with the recalculated current/next step. Illegal or out-of-order transitions are rejected by the HIS. commandId is an optional caller-assigned idempotency key (a fresh UUID is generated when absent); source names the acting surface for the audit trail. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    visitId: string;
+                    sequence: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TransitionRequest"];
+                };
+            };
+            responses: {
+                /** @description The refreshed journey after applying the command */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Journey"];
+                    };
+                };
+                /** @description Invalid body or unknown target status */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Visit or step not found, or journey not projected */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Illegal transition (e.g. from a terminal status) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Upstream HIS error */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/navigation/route": {
         parameters: {
             query?: never;
@@ -393,6 +481,21 @@ export interface components {
             next?: components["schemas"]["JourneyStep"] | null;
             /** Format: date-time */
             syncedAt: string;
+        };
+        /** @description The client-facing transition command (#19). Mirrors the canonical TransitionCommand CarePath forwards to the HIS. */
+        TransitionRequest: {
+            /**
+             * @description Target step status.
+             * @enum {string}
+             */
+            to: "STARTED" | "COMPLETED" | "CANCELLED";
+            /**
+             * Format: uuid
+             * @description Optional caller-assigned idempotency key; generated when absent.
+             */
+            commandId?: string;
+            /** @description Acting surface for the audit trail, e.g. staff-web or patient-web. Defaults to unknown. */
+            source?: string;
         };
         /** @description The Visit fields plus the resolved next step. */
         VisitView: {

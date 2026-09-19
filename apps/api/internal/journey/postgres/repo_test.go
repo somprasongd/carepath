@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"carepath/apps/api/internal/journey"
 	"carepath/apps/api/internal/platform/db"
@@ -136,6 +137,43 @@ func TestGetVisitNotFound(t *testing.T) {
 	repo := New(newDB(t))
 	if _, err := repo.GetVisit(context.Background(), "NOPE"); err != journey.ErrNotFound {
 		t.Fatalf("error = %v, want journey.ErrNotFound", err)
+	}
+}
+
+// #19 AC4: commands land in the audit table with timestamp and source, and a
+// replayed commandId (retry after a failed local transaction) never
+// duplicates the row.
+func TestInsertCommandAuditDedupesByCommandID(t *testing.T) {
+	database := newDB(t)
+	repo := New(database)
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_, _ = database.Querier(ctx).Exec(ctx,
+			`DELETE FROM carepath.journey_command_audit WHERE command_id = $1`, "TEST-CMD-1")
+	})
+
+	audit := journey.CommandAudit{
+		CommandID: "TEST-CMD-1", VisitID: "TEST-JOURNEY-5",
+		Sequence: 2, ToStatus: "STARTED", Source: "staff-web",
+	}
+	for i := 0; i < 2; i++ {
+		if err := repo.InsertCommandAudit(ctx, audit); err != nil {
+			t.Fatalf("InsertCommandAudit %d: %v", i, err)
+		}
+	}
+
+	var count int
+	var source string
+	var createdAt *time.Time
+	err := database.Querier(ctx).QueryRow(ctx,
+		`SELECT count(*), min(source), min(created_at) FROM carepath.journey_command_audit WHERE command_id = $1`,
+		"TEST-CMD-1",
+	).Scan(&count, &source, &createdAt)
+	if err != nil {
+		t.Fatalf("query audit: %v", err)
+	}
+	if count != 1 || source != "staff-web" || createdAt == nil || createdAt.IsZero() {
+		t.Fatalf("audit = count %d source %s created_at %v, want 1 row with source and timestamp", count, source, createdAt)
 	}
 }
 

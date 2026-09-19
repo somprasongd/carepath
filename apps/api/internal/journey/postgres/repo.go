@@ -117,3 +117,20 @@ func (r *Repo) EventApplied(ctx context.Context, eventID string) (bool, error) {
 	}
 	return applied, nil
 }
+
+// InsertCommandAudit records one forwarded transition command (#19 AC4).
+// command_id is the primary key, so replaying the same id — e.g. a client
+// retry after a failed local transaction — is a no-op, not a duplicate row.
+func (r *Repo) InsertCommandAudit(ctx context.Context, audit journey.CommandAudit) error {
+	_, err := r.database.Querier(ctx).Exec(ctx,
+		`INSERT INTO carepath.journey_command_audit (command_id, visit_id, sequence, to_status, source)
+		 VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT (command_id) DO NOTHING`,
+		audit.CommandID, audit.VisitID, audit.Sequence, audit.ToStatus, audit.Source,
+	)
+	if err != nil {
+		return apperr.Wrapf(apperr.KindInternal, err,
+			"journey: audit command %s of %s", audit.CommandID, audit.VisitID)
+	}
+	return nil
+}

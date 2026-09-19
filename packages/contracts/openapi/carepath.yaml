@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.2.0
+  version: 0.3.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -142,6 +142,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/journeys/{visitId}/steps/{sequence}/transition:
+    post:
+      description: >
+        Command: transition one service step's status. Forwards the command
+        to the HIS — the system of record (ADR-0008) — and returns the
+        refreshed journey with the recalculated current/next step. Illegal or
+        out-of-order transitions are rejected by the HIS. commandId is an
+        optional caller-assigned idempotency key (a fresh UUID is generated
+        when absent); source names the acting surface for the audit trail.
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: sequence
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransitionRequest'
+      responses:
+        '200':
+          description: The refreshed journey after applying the command
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Journey'
+        '400':
+          description: Invalid body or unknown target status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Visit or step not found, or journey not projected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Illegal transition (e.g. from a terminal status)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Upstream HIS error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/navigation/route:
     get:
       description: Not implemented yet — reserved for the navigation module.
@@ -263,6 +324,23 @@ components:
           description: The first READY step by sequence — the next actionable
             step, if any.
         syncedAt: { type: string, format: date-time }
+    TransitionRequest:
+      type: object
+      description: The client-facing transition command (#19). Mirrors the
+        canonical TransitionCommand CarePath forwards to the HIS.
+      required: [to]
+      properties:
+        to:
+          type: string
+          description: Target step status.
+          enum: [STARTED, COMPLETED, CANCELLED]
+        commandId:
+          type: string
+          format: uuid
+          description: Optional caller-assigned idempotency key; generated when absent.
+        source:
+          type: string
+          description: Acting surface for the audit trail, e.g. staff-web or patient-web. Defaults to unknown.
     VisitView:
       type: object
       description: The Visit fields plus the resolved next step.

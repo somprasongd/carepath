@@ -2,7 +2,10 @@ package journey
 
 import (
 	"context"
+	"fmt"
 	"sort"
+
+	"github.com/google/uuid"
 
 	"carepath/apps/api/internal/his"
 	"carepath/apps/api/internal/platform/apperr"
@@ -25,6 +28,11 @@ type Service interface {
 	// ordered by sequence, each resolved to its service point, with the
 	// deterministic current (first STARTED) and next (first READY) step.
 	GetJourney(ctx context.Context, visitID string) (View, error)
+	// TransitionStep forwards one step-status command to the HIS (the system
+	// of record per ADR-0008 §2), then re-projects the visit synchronously
+	// and records the command in the audit log. The returned view carries the
+	// recalculated next step immediately.
+	TransitionStep(ctx context.Context, visitID string, sequence int, cmd his.TransitionCommand, source string) (View, error)
 }
 
 type service struct {
@@ -119,6 +127,59 @@ func (s *service) GetJourney(ctx context.Context, visitID string) (View, error) 
 		return View{}, err
 	}
 	return view, nil
+}
+
+func (s *service) TransitionStep(ctx context.Context, visitID string, sequence int, cmd his.TransitionCommand, source string) (View, error) {
+	switch cmd.To {
+	case his.CommandToStarted, his.CommandToCompleted, his.CommandToCancelled:
+	default:
+		return View{}, apperr.New(apperr.KindInvalid, fmt.Sprintf("unknown target status %q", cmd.To))
+	}
+	if cmd.CommandID == "" {
+		cmd.CommandID = uuid.NewString()
+	}
+	if source == "" {
+		source = "unknown"
+	}
+
+	// The HIS owns transition legality and never joins database transactions
+	// (ADR-0007/0008): send the command first, then read the resulting state.
+	step, err := s.his.TransitionStep(ctx, visitID, sequence, cmd)
+	if err != nil {
+		return View{}, err
+	}
+	snapshot, err := s.his.GetVisit(ctx, visitID)
+	if err != nil {
+		return View{}, err
+	}
+
+	err = s.tx.WithinTransaction(ctx, func(ctx context.Context) error {
+		visit, err := s.project(ctx, snapshot)
+		if err != nil {
+			return err
+		}
+		if err := s.repo.UpsertVisit(ctx, visit); err != nil {
+			return err
+		}
+		return s.repo.InsertCommandAudit(ctx, CommandAudit{
+			CommandID: cmd.CommandID,
+			VisitID:   visitID,
+			Sequence:  sequence,
+			ToStatus:  step.Status,
+			Source:    source,
+		})
+	})
+	if err != nil {
+		return View{}, err
+	}
+	logger.FromContext(ctx).Info("step transitioned",
+		"command_id", cmd.CommandID,
+		"visit_id", visitID,
+		"sequence", sequence,
+		"to", step.Status,
+		"source", source,
+	)
+	return s.GetJourney(ctx, visitID)
 }
 
 // buildView resolves service points for the projection's stored bindings and

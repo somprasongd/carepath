@@ -34,6 +34,18 @@ type Visit struct {
 	SyncedAt   time.Time
 }
 
+// CommandAudit is the CarePath-side operational record of one transition
+// command sent to the HIS (#19 AC4): timestamp and source at minimum. It is
+// not step status — the HIS remains the system of record (ADR-0008 §2) — so
+// CommandID is only the idempotency key of the audit row.
+type CommandAudit struct {
+	CommandID string
+	VisitID   string
+	Sequence  int
+	ToStatus  string
+	Source    string
+}
+
 // Repo is the persistence port of this module. Only this package's postgres
 // adapter implements it; the service wraps its calls in transactions, so
 // repository calls always join the ambient transaction carried by ctx.
@@ -42,4 +54,5 @@ type Repo interface {
 	GetVisit(ctx context.Context, visitID string) (Visit, error)
 	MarkEventApplied(ctx context.Context, eventID, visitID string) error
 	EventApplied(ctx context.Context, eventID string) (bool, error)
+	InsertCommandAudit(ctx context.Context, audit CommandAudit) error
 }

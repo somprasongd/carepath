@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"carepath/apps/api/internal/his"
+	"carepath/apps/api/internal/platform/apperr"
 	"carepath/apps/api/internal/servicepoint"
 )
 
@@ -38,6 +39,10 @@ func (f *fakeHIS) GetVisit(_ context.Context, _ string) (his.Visit, error) {
 
 func (f *fakeHIS) Events(_ context.Context, _ string, _ int) (his.EventPage, error) {
 	return his.EventPage{}, nil
+}
+
+func (f *fakeHIS) TransitionStep(_ context.Context, _ string, _ int, _ his.TransitionCommand) (his.VisitStep, error) {
+	return his.VisitStep{}, apperr.New(apperr.KindConflict, "visit module never sends commands")
 }
 
 type fakeServicepoint struct {

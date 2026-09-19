@@ -102,3 +102,61 @@ func TestEventsError(t *testing.T) {
 		t.Fatalf("error = %v, want KindUpstream", err)
 	}
 }
+
+func TestTransitionStep(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   int
+		body     string
+		wantStep bool
+		wantKind apperr.Kind
+		wantMsg  string
+	}{
+		{
+			name:     "decodes resulting step",
+			status:   http.StatusOK,
+			body:     `{"sequence":2,"serviceCode":"LAB","status":"STARTED"}`,
+			wantStep: true,
+		},
+		{name: "unknown target", status: http.StatusBadRequest, body: `{"error":"unknown target status \"PAUSED\""}`, wantKind: apperr.KindInvalid, wantMsg: `unknown target status "PAUSED"`},
+		{name: "visit not found", status: http.StatusNotFound, body: `{"error":"visit not found"}`, wantKind: apperr.KindNotFound, wantMsg: "visit not found"},
+		{name: "illegal transition", status: http.StatusConflict, body: `{"error":"step 1 is COMPLETED and cannot transition to STARTED"}`, wantKind: apperr.KindConflict, wantMsg: "step 1 is COMPLETED and cannot transition to STARTED"},
+		{name: "upstream error", status: http.StatusInternalServerError, body: `{"error":"boom"}`, wantKind: apperr.KindUpstream},
+		{name: "error without message", status: http.StatusConflict, body: `{}`, wantKind: apperr.KindConflict, wantMsg: "HIS rejected the command"},
+		{name: "malformed success body", status: http.StatusOK, body: `{`, wantKind: apperr.KindUpstream},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/api/v1/visits/VISIT-001/steps/2/transition" {
+					t.Errorf("request = %s %s, want POST /api/v1/visits/VISIT-001/steps/2/transition", r.Method, r.URL.Path)
+				}
+				var cmd his.TransitionCommand
+				if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil || cmd.CommandID != "CMD-1" || cmd.To != "STARTED" {
+					t.Errorf("command body = %+v (err %v), want commandId CMD-1 to STARTED", cmd, err)
+				}
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer server.Close()
+
+			step, err := New(server.URL, server.Client()).TransitionStep(context.Background(), "VISIT-001", 2,
+				his.TransitionCommand{CommandID: "CMD-1", To: "STARTED"})
+			if tt.wantStep {
+				if err != nil {
+					t.Fatalf("TransitionStep: %v", err)
+				}
+				if step.Sequence != 2 || step.ServiceCode != "LAB" || step.Status != "STARTED" {
+					t.Fatalf("step = %+v, want decoded LAB step", step)
+				}
+				return
+			}
+			if err == nil || apperr.KindOf(err) != tt.wantKind {
+				t.Fatalf("error = %v, want kind %v", err, tt.wantKind)
+			}
+			if tt.wantMsg != "" && err.Error() != tt.wantMsg {
+				t.Fatalf("message = %q, want %q", err.Error(), tt.wantMsg)
+			}
+		})
+	}
+}

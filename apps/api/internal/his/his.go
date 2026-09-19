@@ -25,6 +25,23 @@ const (
 // ErrVisitNotFound is returned when the HIS reports no visit for the given ID.
 var ErrVisitNotFound = apperr.New(apperr.KindNotFound, "visit not found")
 
+// Canonical command targets (mock-his.yaml TransitionCommand schema). A real
+// HIS adapter translates its own action vocabulary onto these.
+const (
+	CommandToStarted   = "STARTED"
+	CommandToCompleted = "COMPLETED"
+	CommandToCancelled = "CANCELLED"
+)
+
+// TransitionCommand is the canonical CarePath→HIS command changing one
+// service step's status (ADR-0008 §1). CommandID is caller-assigned and the
+// HIS-side idempotency key: replaying it is a no-op that returns the current
+// step.
+type TransitionCommand struct {
+	CommandID string `json:"commandId"`
+	To        string `json:"to"`
+}
+
 // ErrUpstream marks any HIS-side failure (network error, unexpected status,
 // malformed payload) and maps to a 502 upstream response.
 var ErrUpstream = apperr.New(apperr.KindUpstream, "upstream HIS error")
@@ -84,4 +101,8 @@ type EventPage struct {
 type Client interface {
 	GetVisit(ctx context.Context, visitID string) (Visit, error)
 	Events(ctx context.Context, after string, limit int) (EventPage, error)
+	// TransitionStep forwards one step-status command. The HIS owns
+	// transition legality: it reports unknown visit/step (NotFound), illegal
+	// or out-of-order targets (Conflict), and unknown targets (Invalid).
+	TransitionStep(ctx context.Context, visitID string, sequence int, cmd TransitionCommand) (VisitStep, error)
 }
