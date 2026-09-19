@@ -59,13 +59,14 @@ Say but don't put on slide: the two-part problem statement — (1) what's next, 
 
 ### Live demo (2:50) — driver: ปฐมพงศ์, narrator: สมประสงค์
 
-Script (each step is something already verified working — see [Test Result](05-test-result.md) TC-01, TC-02, TC-12, TC-13):
+Full beat-by-beat script with expected results and recovery/fallback: **[Demo Script](07-demo-script.md)** (rehearsed end to end on the real stack; the same happy path is pinned by the API-level E2E test in CI). Shape of the 2:50:
 
-1. **(0:30)** Open the web app on `VISIT-001` — point at the journey timeline: registration ✓, screening ✓, doctor ✓, **now: blood draw at Laboratory·LAB-01**, next: pharmacy.
-2. **(0:30)** Call the underlying API live in a second tab/terminal — `GET /api/v1/visits/VISIT-001/next` — show the judges the raw JSON resolving to a real `ServicePoint`, to prove it's computed, not hardcoded on the frontend.
-3. **(0:40)** Trigger the "not yet built" path on purpose: tap "navigate to blood draw." Show the clear fallback message instead of a crash — this demonstrates NFR-10 (no raw errors) and is honest about current scope rather than hiding it.
-4. **(0:40)** Kill Mock HIS live (or show a pre-recorded clip of it) to show the 502 handling: API stays up, client gets `"upstream service unavailable"`, not a stack trace — this is the real bug-fix story from testing (see slide 7).
-5. **(0:30)** Show the ER diagram / SQL script briefly on screen (don't read it line by line) — say "this is the schema for the full Must-Have scope; today's demo exercises the visit and service-point tables live."
+1. **(0:20)** Open the patient app on `VISIT-002` — the journey timeline: ลงทะเบียน ✓, now at พบแพทย์ · อายุรกรรม, later เอกซเรย์/ชำระเงิน.
+2. **(0:20)** Tap "นำทางไปพบแพทย์" — floor plan appears, no route yet: the app asks for the patient's position first (no GPS indoors).
+3. **(0:30)** Report a Zigbee zone fix (simulator) — "คุณอยู่ที่นี่" + the route polyline on the floor plan.
+4. **(0:40)** Staff console: start the doctor step — switch back to the patient tab **without refreshing**: within ~15s the timeline grows "รอผลตรวจ" and the CTA flips to "นำทางไปเอกซเรย์".
+5. **(0:40)** Mock HIS console: X-ray performed → resulted — the patient screen flips to "กลับไปพบแพทย์" with a new CTA: the next destination recomputed after a service completes.
+6. **(0:20)** If time allows, close the loop: ยา + ชำระเงิน → every step เสร็จสิ้น.
 
 Keep a **local recording of this exact sequence** as a backup (brief §12 explicitly asks for one) — narrate over it if the venue's network drops.
 
