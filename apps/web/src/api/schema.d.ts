@@ -398,6 +398,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/demo/zigbee/location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Demo-only Zigbee simulator (#33): reports a zone-level fix for the visit through the canonical ZIGBEE location provider (ADR-0004). The zone resolves to its representative navigation node, which becomes the routing start point like any other location. Stands in for the external positioning service of docs/integration/ location-zigbee.md during demos; a real Zigbee integration will be a separate adapter consuming positioning pushes, not this endpoint. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ZigbeeSimulatorRequest"];
+                };
+            };
+            responses: {
+                /** @description The recorded observation, now the current location */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LocationObservation"];
+                    };
+                };
+                /** @description Invalid body, or a floor/zone that does not resolve to a known location */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/service-points": {
         parameters: {
             query?: never;
@@ -722,6 +780,15 @@ export interface components {
             /** @description Provider source to resolve through, e.g. QR. */
             source: string;
             raw: string;
+        };
+        /** @description One simulated Zigbee zone fix for the demo endpoint (#33) — where the visit's tag is and how confident the simulated positioning is. */
+        ZigbeeSimulatorRequest: {
+            visitId: string;
+            floorId: string;
+            /** @description Positioning zone on that floor, e.g. PUBLIC, WELLNESS. */
+            zone: string;
+            /** @description Optional 0..1 confidence of the simulated fix. */
+            confidence?: number | null;
         };
     };
     responses: never;

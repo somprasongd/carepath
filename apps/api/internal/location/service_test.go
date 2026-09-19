@@ -33,9 +33,12 @@ func (f *fakeRepo) Latest(_ context.Context, visitID string) (location.Observati
 }
 
 // fakeNavigation implements just GetNode: every id exists on I-1301 with the
-// zone from a lookup table, except NotFoundNode.
+// zone from a lookup table, except NotFoundNode. When nodes is set, GetNode
+// and ListNodes serve that whole graph instead — the shape the Zigbee
+// provider's zone lookup (#33) needs.
 type fakeNavigation struct {
 	gotNodeID string
+	nodes     []navigation.NavNode
 }
 
 const notFoundNode = "I-1301/node-missing"
@@ -50,7 +53,12 @@ func floatPtr(f float64) *float64 { return &f }
 
 func (f *fakeNavigation) GetNode(_ context.Context, nodeID string) (navigation.NavNode, error) {
 	f.gotNodeID = nodeID
-	if nodeID == notFoundNode {
+	if len(f.nodes) > 0 {
+		for _, n := range f.nodes {
+			if n.ID == nodeID {
+				return n, nil
+			}
+		}
 		return navigation.NavNode{}, navigation.ErrNodeNotFound
 	}
 	if _, ok := nodeZones[nodeID]; !ok {
@@ -59,7 +67,9 @@ func (f *fakeNavigation) GetNode(_ context.Context, nodeID string) (navigation.N
 	return navigation.NavNode{ID: nodeID, FloorID: "I-1301", Zone: nodeZones[nodeID]}, nil
 }
 
-func (f *fakeNavigation) ListNodes(context.Context) ([]navigation.NavNode, error) { return nil, nil }
+func (f *fakeNavigation) ListNodes(context.Context) ([]navigation.NavNode, error) {
+	return f.nodes, nil
+}
 func (f *fakeNavigation) ListEdges(context.Context) ([]navigation.NavEdge, error) { return nil, nil }
 
 // Route is unused by these tests — location.Service never calls it — but is

@@ -85,6 +85,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/demo/zigbee/location": {
+            "post": {
+                "description": "Demo-only simulator for the Zigbee positioning service (#33): reports a zone-level fix for the visit through the canonical ZIGBEE location provider and returns the recorded observation. The zone resolves to its representative navigation node, which becomes the routing start point like any other location. A real Zigbee integration will consume positioning-service pushes through a separate adapter, not this endpoint.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "location"
+                ],
+                "summary": "Simulate a Zigbee zone fix",
+                "parameters": [
+                    {
+                        "description": "Simulated zone fix: visitId, floorId, zone, optional confidence",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/location.zigbeeSimulatorRequestBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/location.Observation"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid body, or a floor/zone that does not resolve to a known location",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/journeys/{visitId}": {
             "get": {
                 "description": "Returns the CarePath-derived journey plan (ADR-0009): steps in display order, each resolved to its service point, with every currently-actionable step and CarePath's recommendation among them. A completed visit is reported with completed=true and no actionable steps.",
@@ -661,6 +707,23 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "location.zigbeeSimulatorRequestBody": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number"
+                },
+                "floorId": {
+                    "type": "string"
+                },
+                "visitId": {
+                    "type": "string"
+                },
+                "zone": {
                     "type": "string"
                 }
             }
