@@ -3,8 +3,9 @@ import { AuthContext } from './AuthContext'
 import type { AuthContextValue, AuthIdentity, AuthStatus } from './types'
 
 const DEMO_IDENTITY: AuthIdentity = {
-  idToken: 'demo-id-token',
+  sessionToken: 'demo-session-token',
   source: 'demo',
+  externalId: 'demo-user',
   displayName: 'Demo User',
 }
 

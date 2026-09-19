@@ -45,6 +45,9 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-carepath}:${POSTGRES_PASSWORD:-carepath}@postgres:5432/${POSTGRES_DB:-carepath}?sslmode=disable
       HIS_BASE_URL: ${HIS_BASE_URL:-http://mock-his:8090}
       HIS_INGEST_INTERVAL: ${HIS_INGEST_INTERVAL:-5s}
+      LINE_CHANNEL_ID: ${LINE_CHANNEL_ID:-}
+      ALLOW_DEMO_AUTH: ${ALLOW_DEMO_AUTH:-false}
+      SESSION_TTL: ${SESSION_TTL:-24h}
     depends_on:
       postgres:
         condition: service_healthy

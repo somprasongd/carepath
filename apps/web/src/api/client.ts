@@ -15,10 +15,10 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiGet<TReturn>(path: string): Promise<TReturn> {
+async function request<TReturn>(path: string, init?: RequestInit): Promise<TReturn> {
   let response: Response
   try {
-    response = await fetch(`${apiBase}${path}`)
+    response = init ? await fetch(`${apiBase}${path}`, init) : await fetch(`${apiBase}${path}`)
   } catch (cause) {
     throw new ApiError(0, `เชื่อมต่อ API ไม่ได้ (${String(cause)})`)
   }
@@ -33,4 +33,16 @@ export async function apiGet<TReturn>(path: string): Promise<TReturn> {
     throw new ApiError(response.status, detail)
   }
   return (await response.json()) as TReturn
+}
+
+export function apiGet<TReturn>(path: string): Promise<TReturn> {
+  return request<TReturn>(path)
+}
+
+export function apiPost<TReturn>(path: string, body: unknown): Promise<TReturn> {
+  return request<TReturn>(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }

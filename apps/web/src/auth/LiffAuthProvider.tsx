@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import liff from '@line/liff'
+import { apiPost } from '@/api/client'
+import type { components } from '@/api/schema'
 import { AuthContext } from './AuthContext'
 import type { AuthContextValue, AuthIdentity, AuthStatus } from './types'
+
+type CreateSessionResponse = components['schemas']['CreateSessionResponse']
 
 const liffId = import.meta.env.VITE_LIFF_ID
 
@@ -55,8 +59,16 @@ export function LiffAuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      const decoded = liff.getDecodedIDToken()
-      setIdentity({ idToken, source: 'line', displayName: decoded?.name })
+      const session = await apiPost<CreateSessionResponse>('/api/v1/auth/session', {
+        source: 'line',
+        idToken,
+      })
+      setIdentity({
+        sessionToken: session.sessionToken,
+        source: 'line',
+        externalId: session.identity.externalId,
+        displayName: session.identity.displayName,
+      })
       setStatus('authenticated')
     } catch (err) {
       setStatus('error')
