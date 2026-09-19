@@ -58,16 +58,16 @@ export function Queue() {
   const waiting = ticketRun.slice(queueIndex + 1)
 
   return (
-    <div className="flex h-dvh flex-col bg-neutral">
+    <div className="@container flex h-dvh flex-col bg-neutral">
       <TaskHeader
         role="เจ้าหน้าที่จุดบริการ"
         station={
-          <>
-            <span className="h-5 w-px bg-line" />
+          <span className="flex min-w-0 items-center gap-3.5">
+            <span className="hidden h-5 w-px shrink-0 bg-line @sm:inline-block" />
             <ZoneChip zone={station.zone}>
               {station.name} · {station.code} · {station.floor}
             </ZoneChip>
-          </>
+          </span>
         }
       />
 

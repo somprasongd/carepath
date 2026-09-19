@@ -23,7 +23,9 @@ export function ScreensSection() {
           จริง) หน้าเจ้าหน้าที่เป็นคอมโพเนนต์เดียว ปรับเองตามความกว้างของกรอบด้วย container query —
           ไม่ใช่สองหน้าที่แยกกัน ต่อจากนั้นคือ 3 หน้าจอที่ปิดช่องว่างใน{' '}
           <code>docs/deliverables/03-prototype-wireframe.md</code> §3.3 (เข้าสู่ระบบ, ลงทะเบียน,
-          เรียกคิว) — ออกแบบไว้ก่อนใน canvas เดียวกัน แล้วนำมาสร้างเป็นคอมโพเนนต์จริงที่นี่
+          เรียกคิว) — ออกแบบไว้ก่อนใน canvas เดียวกัน แล้วนำมาสร้างเป็นคอมโพเนนต์จริงที่นี่ ปรับตาม
+          ความกว้างของกรอบด้วย container query เหมือนหน้าเจ้าหน้าที่ชุดเดิม จึงมีทั้งเวอร์ชันมือถือและ
+          เดสก์ท็อป
         </>
       }
     >
@@ -59,7 +61,22 @@ export function ScreensSection() {
         </ScreenFrame>
       </div>
 
-      <SubHead>เจ้าหน้าที่ · เข้าสู่ระบบ, ลงทะเบียน, เรียกคิว (FR-13, FR-14, FR-15, FR-16, FR-18)</SubHead>
+      <SubHead>
+        เจ้าหน้าที่ · เข้าสู่ระบบ, ลงทะเบียน, เรียกคิว · มือถือ (FR-13, FR-14, FR-15, FR-16, FR-18)
+      </SubHead>
+      <div className="ds-frames">
+        <ScreenFrame title="เข้าสู่ระบบ · เลือกบทบาท" {...MOBILE}>
+          <LoginScreen onSignIn={() => {}} />
+        </ScreenFrame>
+        <ScreenFrame title="ลงทะเบียนผู้ป่วย" {...MOBILE}>
+          <Register />
+        </ScreenFrame>
+        <ScreenFrame title="เรียกคิว" {...MOBILE}>
+          <Queue />
+        </ScreenFrame>
+      </div>
+
+      <SubHead>เจ้าหน้าที่ · เข้าสู่ระบบ, ลงทะเบียน, เรียกคิว · เดสก์ท็อป</SubHead>
       <div className="ds-frames">
         <ScreenFrame title="เข้าสู่ระบบ · เลือกบทบาท" {...DESKTOP}>
           <LoginScreen onSignIn={() => {}} />

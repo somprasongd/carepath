@@ -27,7 +27,7 @@ export function Register() {
   const template = pathwayTemplates.find((t) => t.id === templateId) ?? pathwayTemplates[0]
 
   return (
-    <div className="flex h-dvh flex-col bg-neutral">
+    <div className="@container flex h-dvh flex-col bg-neutral">
       <TaskHeader role="เจ้าหน้าที่ลงทะเบียน" />
 
       <main className="flex-1 overflow-y-auto px-gutter py-8 @7xl:px-gutter-desktop">

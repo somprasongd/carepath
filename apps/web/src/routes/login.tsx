@@ -8,5 +8,9 @@ export const Route = createFileRoute('/login')({
 
 function LoginRoute() {
   const navigate = useNavigate()
-  return <LoginScreen onSignIn={(landing) => navigate({ to: landing })} />
+  return (
+    <div className="h-dvh">
+      <LoginScreen onSignIn={(landing) => navigate({ to: landing })} />
+    </div>
+  )
 }
