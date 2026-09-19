@@ -16,7 +16,8 @@ This directory is the working source of truth for architecture, requirements, de
 - [Functional Requirements](requirements/functional-requirements.md)
 - [Non-Functional Requirements](requirements/non-functional-requirements.md)
 - [MVP Scope](requirements/mvp-scope.md)
-- [Initial User Stories](requirements/user-stories.md)
+- [User Stories](requirements/user-stories.md)
+- [Use Case Diagram](requirements/use-case-diagram.md)
 
 ## Architecture Decision Records
 
@@ -45,6 +46,17 @@ This directory is the working source of truth for architecture, requirements, de
 ## Designs
 
 - [Patient & Staff UI (mobile-first mockup)](designs/patient-staff-ui.html) — exported interactive design canvas covering the patient journey/navigation screens and the staff dashboard/service-point mapping screens, mobile and desktop. Reference for visual direction only — not wired into `apps/web`.
+
+## Deliverables
+
+Hackathon submission deliverables (brief §10), assembled from the docs above:
+
+- [1. Requirement Specification](deliverables/01-requirement-specification.md)
+- [2. ER Diagram and Database Structure](deliverables/02-er-diagram-database.md)
+- [3. Prototype / Wireframe](deliverables/03-prototype-wireframe.md)
+- 4. Working Software — not a document; see `make up` / `docker compose up --build`
+- [5. Test Result](deliverables/05-test-result.md)
+- [6. Presentation Slides (outline)](deliverables/06-presentation-slides.md)
 
 ## Process
 

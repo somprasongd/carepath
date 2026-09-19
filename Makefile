@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: up down logs api mock-his web fmt migrate-up swag start stop fetch
+.PHONY: up down logs api mock-his web fmt migrate-up swag start stop fetch docs-erd
 
 up:
 	docker compose up --build
@@ -26,6 +26,15 @@ fmt:
 
 migrate-up:
 	docker compose run --rm migrate
+
+# Regenerate docs/architecture/erd/ from the live schema (needs `make up` or
+# `make migrate-up` first, and `tbls`: brew install k1LoW/tap/tbls). Docs use
+# Mermaid (renders inline on GitHub); schema.png is a static image export for
+# sharing outside the repo (e.g. slides, chat).
+docs-erd:
+	set -a; [ -f .env ] && . ./.env; set +a; \
+	tbls doc --rm-dist -f; \
+	tbls out -t png -o docs/architecture/erd/schema.png
 
 swag:
 	cd apps/api && go run github.com/swaggo/swag/cmd/swag init -g cmd/server/main.go -o docs --parseInternal

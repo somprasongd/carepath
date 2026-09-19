@@ -1,0 +1,91 @@
+{
+  "name": "carepath",
+  "tables": [
+    {
+      "name": "carepath.service_point",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "place_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "service_point_pkey",
+          "def": "CREATE UNIQUE INDEX service_point_pkey ON carepath.service_point USING btree (id)",
+          "table": "carepath.service_point",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "service_point_code_key",
+          "def": "CREATE UNIQUE INDEX service_point_code_key ON carepath.service_point USING btree (code)",
+          "table": "carepath.service_point",
+          "columns": [
+            "code"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "service_point_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "carepath.service_point",
+          "referenced_table": "",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "service_point_code_key",
+          "type": "UNIQUE",
+          "def": "UNIQUE (code)",
+          "table": "carepath.service_point",
+          "referenced_table": "",
+          "columns": [
+            "code"
+          ]
+        }
+      ]
+    }
+  ],
+  "driver": {
+    "name": "postgres",
+    "database_version": "PostgreSQL 17.7 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+    "meta": {
+      "current_schema": "carepath",
+      "search_paths": [
+        "carepath",
+        "public"
+      ],
+      "dict": {
+        "Functions": "Stored procedures and functions"
+      }
+    }
+  }
+}
