@@ -274,6 +274,35 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/staff/visits": {
+            "get": {
+                "description": "Every projected journey, freshest sync first — the same per-visit shape as the single-journey read (ordered steps, resolved service points, deterministic current/next). Reads the CarePath projection only; a visit not yet ingested is absent until its first event lands.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "staff"
+                ],
+                "summary": "List visits for the staff monitor",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/journey.View"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/visits/{visitId}": {
             "get": {
                 "description": "Returns the HIS visit enriched with the next actionable step and its service point.",

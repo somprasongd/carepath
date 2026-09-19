@@ -3,7 +3,9 @@ package journey
 import (
 	"context"
 	"errors"
+	"sort"
 	"testing"
+	"time"
 
 	"carepath/apps/api/internal/his"
 	"carepath/apps/api/internal/platform/apperr"
@@ -133,6 +135,17 @@ func (f *fakeRepo) GetVisit(_ context.Context, visitID string) (Visit, error) {
 		return v, nil
 	}
 	return Visit{}, ErrNotFound
+}
+
+// ListVisits mirrors the port's ordering contract: freshest sync first.
+func (f *fakeRepo) ListVisits(ctx context.Context) ([]Visit, error) {
+	_, f.inTxMarker = ctx.Value(txMarker{}).(bool)
+	out := make([]Visit, 0, len(f.visits))
+	for _, v := range f.visits {
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SyncedAt.After(out[j].SyncedAt) })
+	return out, nil
 }
 
 func (f *fakeRepo) MarkEventApplied(ctx context.Context, eventID, visitID string) error {
@@ -393,6 +406,63 @@ func TestGetJourneyNotFoundWhenNotProjected(t *testing.T) {
 	svc := newTestService(&fakeHIS{}, newFakeRepo())
 	if _, err := svc.GetJourney(context.Background(), "NOPE"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("error = %v, want ErrNotFound", err)
+	}
+}
+
+// #37 AC1–AC3: the staff monitor lists every projected visit with the same
+// deterministic current/next resolution as the single-journey read, freshest
+// sync first.
+func TestListJourneysResolvesEveryVisit(t *testing.T) {
+	repo := newFakeRepo()
+	lab := "SP-LAB"
+	repo.visits["VISIT-A"] = Visit{
+		VisitID: "VISIT-A", PatientRef: "PAT-A", Status: "ACTIVE",
+		SyncedAt: time.Now().Add(-time.Minute),
+		Steps: []Step{
+			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: &lab},
+			{Sequence: 2, ServiceCode: "LAB", Status: "STARTED", ServicePointID: &lab},
+		},
+	}
+	repo.visits["VISIT-B"] = Visit{
+		VisitID: "VISIT-B", PatientRef: "PAT-B", Status: "COMPLETED",
+		SyncedAt: time.Now(),
+		Steps: []Step{
+			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: &lab},
+		},
+	}
+	svc := newTestService(&fakeHIS{}, repo)
+
+	got, err := svc.ListJourneys(context.Background())
+	if err != nil {
+		t.Fatalf("ListJourneys: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("journeys = %d, want 2", len(got))
+	}
+	if got[0].VisitID != "VISIT-B" || got[1].VisitID != "VISIT-A" {
+		t.Fatalf("order = %s then %s, want freshest (VISIT-B) first", got[0].VisitID, got[1].VisitID)
+	}
+	if !got[0].Completed || got[0].Current != nil || got[0].Next != nil {
+		t.Fatalf("completed visit = %+v, want completed with no current/next", got[0])
+	}
+	if got[1].Current == nil || got[1].Current.Sequence != 2 || got[1].Current.ServicePoint == nil {
+		t.Fatalf("active visit current = %+v, want LAB at sequence 2 resolved to SP-LAB", got[1].Current)
+	}
+	if !repo.inTxMarker {
+		t.Fatal("list reads did not run inside a transaction")
+	}
+}
+
+// No projected visits is an empty list, not null — the contract promises an
+// array.
+func TestListJourneysEmptyIsArray(t *testing.T) {
+	svc := newTestService(&fakeHIS{}, newFakeRepo())
+	got, err := svc.ListJourneys(context.Background())
+	if err != nil {
+		t.Fatalf("ListJourneys: %v", err)
+	}
+	if got == nil || len(got) != 0 {
+		t.Fatalf("got = %#v, want an empty non-nil slice", got)
 	}
 }
 

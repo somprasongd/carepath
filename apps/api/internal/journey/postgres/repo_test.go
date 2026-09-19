@@ -140,6 +140,68 @@ func TestGetVisitNotFound(t *testing.T) {
 	}
 }
 
+// #37: the list read serves every projected visit with its steps grouped and
+// ordered, freshest sync first. Extra visits from other tests may share the
+// database — only the two seeded rows and their relative order are asserted.
+func TestListVisitsGroupsStepsNewestFirst(t *testing.T) {
+	database := newDB(t)
+	cleanupJourney(t, database, "TEST-JOURNEY-L1")
+	cleanupJourney(t, database, "TEST-JOURNEY-L2")
+	repo := New(database)
+	ctx := context.Background()
+
+	older := journey.Visit{
+		VisitID: "TEST-JOURNEY-L1", PatientRef: "PAT-L1", Status: "ACTIVE",
+		Steps: []journey.Step{
+			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: sp("SP-REG")},
+			{Sequence: 2, ServiceCode: "MYSTERY", Status: "READY"}, // unmapped: nil binding
+		},
+	}
+	newer := journey.Visit{
+		VisitID: "TEST-JOURNEY-L2", PatientRef: "PAT-L2", Status: "COMPLETED",
+		Steps: []journey.Step{
+			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: sp("SP-REG")},
+		},
+	}
+	if err := repo.UpsertVisit(ctx, older); err != nil {
+		t.Fatalf("upsert older: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond) // distinct synced_at for a deterministic order
+	if err := repo.UpsertVisit(ctx, newer); err != nil {
+		t.Fatalf("upsert newer: %v", err)
+	}
+
+	got, err := repo.ListVisits(ctx)
+	if err != nil {
+		t.Fatalf("ListVisits: %v", err)
+	}
+	posL1, posL2 := -1, -1
+	for i := range got {
+		switch got[i].VisitID {
+		case "TEST-JOURNEY-L1":
+			posL1 = i
+		case "TEST-JOURNEY-L2":
+			posL2 = i
+		}
+	}
+	if posL1 < 0 || posL2 < 0 {
+		t.Fatalf("list = %d visits, want both seeded rows present", len(got))
+	}
+	if posL2 > posL1 {
+		t.Fatalf("positions = older %d, newer %d; want newer first (synced_at DESC)", posL1, posL2)
+	}
+	seeded := got[posL1]
+	if len(seeded.Steps) != 2 || seeded.Steps[0].Sequence != 1 || seeded.Steps[1].Sequence != 2 {
+		t.Fatalf("older visit steps = %+v, want 2 steps ordered by sequence", seeded.Steps)
+	}
+	if seeded.Steps[1].ServicePointID != nil {
+		t.Fatalf("unmapped step = %+v, want nil binding", seeded.Steps[1])
+	}
+	if seeded.SyncedAt.IsZero() {
+		t.Fatal("synced_at not loaded")
+	}
+}
+
 // #19 AC4: commands land in the audit table with timestamp and source, and a
 // replayed commandId (retry after a failed local transaction) never
 // duplicates the row.

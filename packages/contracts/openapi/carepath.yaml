@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.4.1
+  version: 0.4.2
 servers:
   - url: http://localhost:8080
 paths:
@@ -248,6 +248,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/staff/visits:
+    get:
+      description: >
+        Staff visit monitor (#37): the projected journey of every visit
+        CarePath knows, freshest sync first — the same per-visit shape as the
+        single-journey read (ordered steps, resolved service points,
+        deterministic current/next). Reads the CarePath projection only; a
+        visit opened in the HIS but not yet ingested is absent until its
+        first event lands. Mounted under /api/v1/staff so the NFR-08 auth
+        guard (#43) can cover the group.
+      responses:
+        '200':
+          description: All projected journeys, newest sync first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Journey'
         '500':
           description: Internal server error
           content:

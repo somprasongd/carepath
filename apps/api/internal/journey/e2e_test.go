@@ -182,6 +182,26 @@ func TestIngestToProjectionEndToEnd(t *testing.T) {
 		t.Fatalf("MYSTERY binding = %v, want nil (unmapped is explicit)", got.Steps[3].ServicePointID)
 	}
 
+	// #37: the staff monitor's list serves the same projection, resolved the
+	// same way as the single-journey read.
+	views, err := journeys.ListJourneys(ctx)
+	if err != nil {
+		t.Fatalf("ListJourneys: %v", err)
+	}
+	listed := false
+	for _, v := range views {
+		if v.VisitID != "VISIT-E2E" {
+			continue
+		}
+		listed = true
+		if v.Next == nil || v.Next.Sequence != 2 || v.Next.ServiceCode != "LAB" {
+			t.Fatalf("listed VISIT-E2E next = %+v, want LAB at sequence 2", v.Next)
+		}
+	}
+	if !listed {
+		t.Fatalf("ListJourneys = %d views, want VISIT-E2E present", len(views))
+	}
+
 	// The HIS completes LAB: a canonical event drives the projection forward.
 	completed := e2eVisit()
 	completed.Steps[1].Status = "COMPLETED"

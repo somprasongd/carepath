@@ -28,6 +28,10 @@ type Service interface {
 	// ordered by sequence, each resolved to its service point, with the
 	// deterministic current (first STARTED) and next (first READY) step.
 	GetJourney(ctx context.Context, visitID string) (View, error)
+	// ListJourneys returns the projected journey of every visit for the
+	// staff visit monitor (#37), freshest sync first, with the same
+	// per-visit resolution as GetJourney.
+	ListJourneys(ctx context.Context) ([]View, error)
 	// TransitionStep forwards one step-status command to the HIS (the system
 	// of record per ADR-0008 §2), then re-projects the visit synchronously
 	// and records the command in the audit log. The returned view carries the
@@ -120,13 +124,42 @@ func (s *service) GetJourney(ctx context.Context, visitID string) (View, error) 
 		if err != nil {
 			return err
 		}
-		view, err = s.buildView(ctx, visit)
-		return err
+		points, err := s.servicePoints.List(ctx)
+		if err != nil {
+			return err
+		}
+		view = assembleView(visit, points)
+		return nil
 	})
 	if err != nil {
 		return View{}, err
 	}
 	return view, nil
+}
+
+func (s *service) ListJourneys(ctx context.Context) ([]View, error) {
+	var views []View
+	err := s.tx.WithinTransaction(ctx, func(ctx context.Context) error {
+		visits, err := s.repo.ListVisits(ctx)
+		if err != nil {
+			return err
+		}
+		// One service-point read feeds every row — the bindings are the
+		// same catalog the single-journey read resolves against.
+		points, err := s.servicePoints.List(ctx)
+		if err != nil {
+			return err
+		}
+		views = make([]View, len(visits))
+		for i, visit := range visits {
+			views[i] = assembleView(visit, points)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return views, nil
 }
 
 func (s *service) TransitionStep(ctx context.Context, visitID string, sequence int, cmd his.TransitionCommand, source string) (View, error) {
@@ -182,16 +215,12 @@ func (s *service) TransitionStep(ctx context.Context, visitID string, sequence i
 	return s.GetJourney(ctx, visitID)
 }
 
-// buildView resolves service points for the projection's stored bindings and
-// derives current/next. Resolution is deterministic: steps are ordered by
-// sequence, current is the first STARTED step, next the first READY one. It
-// must be called with the transaction-bound ctx so the servicepoint read
-// joins the projection read.
-func (s *service) buildView(ctx context.Context, visit Visit) (View, error) {
-	points, err := s.servicePoints.List(ctx)
-	if err != nil {
-		return View{}, err
-	}
+// assembleView resolves service points for the projection's stored bindings
+// and derives current/next. Resolution is deterministic: steps are ordered by
+// sequence, current is the first STARTED step, next the first READY one. The
+// caller fetches the service points and runs this inside the transaction so
+// both reads share it.
+func assembleView(visit Visit, points []servicepoint.ServicePoint) View {
 	byID := make(map[string]servicepoint.ServicePoint, len(points))
 	for _, sp := range points {
 		byID[sp.ID] = sp
@@ -229,7 +258,7 @@ func (s *service) buildView(ctx context.Context, visit Visit) (View, error) {
 			view.Next = &steps[i]
 		}
 	}
-	return view, nil
+	return view
 }
 
 // project resolves each step's service-point binding. A step whose service
