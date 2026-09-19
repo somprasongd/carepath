@@ -1,4 +1,4 @@
-package visit
+package journey_test
 
 import (
 	"go/parser"
@@ -13,7 +13,9 @@ import (
 // mock-specific HIS shape. All HIS access goes through the his.Client port
 // (ADR-0005); the mock-his Go module must never be imported from apps/api —
 // the only allowed coupling to Mock HIS is the HTTP contract in
-// packages/contracts/openapi/mock-his.yaml.
+// packages/contracts/openapi/mock-his.yaml. Lives here (moved from the
+// now-retired visit module, ADR-0009) since journey is the module that most
+// centrally owns the HIS boundary today.
 func TestNoModuleImportsMockHIS(t *testing.T) {
 	fset := token.NewFileSet()
 	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {

@@ -1,8 +1,11 @@
-// Package mockhis is the deterministic fake HIS: it owns visit and step
-// status (the system of record per ADR-0008), exposes the canonical
-// contract in packages/contracts/openapi/mock-his.yaml, and keeps an
-// append-only event log. It is not a second implementation of CarePath
-// business logic (see docs/integration/mock-his.md).
+// Package mockhis is the deterministic fake HIS: it owns visit, clinic, and
+// order facts (the system of record per ADR-0008, amended by ADR-0009),
+// exposes the canonical contract in packages/contracts/openapi/mock-his.yaml,
+// and keeps an append-only event log. Per ADR-0009 it has no concept of an
+// ordered patient journey — that is CarePath's journey planner's job — so
+// this store never models steps, only the facts a real HIS could report. It
+// is not a second implementation of CarePath business logic (see
+// docs/integration/mock-his.md).
 package mockhis
 
 import (
@@ -20,45 +23,69 @@ const (
 	VisitCancelled = "CANCELLED"
 )
 
-// Canonical step statuses (contract schema StepStatus).
+// Canonical visit types (contract schema VisitType).
 const (
-	StepPending   = "PENDING"
-	StepReady     = "READY"
-	StepStarted   = "STARTED"
-	StepCompleted = "COMPLETED"
-	StepCancelled = "CANCELLED"
+	VisitWalkin      = "WALKIN"
+	VisitAppointment = "APPOINTMENT"
+)
+
+// Canonical order types (contract schema OrderType).
+const (
+	OrderTypeLab  = "LAB"
+	OrderTypeXray = "XRAY"
+	OrderTypeEKG  = "EKG"
+	OrderTypeUS   = "US"
+	OrderTypeDrug = "DRUG"
+)
+
+// Canonical order statuses (contract schema OrderStatus).
+const (
+	OrderPlaced    = "PLACED"
+	OrderPerformed = "PERFORMED"
+	OrderResulted  = "RESULTED"
+	OrderCancelled = "CANCELLED"
 )
 
 // Canonical event types (contract schema EventType).
 const (
-	EventVisitOpened      = "visit.opened"
-	EventVisitUpdated     = "visit.updated"
-	EventServiceRequested = "service.requested"
-	EventServiceStarted   = "service.started"
-	EventServiceCompleted = "service.completed"
-	EventServiceCancelled = "service.cancelled"
+	EventVisitOpened        = "visit.opened"
+	EventVisitUpdated       = "visit.updated"
+	EventVisitClosed        = "visit.closed"
+	EventOrderPlaced        = "order.placed"
+	EventOrderPerformed     = "order.performed"
+	EventOrderResulted      = "order.resulted"
+	EventOrderCancelled     = "order.cancelled"
+	EventEncounterCompleted = "encounter.completed"
 )
 
-// VisitStep mirrors the contract VisitStep schema.
-type VisitStep struct {
-	Sequence    int    `json:"sequence"`
-	ServiceCode string `json:"serviceCode"`
-	Status      string `json:"status"`
+// Clinic mirrors the contract Clinic schema.
+type Clinic struct {
+	Code string `json:"code"`
+	Name string `json:"name,omitempty"`
+}
+
+// Order mirrors the contract Order schema.
+type Order struct {
+	OrderRef        string     `json:"orderRef"`
+	OrderType       string     `json:"orderType"`
+	OrderName       string     `json:"orderName"`
+	OrderedByClinic string     `json:"orderedByClinic"`
+	OrderedAt       time.Time  `json:"orderedAt"`
+	Status          string     `json:"status"`
+	PerformedAt     *time.Time `json:"performedAt,omitempty"`
+	ResultedAt      *time.Time `json:"resultedAt,omitempty"`
 }
 
 // Visit mirrors the contract Visit schema.
 type Visit struct {
-	VisitID    string      `json:"visitId"`
-	PatientRef string      `json:"patientRef"`
-	Status     string      `json:"status"`
-	Steps      []VisitStep `json:"steps"`
-}
-
-// TransitionCommand mirrors the contract TransitionCommand schema. CommandID
-// is the caller-assigned idempotency key.
-type TransitionCommand struct {
-	CommandID string `json:"commandId"`
-	To        string `json:"to"`
+	VisitID     string    `json:"visitId"`
+	PatientRef  string    `json:"patientRef"`
+	PatientName string    `json:"patientName,omitempty"`
+	VisitType   string    `json:"visitType"`
+	Status      string    `json:"status"`
+	Clinics     []Clinic  `json:"clinics"`
+	Orders      []Order   `json:"orders"`
+	OpenedAt    time.Time `json:"openedAt"`
 }
 
 // HISEvent mirrors the contract HISEvent envelope.
@@ -93,56 +120,44 @@ func (e *Error) Error() string { return e.Msg }
 type Store struct {
 	mu       sync.Mutex
 	visits   map[string]*Visit
+	orderVis map[string]string // orderRef -> visitId, for the /demo/orders/{orderRef}/* endpoints
 	events   []HISEvent
-	applied  map[string]bool
 	eventSeq int
 	visitSeq int
+	orderSeq int
 	seedBase time.Time
 	now      func() time.Time
 }
 
-// defaultServiceCodes is the standard demo flow used when a created visit
-// does not specify its own steps.
-var defaultServiceCodes = []string{"REGISTRATION", "SCREENING", "DOCTOR", "LAB", "PHARMACY"}
-
-// NewStore returns a seeded store. Seed events replay the visit history that
-// the seed snapshot already reflects (opened, requested per step, completed
-// steps), with timestamps derived from a fixed base for determinism.
+// NewStore returns a seeded store. The seed visit is an appointment patient
+// with one pre-visit lab order — the ADR-0009 example flow — so the console
+// and CarePath's journey planner both have something to show on first boot.
 func NewStore() *Store {
 	s := &Store{
 		visits:   map[string]*Visit{},
-		applied:  map[string]bool{},
+		orderVis: map[string]string{},
 		visitSeq: 1, // VISIT-001 is the seed
+		orderSeq: 1, // ORD-001 is the seed
 		seedBase: time.Date(2026, 9, 19, 9, 0, 0, 0, time.FixedZone("ICT", 7*60*60)),
 		now:      time.Now,
 	}
 	v := &Visit{
-		VisitID:    "VISIT-001",
-		PatientRef: "PATIENT-DEMO-001",
-		Status:     VisitActive,
-		Steps: []VisitStep{
-			{Sequence: 1, ServiceCode: "REGISTRATION", Status: StepCompleted},
-			{Sequence: 2, ServiceCode: "SCREENING", Status: StepCompleted},
-			{Sequence: 3, ServiceCode: "DOCTOR", Status: StepCompleted},
-			{Sequence: 4, ServiceCode: "LAB", Status: StepReady},
-			{Sequence: 5, ServiceCode: "PHARMACY", Status: StepPending},
+		VisitID: "VISIT-001", PatientRef: "PATIENT-DEMO-001", PatientName: "สมชาย ใจดี",
+		VisitType: VisitAppointment, Status: VisitActive,
+		Clinics:  []Clinic{{Code: "MED", Name: "อายุรกรรม"}},
+		OpenedAt: s.seedBase,
+		Orders: []Order{
+			{OrderRef: "ORD-001", OrderType: OrderTypeLab, OrderName: "CBC", OrderedByClinic: "MED",
+				OrderedAt: s.seedBase.Add(-30 * time.Minute), Status: OrderPlaced},
 		},
 	}
 	s.visits[v.VisitID] = v
+	s.orderVis["ORD-001"] = v.VisitID
 
-	s.appendSeed(EventVisitOpened, v, map[string]any{"status": v.Status})
-	for _, step := range v.Steps {
-		s.appendSeed(EventServiceRequested, v, map[string]any{
-			"sequence": step.Sequence, "serviceCode": step.ServiceCode,
-		})
-	}
-	for _, step := range v.Steps {
-		if step.Status == StepCompleted {
-			s.appendSeed(EventServiceCompleted, v, map[string]any{
-				"sequence": step.Sequence, "serviceCode": step.ServiceCode,
-			})
-		}
-	}
+	s.appendSeed(EventVisitOpened, v, map[string]any{
+		"patientName": v.PatientName, "visitType": v.VisitType, "clinics": v.Clinics,
+	})
+	s.appendSeed(EventOrderPlaced, v, orderPayload(v.Orders[0]))
 	return s
 }
 
@@ -161,6 +176,13 @@ func (s *Store) appendSeed(eventType string, v *Visit, payload map[string]any) {
 // EventID formats the zero-padded, lexicographically sortable event id.
 func EventID(seq int) string { return fmt.Sprintf("EVT-%06d", seq) }
 
+func orderPayload(o Order) map[string]any {
+	return map[string]any{
+		"orderRef": o.OrderRef, "orderType": o.OrderType, "orderName": o.OrderName,
+		"orderedByClinic": o.OrderedByClinic, "orderedAt": o.OrderedAt,
+	}
+}
+
 // GetVisit returns the current snapshot.
 func (s *Store) GetVisit(visitID string) (Visit, bool) {
 	s.mu.Lock()
@@ -172,8 +194,7 @@ func (s *Store) GetVisit(visitID string) (Visit, bool) {
 	return *copyVisit(v), true
 }
 
-// ListVisits returns every visit snapshot, ordered by visit id — the
-// demo-driver surface the console selects from.
+// ListVisits returns every visit snapshot, ordered by visit id.
 func (s *Store) ListVisits() []Visit {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -189,180 +210,242 @@ func (s *Store) ListVisits() []Visit {
 	return out
 }
 
-// CreateVisit opens a new ACTIVE visit: the first step is READY, the rest
-// PENDING. Codes fall back to the standard demo template when empty. Every
-// fact is announced as canonical events (visit.opened, service.requested per
-// step) so downstream consumers see the visit through the contract only.
-func (s *Store) CreateVisit(patientRef string, serviceCodes []string) (Visit, *Error) {
+func copyVisit(v *Visit) *Visit {
+	out := *v
+	out.Clinics = append([]Clinic(nil), v.Clinics...)
+	out.Orders = append([]Order(nil), v.Orders...)
+	return &out
+}
+
+// OpenVisitClinic is one clinic assignment on an OpenVisit call.
+type OpenVisitClinic struct{ Code, Name string }
+
+// OpenVisitOrder is one pre-visit order on an OpenVisit call.
+type OpenVisitOrder struct{ OrderType, OrderName, OrderedByClinic string }
+
+// OpenVisit opens a new ACTIVE visit (mirrors registration in a real HIS).
+// Every fact is announced as canonical events (visit.opened, order.placed
+// per pre-visit order) so downstream consumers see the visit through the
+// contract only.
+func (s *Store) OpenVisit(patientRef, patientName, visitType string, clinics []OpenVisitClinic, orders []OpenVisitOrder) (Visit, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	codes := make([]string, 0, len(serviceCodes))
-	for _, code := range serviceCodes {
-		code = strings.TrimSpace(code)
-		if code == "" {
-			return Visit{}, &Error{Kind: ErrBadInput, Msg: "serviceCodes must be non-empty strings"}
-		}
-		codes = append(codes, code)
+	if visitType != VisitWalkin && visitType != VisitAppointment {
+		return Visit{}, &Error{Kind: ErrBadInput, Msg: fmt.Sprintf("visitType must be %s or %s", VisitWalkin, VisitAppointment)}
 	}
-	if len(codes) == 0 {
-		codes = defaultServiceCodes
+	if len(clinics) == 0 {
+		return Visit{}, &Error{Kind: ErrBadInput, Msg: "at least one clinic is required"}
+	}
+	for _, c := range clinics {
+		if strings.TrimSpace(c.Code) == "" {
+			return Visit{}, &Error{Kind: ErrBadInput, Msg: "clinicCode must be non-empty"}
+		}
 	}
 
 	s.visitSeq++
 	v := &Visit{
-		VisitID:    fmt.Sprintf("VISIT-%03d", s.visitSeq),
-		PatientRef: patientRef,
-		Status:     VisitActive,
+		VisitID: fmt.Sprintf("VISIT-%03d", s.visitSeq), PatientRef: patientRef, PatientName: patientName,
+		VisitType: visitType, Status: VisitActive, OpenedAt: s.now(),
 	}
 	if v.PatientRef == "" {
 		v.PatientRef = fmt.Sprintf("PATIENT-DEMO-%03d", s.visitSeq)
 	}
-	for i, code := range codes {
-		status := StepPending
-		if i == 0 {
-			status = StepReady
-		}
-		v.Steps = append(v.Steps, VisitStep{Sequence: i + 1, ServiceCode: code, Status: status})
+	for _, c := range clinics {
+		v.Clinics = append(v.Clinics, Clinic{Code: c.Code, Name: c.Name})
 	}
-
 	s.visits[v.VisitID] = v
-	s.append(EventVisitOpened, v, map[string]any{"status": v.Status})
-	for _, step := range v.Steps {
-		s.append(EventServiceRequested, v, map[string]any{
-			"sequence": step.Sequence, "serviceCode": step.ServiceCode,
-		})
+	s.append(EventVisitOpened, v, map[string]any{
+		"patientName": v.PatientName, "visitType": v.VisitType, "clinics": v.Clinics,
+	})
+
+	for _, o := range orders {
+		if _, err := s.placeOrderLocked(v, o.OrderType, o.OrderName, o.OrderedByClinic, v.OpenedAt.Add(-time.Minute)); err != nil {
+			return Visit{}, err
+		}
 	}
 	return *copyVisit(v), nil
 }
 
-// AddOrder appends one ordered service as a PENDING step after the current
-// last sequence; it becomes READY when the preceding open step completes,
-// like any other step. Announced as a canonical service.requested event.
-func (s *Store) AddOrder(visitID, serviceCode string) (VisitStep, *Error) {
+// AddClinic assigns an additional clinic to an ACTIVE visit.
+func (s *Store) AddClinic(visitID, clinicCode, clinicName string) (Visit, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	serviceCode = strings.TrimSpace(serviceCode)
-	if serviceCode == "" {
-		return VisitStep{}, &Error{Kind: ErrBadInput, Msg: "serviceCode is required"}
+	if strings.TrimSpace(clinicCode) == "" {
+		return Visit{}, &Error{Kind: ErrBadInput, Msg: "clinicCode is required"}
 	}
 	v, ok := s.visits[visitID]
 	if !ok {
-		return VisitStep{}, &Error{Kind: ErrNotFound, Msg: "visit not found"}
+		return Visit{}, &Error{Kind: ErrNotFound, Msg: "visit not found"}
 	}
 	if v.Status != VisitActive {
-		return VisitStep{}, &Error{Kind: ErrConflict, Msg: fmt.Sprintf("visit is %s and cannot take new orders", v.Status)}
+		return Visit{}, &Error{Kind: ErrConflict, Msg: fmt.Sprintf("visit is %s and cannot take new clinics", v.Status)}
 	}
-
-	next := 1
-	for _, step := range v.Steps {
-		if step.Sequence >= next {
-			next = step.Sequence + 1
-		}
-	}
-	step := VisitStep{Sequence: next, ServiceCode: serviceCode, Status: StepPending}
-	v.Steps = append(v.Steps, step)
-	s.append(EventServiceRequested, v, map[string]any{
-		"sequence": step.Sequence, "serviceCode": step.ServiceCode,
-	})
-	return step, nil
+	v.Clinics = append(v.Clinics, Clinic{Code: clinicCode, Name: clinicName})
+	s.append(EventVisitUpdated, v, map[string]any{"clinics": v.Clinics})
+	return *copyVisit(v), nil
 }
 
-func copyVisit(v *Visit) *Visit {
-	out := *v
-	out.Steps = append([]VisitStep(nil), v.Steps...)
-	return &out
-}
-
-// Transition applies a command to one step. Idempotent by contract: a replayed
-// commandId, or a transition to the step's current status, is a no-op success
-// that returns the current step. Completing a step also readies the next
-// PENDING step, and completing the last open step completes the visit — both
-// upstream HIS facts, reported as visit.updated events.
-func (s *Store) Transition(visitID string, sequence int, cmd TransitionCommand) (VisitStep, *Error) {
+// PlaceOrder places an order against an ACTIVE visit.
+func (s *Store) PlaceOrder(visitID, orderType, orderName, orderedByClinic string) (Order, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if cmd.To != StepStarted && cmd.To != StepCompleted && cmd.To != StepCancelled {
-		return VisitStep{}, &Error{Kind: ErrBadInput, Msg: fmt.Sprintf("unknown target status %q", cmd.To)}
-	}
 	v, ok := s.visits[visitID]
 	if !ok {
-		return VisitStep{}, &Error{Kind: ErrNotFound, Msg: "visit not found"}
+		return Order{}, &Error{Kind: ErrNotFound, Msg: "visit not found"}
 	}
-	idx := -1
-	for i, st := range v.Steps {
-		if st.Sequence == sequence {
-			idx = i
+	if v.Status != VisitActive {
+		return Order{}, &Error{Kind: ErrConflict, Msg: fmt.Sprintf("visit is %s and cannot take new orders", v.Status)}
+	}
+	order, err := s.placeOrderLocked(v, orderType, orderName, orderedByClinic, s.now())
+	if err != nil {
+		return Order{}, err
+	}
+	return *order, nil
+}
+
+func (s *Store) placeOrderLocked(v *Visit, orderType, orderName, orderedByClinic string, orderedAt time.Time) (*Order, *Error) {
+	switch orderType {
+	case OrderTypeLab, OrderTypeXray, OrderTypeEKG, OrderTypeUS, OrderTypeDrug:
+	default:
+		return nil, &Error{Kind: ErrBadInput, Msg: fmt.Sprintf("unknown orderType %q", orderType)}
+	}
+	orderName = strings.TrimSpace(orderName)
+	orderedByClinic = strings.TrimSpace(orderedByClinic)
+	if orderName == "" || orderedByClinic == "" {
+		return nil, &Error{Kind: ErrBadInput, Msg: "orderName and orderedByClinic are required"}
+	}
+
+	s.orderSeq++
+	order := Order{
+		OrderRef: fmt.Sprintf("ORD-%03d", s.orderSeq), OrderType: orderType, OrderName: orderName,
+		OrderedByClinic: orderedByClinic, OrderedAt: orderedAt, Status: OrderPlaced,
+	}
+	v.Orders = append(v.Orders, order)
+	s.orderVis[order.OrderRef] = v.VisitID
+	s.append(EventOrderPlaced, v, orderPayload(order))
+	return &v.Orders[len(v.Orders)-1], nil
+}
+
+// findOrder must be called with s.mu held.
+func (s *Store) findOrder(orderRef string) (*Visit, int, *Error) {
+	visitID, ok := s.orderVis[orderRef]
+	if !ok {
+		return nil, -1, &Error{Kind: ErrNotFound, Msg: "order not found"}
+	}
+	v := s.visits[visitID]
+	for i := range v.Orders {
+		if v.Orders[i].OrderRef == orderRef {
+			return v, i, nil
+		}
+	}
+	return nil, -1, &Error{Kind: ErrNotFound, Msg: "order not found"}
+}
+
+// MarkPerformed marks an order as performed — the procedure happened.
+func (s *Store) MarkPerformed(orderRef string) (Order, *Error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	v, i, err := s.findOrder(orderRef)
+	if err != nil {
+		return Order{}, err
+	}
+	if v.Orders[i].Status != OrderPlaced {
+		return Order{}, &Error{Kind: ErrConflict, Msg: fmt.Sprintf("order %s is %s and cannot be marked performed", orderRef, v.Orders[i].Status)}
+	}
+	now := s.now()
+	v.Orders[i].Status = OrderPerformed
+	v.Orders[i].PerformedAt = &now
+	s.append(EventOrderPerformed, v, map[string]any{"orderRef": orderRef, "performedAt": now})
+	return v.Orders[i], nil
+}
+
+// MarkResulted marks an order's result as reported. Only valid once
+// PERFORMED — a result cannot exist before the procedure did.
+func (s *Store) MarkResulted(orderRef string) (Order, *Error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	v, i, err := s.findOrder(orderRef)
+	if err != nil {
+		return Order{}, err
+	}
+	if v.Orders[i].Status != OrderPerformed {
+		return Order{}, &Error{Kind: ErrConflict, Msg: fmt.Sprintf("order %s is %s and cannot be marked resulted", orderRef, v.Orders[i].Status)}
+	}
+	now := s.now()
+	v.Orders[i].Status = OrderResulted
+	v.Orders[i].ResultedAt = &now
+	s.append(EventOrderResulted, v, map[string]any{"orderRef": orderRef, "resultedAt": now})
+	return v.Orders[i], nil
+}
+
+// CancelOrder cancels an order that has not yet resulted.
+func (s *Store) CancelOrder(orderRef string) (Order, *Error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	v, i, err := s.findOrder(orderRef)
+	if err != nil {
+		return Order{}, err
+	}
+	if v.Orders[i].Status == OrderResulted || v.Orders[i].Status == OrderCancelled {
+		return Order{}, &Error{Kind: ErrConflict, Msg: fmt.Sprintf("order %s is already %s", orderRef, v.Orders[i].Status)}
+	}
+	v.Orders[i].Status = OrderCancelled
+	s.append(EventOrderCancelled, v, map[string]any{"orderRef": orderRef})
+	return v.Orders[i], nil
+}
+
+// CompleteEncounter announces that the given clinic is finished examining
+// the patient for this round (ADR-0009 §4).
+func (s *Store) CompleteEncounter(visitID, clinicCode string) (Visit, *Error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	v, ok := s.visits[visitID]
+	if !ok {
+		return Visit{}, &Error{Kind: ErrNotFound, Msg: "visit not found"}
+	}
+	found := false
+	for _, c := range v.Clinics {
+		if c.Code == clinicCode {
+			found = true
 			break
 		}
 	}
-	if idx < 0 {
-		return VisitStep{}, &Error{Kind: ErrNotFound, Msg: "step not found"}
+	if !found {
+		return Visit{}, &Error{Kind: ErrNotFound, Msg: fmt.Sprintf("clinic %s is not assigned to this visit", clinicCode)}
 	}
-
-	step := v.Steps[idx]
-	if s.applied[cmd.CommandID] || step.Status == cmd.To {
-		s.applied[cmd.CommandID] = true
-		return step, nil
-	}
-
-	from := step.Status
-	switch {
-	case from == StepCompleted || from == StepCancelled:
-		return VisitStep{}, &Error{Kind: ErrConflict, Msg: fmt.Sprintf("step %d is %s and cannot transition to %s", sequence, from, cmd.To)}
-	case cmd.To == StepStarted && from != StepPending && from != StepReady:
-		return VisitStep{}, &Error{Kind: ErrConflict, Msg: fmt.Sprintf("step %d is %s and cannot transition to STARTED", sequence, from)}
-	}
-
-	step.Status = cmd.To
-	v.Steps[idx] = step
-	s.applied[cmd.CommandID] = true
-	s.append(EventServiceType(cmd.To), v, map[string]any{
-		"sequence": step.Sequence, "serviceCode": step.ServiceCode,
-	})
-
-	if cmd.To == StepCompleted {
-		for i := range v.Steps {
-			if v.Steps[i].Status == StepPending {
-				v.Steps[i].Status = StepReady
-				s.append(EventVisitUpdated, v, map[string]any{
-					"sequence": v.Steps[i].Sequence, "serviceCode": v.Steps[i].ServiceCode,
-				})
-				break
-			}
-		}
-	}
-	// Closing the last open step ends the visit: completing it completes the
-	// visit, cancelling it cancels the visit. Both are upstream HIS facts,
-	// reported as visit.updated events.
-	if (cmd.To == StepCompleted || cmd.To == StepCancelled) &&
-		s.openSteps(v) == 0 && v.Status == VisitActive {
-		if cmd.To == StepCompleted {
-			v.Status = VisitCompleted
-		} else {
-			v.Status = VisitCancelled
-		}
-		s.append(EventVisitUpdated, v, map[string]any{"status": v.Status})
-	}
-	return step, nil
+	now := s.now()
+	s.append(EventEncounterCompleted, v, map[string]any{"clinicCode": clinicCode, "completedAt": now})
+	return *copyVisit(v), nil
 }
 
-func (s *Store) openSteps(v *Visit) int {
-	n := 0
-	for _, st := range v.Steps {
-		if st.Status != StepCompleted && st.Status != StepCancelled {
-			n++
-		}
+// CompleteVisit completes an ACTIVE visit.
+func (s *Store) CompleteVisit(visitID string) (Visit, *Error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	v, ok := s.visits[visitID]
+	if !ok {
+		return Visit{}, &Error{Kind: ErrNotFound, Msg: "visit not found"}
 	}
-	return n
+	if v.Status != VisitActive {
+		return Visit{}, &Error{Kind: ErrConflict, Msg: fmt.Sprintf("visit is %s and cannot be completed", v.Status)}
+	}
+	v.Status = VisitCompleted
+	s.append(EventVisitClosed, v, map[string]any{"status": v.Status})
+	return *copyVisit(v), nil
 }
 
-// CancelVisit cancels an ACTIVE visit outright: every open step is cancelled
-// (canonical service.cancelled each) and the visit itself becomes CANCELLED
-// (canonical visit.updated). Cancelling an already-CANCELLED visit is a no-op;
-// a COMPLETED visit cannot be cancelled.
+// CancelVisit cancels an ACTIVE visit outright: every open order is
+// cancelled (canonical order.cancelled each) and the visit itself becomes
+// CANCELLED (canonical visit.closed). Cancelling an already-CANCELLED visit
+// is a no-op; a COMPLETED visit cannot be cancelled.
 func (s *Store) CancelVisit(visitID string) (Visit, *Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -378,30 +461,15 @@ func (s *Store) CancelVisit(visitID string) (Visit, *Error) {
 		return Visit{}, &Error{Kind: ErrConflict, Msg: "visit is COMPLETED and cannot be cancelled"}
 	}
 
-	for i := range v.Steps {
-		if v.Steps[i].Status != StepCompleted && v.Steps[i].Status != StepCancelled {
-			v.Steps[i].Status = StepCancelled
-			s.append(EventServiceCancelled, v, map[string]any{
-				"sequence": v.Steps[i].Sequence, "serviceCode": v.Steps[i].ServiceCode,
-			})
+	for i := range v.Orders {
+		if v.Orders[i].Status == OrderPlaced || v.Orders[i].Status == OrderPerformed {
+			v.Orders[i].Status = OrderCancelled
+			s.append(EventOrderCancelled, v, map[string]any{"orderRef": v.Orders[i].OrderRef})
 		}
 	}
 	v.Status = VisitCancelled
-	s.append(EventVisitUpdated, v, map[string]any{"status": v.Status})
+	s.append(EventVisitClosed, v, map[string]any{"status": v.Status})
 	return *copyVisit(v), nil
-}
-
-// EventServiceType maps a target step status to its service.* event type.
-func EventServiceType(to string) string {
-	switch to {
-	case StepStarted:
-		return EventServiceStarted
-	case StepCompleted:
-		return EventServiceCompleted
-	case StepCancelled:
-		return EventServiceCancelled
-	}
-	return EventVisitUpdated
 }
 
 func (s *Store) append(eventType string, v *Visit, payload map[string]any) {

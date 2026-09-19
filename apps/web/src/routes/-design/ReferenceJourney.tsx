@@ -4,7 +4,7 @@ import { JourneyShell } from '../patient/-JourneyScreen'
 /**
  * The journey screen wearing its static /design data — the catalogue must
  * never depend on the API, so it feeds the shell directly instead of going
- * through useVisit.
+ * through useJourney.
  */
 export function ReferenceJourney({ onNavigate }: { onNavigate?: () => void }) {
   return (

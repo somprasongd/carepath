@@ -20,9 +20,17 @@ import { TaskHeader } from './-TaskHeader'
  * patient up and "register" their visit — it doesn't anymore. It only reads
  * static Pathway Template config and lets staff copy the resulting
  * service-code checklist to type into the HIS themselves when they open the
- * visit there. There is nothing here to wire to a backend: the projected
- * `VisitStep` list a patient actually sees comes from the HIS events
- * apps/api's `journey` module ingests, once that step is placed.
+ * visit there.
+ *
+ * Superseded in scope by ADR-0009: the HIS cannot report an ordered step
+ * list at all (not just "CarePath must not write one"), so the "checklist to
+ * key into the HIS" premise here is gone too — CarePath now derives the plan
+ * itself once the HIS reports facts (see `journey.Plan`). This screen is due
+ * a rework into "look up a visit by VN and see its derived plan" (revised
+ * FR-14/US-13); kept as-is for this change since it reads only static
+ * config and calls no backend, so nothing here is actually broken by
+ * ADR-0009 — it is just describing a premise that no longer matches the
+ * rest of the system.
  */
 export function PathwayTemplates() {
   const [templateId, setTemplateId] = useState(pathwayTemplates[0].id)

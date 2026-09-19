@@ -28,7 +28,8 @@ This directory is the working source of truth for architecture, requirements, de
 - [ADR-0005 HIS Adapter and Mock HIS](adr/0005-his-adapter-and-mock-his.md)
 - [ADR-0006 REST + OpenAPI Contracts](adr/0006-rest-openapi.md)
 - [ADR-0007 Hexagonal Module Layout with Transaction-in-Context](adr/0007-hexagonal-modules-transaction-in-context.md)
-- [ADR-0008 Canonical HIS Event/Command Contract](adr/0008-his-canonical-event-contract.md)
+- [ADR-0008 Canonical HIS Event/Command Contract](adr/0008-his-canonical-event-contract.md) — superseded in part by ADR-0009
+- [ADR-0009 CarePath Owns the Journey Plan](adr/0009-carepath-owns-journey-plan.md)
 
 ## Integration
 

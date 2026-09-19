@@ -3,7 +3,6 @@
 package httpclient
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -54,60 +53,6 @@ func (c *Client) GetVisit(ctx context.Context, visitID string) (his.Visit, error
 		return visit, apperr.Wrapf(apperr.KindUpstream, err, "invalid HIS response")
 	}
 	return visit, nil
-}
-
-// TransitionStep sends the canonical step-status command to the HIS
-// (ADR-0008). HIS-side validation errors keep their meaning: 400 maps to
-// Invalid, 404 to NotFound, 409 to Conflict — each carrying the HIS's own
-// message (e.g. which rule rejected the transition).
-func (c *Client) TransitionStep(ctx context.Context, visitID string, sequence int, cmd his.TransitionCommand) (his.VisitStep, error) {
-	var step his.VisitStep
-
-	payload, err := json.Marshal(cmd)
-	if err != nil {
-		return step, apperr.Wrapf(apperr.KindInternal, err, "encode command failed")
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		fmt.Sprintf("%s/api/v1/visits/%s/steps/%d/transition",
-			c.baseURL, url.PathEscape(visitID), sequence),
-		bytes.NewReader(payload))
-	if err != nil {
-		return step, apperr.Wrapf(apperr.KindUpstream, err, "build request failed")
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return step, apperr.Wrapf(apperr.KindUpstream, err, "HIS unavailable")
-	}
-	defer resp.Body.Close()
-
-	switch {
-	case resp.StatusCode == http.StatusOK:
-	case resp.StatusCode == http.StatusBadRequest:
-		return step, statusError(apperr.KindInvalid, resp)
-	case resp.StatusCode == http.StatusNotFound:
-		return step, statusError(apperr.KindNotFound, resp)
-	case resp.StatusCode == http.StatusConflict:
-		return step, statusError(apperr.KindConflict, resp)
-	default:
-		return step, apperr.Wrapf(apperr.KindUpstream, fmt.Errorf("status %d", resp.StatusCode), "HIS returned error")
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&step); err != nil {
-		return step, apperr.Wrapf(apperr.KindUpstream, err, "invalid HIS response")
-	}
-	return step, nil
-}
-
-// statusError decodes the contract's {"error": msg} envelope so a rejected
-// command surfaces the HIS's own reason instead of a generic one.
-func statusError(kind apperr.Kind, resp *http.Response) error {
-	var body struct {
-		Error string `json:"error"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil || body.Error == "" {
-		return apperr.New(kind, "HIS rejected the command")
-	}
-	return apperr.New(kind, body.Error)
 }
 
 // Events reads one page of the append-only canonical event feed, strictly

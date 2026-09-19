@@ -62,6 +62,13 @@ func (f *fakeNavigation) GetNode(_ context.Context, nodeID string) (navigation.N
 func (f *fakeNavigation) ListNodes(context.Context) ([]navigation.NavNode, error) { return nil, nil }
 func (f *fakeNavigation) ListEdges(context.Context) ([]navigation.NavEdge, error) { return nil, nil }
 
+// Route is unused by these tests — location.Service never calls it — but is
+// required to satisfy navigation.Service (#27 added it after this fake was
+// written).
+func (f *fakeNavigation) Route(context.Context, string, string, navigation.RouteOptions) (navigation.Route, error) {
+	return navigation.Route{}, nil
+}
+
 func newService(t *testing.T, providers ...location.Provider) (location.Service, *fakeRepo, *fakeNavigation) {
 	t.Helper()
 	repo := &fakeRepo{}

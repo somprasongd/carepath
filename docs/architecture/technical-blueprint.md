@@ -48,11 +48,10 @@ Planned module list — a module gets a package when it has real features, never
 
 ```text
 identity       (implemented — Verifier port; LINE ID-token verification adapter)
-visit          (implemented)
-journey        (implemented — CarePath-owned projection of canonical HIS events, ADR-0008)
+journey        (implemented — CarePath-owned journey plan derived from HIS facts, ADR-0008 amended by ADR-0009; superseded and removed the visit module)
 servicepoint   (implemented)
 session        (implemented — patient sessions bound to visits)
-hospitalmap    (implemented)
+hospitalmap    (implemented, #24)
 navigation     (implemented)
 location       (implemented — provider port + canonical observations, ADR-0004)
 notification   (planned)
@@ -73,8 +72,7 @@ apps/api/
     │       └── postgres/   # durable feed cursor (checkpoint)
     ├── servicepoint/       # domain type + Repo port + Service
     │   └── postgres/       # pgx adapter implementing the Repo port
-    ├── visit/              # domain types + Service + HTTP handler (live HIS read view)
-    ├── journey/            # journey projection (derived state, eventId-idempotent apply)
+    ├── journey/            # journey plan derived from HIS facts (ADR-0009); the pure planner lives here too
     │   └── postgres/       # pgx adapter implementing the Repo port
     ├── identity/           # Verifier port for patient login
     │   └── line/           # LINE ID-token verification (JWKS)
@@ -107,8 +105,8 @@ Error model: modules expose domain error variables built with `apperr.New(kind, 
 ## Core runtime chain
 
 ```text
-Visit
-  -> VisitStep / Journey
+Visit facts (clinics, orders, encounters)
+  -> Journey plan (ADR-0009)
   -> ServicePoint
   -> Place
   -> NavigationNode

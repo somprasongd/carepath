@@ -1,14 +1,22 @@
 openapi: 3.1.0
 info:
   title: CarePath Mock HIS API
-  version: 0.2.0
+  version: 0.3.0
   description: >
-    Canonical HIS↔CarePath integration contract (ADR-0008). The Mock HIS
-    implements it for development and demo; a real HIS adapter maps its own
-    transport/payload onto the same canonical events and commands, so
-    journey-domain code never depends on a vendor-specific shape (ADR-0005).
-    The HIS is the system of record for visit and step status: CarePath reads
-    snapshots and sends transition commands, it never writes HIS-owned state.
+    Canonical HIS↔CarePath fact contract (ADR-0008, amended by ADR-0009). The
+    Mock HIS implements it for development and demo; a real HIS adapter maps
+    its own transport/payload onto the same canonical facts, so journey-domain
+    code never depends on a vendor-specific shape (ADR-0005).
+
+
+    Per ADR-0009 the HIS has no concept of an ordered patient journey — it
+    only knows visits, which clinic(s) a patient is assigned to, and orders
+    (lab/x-ray/EKG/ultrasound/drug) with their lifecycle. CarePath derives the
+    journey plan from these facts; the HIS never receives step-status commands
+    back. The `/api/v1/demo/*` endpoints are the Mock HIS's own operator
+    console — the closest a demo can get to the real HIS screens where these
+    facts originate (opening a visit, placing an order, a lab confirming a
+    result) — and are what the console (`GET /console`) and e2e tests drive.
 servers:
   - url: http://localhost:8090
 paths:
@@ -19,7 +27,7 @@ paths:
           description: Healthy
   /api/v1/visits/{visitId}:
     get:
-      description: Current visit snapshot, the pull read CarePath renders the journey from.
+      description: Current visit snapshot, the pull read CarePath's journey planner projects from.
       parameters:
         - in: path
           name: visitId
@@ -38,60 +46,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/v1/visits/{visitId}/steps/{sequence}/transition:
-    post:
-      description: >
-        Command (CarePath→HIS): transition one service step's status. This is
-        the only way step status changes. Idempotent: replaying a commandId the
-        HIS already applied, or transitioning to the step's current status, is
-        a no-op that returns the current step.
-      parameters:
-        - in: path
-          name: visitId
-          required: true
-          schema: { type: string }
-        - in: path
-          name: sequence
-          required: true
-          schema: { type: integer, minimum: 1 }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TransitionCommand'
-      responses:
-        '200':
-          description: The step after applying the command (or the unchanged step for a no-op)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VisitStep'
-        '400':
-          description: Invalid body or unknown target status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Visit or step not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '409':
-          description: Illegal transition (e.g. from a terminal status)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
   /api/v1/events:
     get:
       description: >
-        Append-only feed of canonical HIS events, oldest first. Cursor with
+        Append-only feed of canonical HIS facts, oldest first. Cursor with
         `after` (exclusive): pass the last received eventId, read `nextAfter`
-        from the response. For audit/replay and a future push transport; the
-        MVP journey reads snapshots, it does not require this feed.
+        from the response. This is what CarePath's ingest poller consumes to
+        drive the journey planner.
       parameters:
         - in: query
           name: after
@@ -108,6 +69,320 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventPage'
+  /api/v1/demo/visits:
+    get:
+      description: All visits known to the Mock HIS — the demo driver's picker.
+      responses:
+        '200':
+          description: All visits
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Visit' }
+    post:
+      description: >
+        Opens a new ACTIVE visit (registration, in the real HIS). Emits
+        `visit.opened`. `clinics` is the clinic(s) the patient is assigned to
+        at open time — a walk-in patient is assigned by registration staff, an
+        appointment patient already has one from the schedule.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenVisitRequest'
+      responses:
+        '200':
+          description: The opened visit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Visit'
+        '400':
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/demo/visits/{visitId}/clinics:
+    post:
+      description: >
+        Assigns an additional clinic to an ACTIVE visit (e.g. a walk-in
+        referred to a second clinic). Emits `visit.updated`.
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clinicCode]
+              properties:
+                clinicCode: { type: string }
+                clinicName: { type: string }
+      responses:
+        '200':
+          description: The updated visit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Visit'
+        '404':
+          description: Visit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Visit is not ACTIVE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/demo/visits/{visitId}/orders:
+    post:
+      description: >
+        Places an order against an ACTIVE visit — a lab test, imaging study,
+        or drug prescription. Emits `order.placed`. `orderedByClinic` is
+        whichever clinic ordered it; for orders placed before the patient sees
+        a clinic (an appointment's pre-visit workup), pass the clinic the
+        order is for even though the encounter has not started.
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaceOrderRequest'
+      responses:
+        '200':
+          description: The placed order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Visit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Visit is not ACTIVE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/demo/orders/{orderRef}/performed:
+    post:
+      description: >
+        Marks an order as performed — the procedure happened (blood drawn,
+        film taken). Emits `order.performed`. This is the signal the patient
+        is done at the diagnostic step; the result may still be pending.
+      parameters:
+        - in: path
+          name: orderRef
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The order after the transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Order is not PLACED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/demo/orders/{orderRef}/resulted:
+    post:
+      description: >
+        Marks an order's result as reported and readable by the ordering
+        clinic. Emits `order.resulted`. Only valid once PERFORMED — a result
+        cannot exist before the procedure did.
+      parameters:
+        - in: path
+          name: orderRef
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The order after the transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Order is not PERFORMED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/demo/orders/{orderRef}/cancel:
+    post:
+      description: Cancels an order that has not yet resulted. Emits `order.cancelled`.
+      parameters:
+        - in: path
+          name: orderRef
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The cancelled order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Order already RESULTED or CANCELLED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/demo/visits/{visitId}/clinics/{clinicCode}/complete-encounter:
+    post:
+      description: >
+        The doctor at this clinic is finished examining the patient for this
+        round — no follow-up visit to this clinic is expected. Emits
+        `encounter.completed` (ADR-0009 §4): CarePath drops any not-yet-started
+        "return to this clinic" step it may have inferred.
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: clinicCode
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The visit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Visit'
+        '404':
+          description: Visit or clinic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/demo/visits/{visitId}/complete:
+    post:
+      description: Completes an ACTIVE visit. Emits `visit.closed` with status COMPLETED.
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The completed visit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Visit'
+        '404':
+          description: Visit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Visit is not ACTIVE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/demo/visits/{visitId}/cancel:
+    post:
+      description: >
+        Cancels an ACTIVE visit outright — the patient story of an appointment
+        the patient no longer keeps. Every open order is cancelled and the
+        visit itself becomes CANCELLED. Cancelling an already-CANCELLED visit
+        is a no-op; a COMPLETED visit cannot be cancelled. Emits `visit.closed`
+        with status CANCELLED (plus `order.cancelled` per open order).
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The cancelled visit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Visit'
+        '404':
+          description: Visit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Visit is COMPLETED and cannot be cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/demo/visits/{visitId}/qrcode.png:
+    get:
+      description: A QR code encoding the visit id, for the patient hand-off demo prop.
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: PNG image
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+        '404':
+          description: Visit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   schemas:
     Error:
@@ -119,54 +394,122 @@ components:
       type: string
       description: Canonical visit status; vendor codes are translated inside the HIS adapter.
       enum: [ACTIVE, COMPLETED, CANCELLED]
-    StepStatus:
+    VisitType:
       type: string
-      description: Canonical step status; vendor codes are translated inside the HIS adapter.
-      enum: [PENDING, READY, STARTED, COMPLETED, CANCELLED]
+      description: Whether the patient walked in or was already scheduled.
+      enum: [WALKIN, APPOINTMENT]
+    OrderType:
+      type: string
+      description: Canonical order category; vendor order codes are translated inside the HIS adapter.
+      enum: [LAB, XRAY, EKG, US, DRUG]
+    OrderStatus:
+      type: string
+      description: >
+        Canonical order lifecycle. PLACED → PERFORMED → RESULTED is the
+        diagnostic path (a DRUG order has no PERFORMED/RESULTED distinction in
+        this model and is treated as done once PLACED — dispensing is a
+        pharmacy-side fact CarePath does not need). Terminal from any
+        non-RESULTED state: CANCELLED.
+      enum: [PLACED, PERFORMED, RESULTED, CANCELLED]
     EventType:
       type: string
-      enum: [visit.opened, visit.updated, service.requested, service.started, service.completed, service.cancelled]
-    VisitStep:
+      enum:
+        - visit.opened
+        - visit.updated
+        - visit.closed
+        - order.placed
+        - order.performed
+        - order.resulted
+        - order.cancelled
+        - encounter.completed
+    Clinic:
       type: object
-      required: [sequence, serviceCode, status]
+      required: [code]
       properties:
-        sequence: { type: integer }
-        serviceCode:
+        code:
           type: string
-          description: External service code in HIS vocabulary (e.g. LAB); CarePath maps it to a service point.
-        status: { $ref: '#/components/schemas/StepStatus' }
+          description: External clinic code in HIS vocabulary (e.g. MED, SURG).
+        name: { type: string }
+    Order:
+      type: object
+      required: [orderRef, orderType, orderName, orderedByClinic, orderedAt, status]
+      properties:
+        orderRef:
+          type: string
+          description: HIS-assigned external order id.
+        orderType: { $ref: '#/components/schemas/OrderType' }
+        orderName:
+          type: string
+          description: Human-readable order name (e.g. "CBC", "Chest X-Ray").
+        orderedByClinic:
+          type: string
+          description: Clinic code that placed the order.
+        orderedAt: { type: string, format: date-time }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        performedAt: { type: [string, "null"], format: date-time }
+        resultedAt: { type: [string, "null"], format: date-time }
     Visit:
       type: object
-      required: [visitId, patientRef, status, steps]
+      required: [visitId, patientRef, visitType, status, clinics, orders, openedAt]
       properties:
         visitId:
           type: string
-          description: HIS-assigned external visit id.
+          description: HIS-assigned external visit id (VN).
         patientRef:
           type: string
-          description: Opaque external patient reference; carries no PHI beyond the reference itself.
+          description: External patient reference (HN). Opaque to CarePath beyond display.
+        patientName:
+          type: string
+          description: Patient display name, for staff-facing screens only (ADR-0009 §8).
+        visitType: { $ref: '#/components/schemas/VisitType' }
         status: { $ref: '#/components/schemas/VisitStatus' }
-        steps:
+        clinics:
           type: array
-          items: { $ref: '#/components/schemas/VisitStep' }
-    TransitionCommand:
+          description: Every clinic this visit has been assigned to, in assignment order.
+          items: { $ref: '#/components/schemas/Clinic' }
+        orders:
+          type: array
+          items: { $ref: '#/components/schemas/Order' }
+        openedAt: { type: string, format: date-time }
+    OpenVisitRequest:
       type: object
-      required: [commandId, to]
+      required: [visitType, clinics]
       properties:
-        commandId:
-          type: string
-          format: uuid
-          description: Caller-assigned idempotency key; the HIS deduplicates retries of the same commandId.
-        to:
-          type: string
-          description: Target step status.
-          enum: [STARTED, COMPLETED, CANCELLED]
+        patientRef: { type: string, description: "HN; a demo value is generated when absent." }
+        patientName: { type: string }
+        visitType: { $ref: '#/components/schemas/VisitType' }
+        clinics:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [clinicCode]
+            properties:
+              clinicCode: { type: string }
+              clinicName: { type: string }
+        orders:
+          type: array
+          description: Optional pre-visit orders (an appointment's workup, ordered before the patient arrives).
+          items:
+            type: object
+            required: [orderType, orderName, orderedByClinic]
+            properties:
+              orderType: { $ref: '#/components/schemas/OrderType' }
+              orderName: { type: string }
+              orderedByClinic: { type: string }
+    PlaceOrderRequest:
+      type: object
+      required: [orderType, orderName, orderedByClinic]
+      properties:
+        orderType: { $ref: '#/components/schemas/OrderType' }
+        orderName: { type: string }
+        orderedByClinic: { type: string }
     HISEvent:
       type: object
       description: >
-        Canonical event envelope (ADR-0008). Transport-agnostic: today it is
-        served by the pull feed below, later a webhook or message adapter can
-        deliver the same envelope.
+        Canonical fact envelope (ADR-0008, amended by ADR-0009).
+        Transport-agnostic: today it is served by the pull feed below, later a
+        webhook or message adapter can deliver the same envelope.
       required: [eventId, occurredAt, visitId, patientRef, type, payload]
       properties:
         eventId:
@@ -179,14 +522,26 @@ components:
         payload:
           type: object
           description: >
-            Typed per event. service.* events carry the affected step;
-            visit.* events carry the visit status. orderRef is reserved for
-            upstream order references and may be absent.
+            Typed per event. `visit.opened`/`visit.updated` carry `clinics`
+            (and `patientName`/`visitType` on open); `visit.closed` carries
+            `status`; `order.*` events carry the affected order's fields;
+            `encounter.completed` carries `clinicCode` and `completedAt`.
           properties:
-            sequence: { type: integer }
-            serviceCode: { type: string }
-            orderRef: { type: string }
+            patientName: { type: string }
+            visitType: { $ref: '#/components/schemas/VisitType' }
+            clinics:
+              type: array
+              items: { $ref: '#/components/schemas/Clinic' }
             status: { $ref: '#/components/schemas/VisitStatus' }
+            orderRef: { type: string }
+            orderType: { $ref: '#/components/schemas/OrderType' }
+            orderName: { type: string }
+            orderedByClinic: { type: string }
+            orderedAt: { type: string, format: date-time }
+            performedAt: { type: string, format: date-time }
+            resultedAt: { type: string, format: date-time }
+            clinicCode: { type: string }
+            completedAt: { type: string, format: date-time }
     EventPage:
       type: object
       required: [events, nextAfter]

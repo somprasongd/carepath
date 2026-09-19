@@ -10,7 +10,7 @@ Mock HIS can be replaced by a real HIS adapter without changing CarePath domain 
 
 ## NFR-03 Privacy
 
-Do not expose unnecessary patient information in URLs, QR payloads, logs, or floor-plan assets. Use opaque visit/session identifiers where practical.
+Do not expose unnecessary patient information in URLs, QR payloads, logs, or floor-plan assets. Use opaque visit/session identifiers where practical. As of ADR-0009, CarePath stores one piece of PHI — the patient's display name, for staff-facing screens only — nothing else; it must never appear on a patient-facing endpoint beyond the patient's own visit, in a URL, or in a QR payload.
 
 ## NFR-04 Availability degradation
 
