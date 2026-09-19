@@ -18,7 +18,9 @@ describe('apiGet', () => {
     await expect(apiGet<{ visitId: string }>('/api/v1/visits/V-1')).resolves.toEqual({
       visitId: 'V-1',
     })
-    expect(fetch).toHaveBeenCalledWith('http://localhost:8080/api/v1/visits/V-1')
+    expect(fetch).toHaveBeenCalledWith('http://localhost:8080/api/v1/visits/V-1', {
+      method: 'GET',
+    })
   })
 
   it('surfaces the API error message for a non-OK response', async () => {
@@ -88,5 +90,39 @@ describe('apiPost', () => {
     const failure = await apiPost('/api/v1/auth/session', {}).catch((e: unknown) => e)
     expect(failure).toBeInstanceOf(ApiError)
     expect((failure as ApiError).status).toBe(0)
+  })
+
+  it('sends JSON and returns the parsed body', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ visitId: 'V-1', status: 'ACTIVE' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      apiPost<{ visitId: string }>('/api/v1/journeys/V-1/steps/2/transition', {
+        to: 'STARTED',
+        source: 'staff-web',
+      }),
+    ).resolves.toEqual({ visitId: 'V-1', status: 'ACTIVE' })
+
+    const [url, init] = vi.mocked(fetchMock).mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/journeys/V-1/steps/2/transition')
+    expect(init?.method).toBe('POST')
+    expect(new Headers(init?.headers).get('content-type')).toBe('application/json')
+    expect(JSON.parse(String(init?.body))).toEqual({ to: 'STARTED', source: 'staff-web' })
+  })
+
+  it('surfaces the API error message for a rejected transition', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ error: 'step is not READY' }, 409)),
+    )
+
+    const failure = await apiPost('/api/v1/journeys/V-1/steps/9/transition', {
+      to: 'COMPLETED',
+    }).catch((e: unknown) => e)
+    expect(failure).toBeInstanceOf(ApiError)
+    expect((failure as ApiError).status).toBe(409)
+    expect((failure as ApiError).message).toBe('step is not READY')
   })
 })

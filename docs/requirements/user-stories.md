@@ -32,8 +32,8 @@ As a patient's relative, I want to follow which step the patient is currently on
 
 ## Registration / screening staff
 
-### US-13 Register a visit and assign a pathway template — *Must (M3)*
-As registration/screening staff, I want to register a patient's visit for the day and assign a Care Pathway Template so that the system automatically generates that patient's ordered visit steps.
+### US-13 Look up service codes for a pathway template — *Must (M3)*
+As registration/screening staff, I want to pick a Care Pathway Template and see the exact, ordered list of service codes it implies so that I enter the correct codes into the HIS when I open the patient's visit there.
 
 ## Service-point staff
 

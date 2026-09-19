@@ -236,6 +236,296 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/journeys/{visitId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The patient journey: the CarePath-owned projection of the HIS visit (ADR-0008), with steps ordered by sequence and the deterministic current/next step resolution. A visit not yet projected (ingest lag) returns 404. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    visitId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The projected journey */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Journey"];
+                    };
+                };
+                /** @description No journey projected for this visit id */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/journeys/{visitId}/steps/{sequence}/transition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Command: transition one service step's status. Forwards the command to the HIS — the system of record (ADR-0008) — and returns the refreshed journey with the recalculated current/next step. Illegal or out-of-order transitions are rejected by the HIS. commandId is an optional caller-assigned idempotency key (a fresh UUID is generated when absent); source names the acting surface for the audit trail. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    visitId: string;
+                    sequence: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TransitionRequest"];
+                };
+            };
+            responses: {
+                /** @description The refreshed journey after applying the command */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Journey"];
+                    };
+                };
+                /** @description Invalid body or unknown target status */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Visit or step not found, or journey not projected */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Illegal transition (e.g. from a terminal status) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Upstream HIS error */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/service-points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Active service points with their resolved place and floor (#24): the service → destination mapping patients navigate by and staff see in the console. Read-only — mapping changes go through seed migrations for the MVP (FR-11). */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description All active service points, ordered by code */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ServicePoint"][];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/service-points/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One active service point by its service code (e.g. LAB), with the resolved place and floor — the destination lookup for a care step's service code (#24). */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    code: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The service point */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ServicePoint"];
+                    };
+                };
+                /** @description No active service point for this code */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/visits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Staff visit monitor (#37): the projected journey of every visit CarePath knows, freshest sync first — the same per-visit shape as the single-journey read (ordered steps, resolved service points, deterministic current/next). Reads the CarePath projection only; a visit opened in the HIS but not yet ingested is absent until its first event lands. Mounted under /api/v1/staff so the NFR-08 auth guard (#43) can cover the group. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description All projected journeys, newest sync first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Journey"][];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/navigation/route": {
         parameters: {
             query?: never;
@@ -295,18 +585,89 @@ export interface components {
             status: string;
             steps: components["schemas"]["VisitStep"][];
         };
-        /** @description Links a service code to a physical Place in the hospital map. */
+        /** @description Links a service code to a physical Place in the hospital map. Place is the resolved destination (place + floor); null when the place is not in the map yet — the same explicit unmapped state as a null servicePoint on a journey step (#24). */
         ServicePoint: {
             id: string;
             code: string;
             name: string;
             placeId: string;
+            place?: components["schemas"]["Place"] | null;
+        };
+        /** @description A physical place on a floor plan, keyed by the stable SVG place id that also keys the navigation graphs in packages/floorplans. x/y are floor-local SVG units of the place's entry node; entryNodeId references that node in the floor graph (a plain string until the graph model lands in */
+        Place: {
+            id: string;
+            floorId: string;
+            name: string;
+            /**
+             * @description Place category from the hospital map.
+             * @enum {string}
+             */
+            type: "ROOM" | "COUNTER" | "WAITING_AREA" | "RESTROOM" | "ELEVATOR" | "STAIRWAY" | "RAMP" | "ENTRANCE" | "AMENITY";
+            x?: number;
+            y?: number;
+            entryNodeId?: string;
+            floor: components["schemas"]["Floor"];
+        };
+        /** @description One floor of a building, identified by the floor-plan id (e.g. I-1301). */
+        Floor: {
+            id: string;
+            buildingId: string;
+            code: string;
+            name: string;
+            levelOrder: number;
         };
         /** @description The first READY step of a visit, resolved to its service point when one is configured for the step's service code. */
         NextStep: {
             sequence: number;
             status: string;
             servicePoint?: components["schemas"]["ServicePoint"];
+        };
+        /** @description One care step of the journey projection, resolved to its configured service point when one exists. */
+        JourneyStep: {
+            sequence: number;
+            /** @description External service code in HIS vocabulary (e.g. LAB). */
+            serviceCode: string;
+            /** @description Canonical step status (PENDING, READY, STARTED, COMPLETED, CANCELLED). */
+            status: string;
+            /** @description Bound service point id; null when no service point is configured for the code (explicit unmapped state). */
+            servicePointId: string | null;
+            /** @description The bound service point, when configured and still active. */
+            servicePoint?: components["schemas"]["ServicePoint"] | null;
+        };
+        /** @description The projected journey of one HIS visit with deterministic current/next step resolution. */
+        Journey: {
+            visitId: string;
+            patientRef: string;
+            /**
+             * @description Canonical visit status.
+             * @enum {string}
+             */
+            status: "ACTIVE" | "COMPLETED" | "CANCELLED";
+            /** @description True iff the visit status is COMPLETED — the unambiguous finished signal; current and next are null in that case. */
+            completed: boolean;
+            /** @description All steps of the visit ordered by sequence. */
+            steps: components["schemas"]["JourneyStep"][];
+            /** @description The first STARTED step by sequence, if any. */
+            current?: components["schemas"]["JourneyStep"] | null;
+            /** @description The first READY step by sequence — the next actionable step, if any. */
+            next?: components["schemas"]["JourneyStep"] | null;
+            /** Format: date-time */
+            syncedAt: string;
+        };
+        /** @description The client-facing transition command (#19). Mirrors the canonical TransitionCommand CarePath forwards to the HIS. */
+        TransitionRequest: {
+            /**
+             * @description Target step status.
+             * @enum {string}
+             */
+            to: "STARTED" | "COMPLETED" | "CANCELLED";
+            /**
+             * Format: uuid
+             * @description Optional caller-assigned idempotency key; generated when absent.
+             */
+            commandId?: string;
+            /** @description Acting surface for the audit trail, e.g. staff-web or patient-web. Defaults to unknown. */
+            source?: string;
         };
         /** @description The Visit fields plus the resolved next step. */
         VisitView: {

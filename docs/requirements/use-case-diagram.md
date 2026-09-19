@@ -20,7 +20,7 @@ flowchart LR
         UC5(["Get queue-proximity notification"])
         UC6(["Switch language / accessibility mode"])
         UC7(["Track visit progress<br/>via shared link"])
-        UC8(["Register visit &amp;<br/>assign pathway template"])
+        UC8(["View pathway-template<br/>service-code checklist"])
         UC9(["Call queue /<br/>update step status"])
         UC10(["Insert unplanned step"])
         UC11(["Manage hospital map &amp;<br/>service-point mapping"])
@@ -47,7 +47,6 @@ flowchart LR
 
     UC3 -. include .-> UC4
     UC2 -. include .-> UC15
-    UC8 -. include .-> UC15
     UC9 -. include .-> UC15
     UC10 -. include .-> UC15
     UC15 --> HIS
@@ -56,7 +55,7 @@ flowchart LR
 ## Notes
 
 - **Authentication & role-based access (FR-18)** applies across every staff/admin/executive use case (UC8–UC14) and is omitted from the diagram as an edge to avoid clutter — treat it as a precondition of the system boundary, not a separate use case.
-- **UC15 (Sync visit/service state with HIS)** is the canonical event/command boundary defined in [ADR-0008](../adr/0008-his-canonical-event-contract.md): the HIS remains the system of record for visit/step status, and CarePath actions (registration, queue call, step completion, unplanned-step insertion) are forwarded as commands rather than written directly.
+- **UC15 (Sync visit/service state with HIS)** is the canonical event/command boundary defined in [ADR-0008](../adr/0008-his-canonical-event-contract.md): the HIS remains the system of record for visit/step status, and CarePath actions (queue call, step completion, unplanned-step insertion) are forwarded as commands rather than written directly. Visit opening and service ordering (UC8) happen in the HIS itself — CarePath only reads the resulting events, so UC8 has no command edge into UC15.
 - **UC3 includes UC4** because route calculation needs a resolved starting point; when no QR scan has happened yet, the patient falls back to manual location selection (see [ADR-0004](../adr/0004-location-provider-abstraction.md)).
 
 ## Actor → use case → requirement traceability
@@ -70,7 +69,7 @@ flowchart LR
 | Patient | UC5 Queue-proximity notification | [US-10](user-stories.md#us-10-get-notified-before-my-queue-comes-up--should-s6) | FR-21 |
 | Patient | UC6 Switch language / accessibility | [US-09](user-stories.md#us-09-get-an-accessible-route--should-s5), [US-11](user-stories.md#us-11-use-carepath-in-my-own-language--should-s4) | FR-19, FR-20 |
 | Relative | UC7 Track visit progress | [US-12](user-stories.md#us-12-track-a-patients-progress-remotely--could-c2) | FR-24 |
-| Registration/screening staff | UC8 Register visit & assign template | [US-13](user-stories.md#us-13-register-a-visit-and-assign-a-pathway-template--must-m3) | FR-14 |
+| Registration/screening staff | UC8 View pathway-template checklist | [US-13](user-stories.md#us-13-look-up-service-codes-for-a-pathway-template--must-m3) | FR-14 |
 | Service-point staff | UC9 Call queue / update step status | [US-14](user-stories.md#us-14-call-the-queue-and-record-step-completion--must-m7) | FR-15, FR-17 |
 | Service-point staff | UC10 Insert unplanned step | [US-15](user-stories.md#us-15-insert-an-unplanned-step--must-m7) | FR-16 |
 | Hospital admin | UC11 Manage hospital map & service points | [US-05](user-stories.md#us-05-configure-service-point-mapping--must-m1), [US-06](user-stories.md#us-06-update-floornavigation-data--must-m1-m6) | FR-05, FR-11 |

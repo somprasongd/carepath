@@ -85,6 +85,224 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/journeys/{visitId}": {
+            "get": {
+                "description": "Returns the CarePath-owned journey projection: steps ordered by sequence, each resolved to its service point, with the deterministic current (first STARTED) and next (first READY) step. A completed visit is reported with completed=true and no current/next.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "journeys"
+                ],
+                "summary": "Get the patient journey",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit ID",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/journey.View"
+                        }
+                    },
+                    "404": {
+                        "description": "no journey projected for this visit",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/journeys/{visitId}/steps/{sequence}/transition": {
+            "post": {
+                "description": "Forwards a step-status command to the HIS (the system of record, ADR-0008) and returns the refreshed journey with the recalculated next step. Illegal or out-of-order transitions are rejected by the HIS with 409. commandId is an optional idempotency key; source names the acting surface for the audit trail.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "journeys"
+                ],
+                "summary": "Transition one service step",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit ID",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Step sequence",
+                        "name": "sequence",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Transition command",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/journey.transitionRequestBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/journey.View"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid body or unknown target status",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "visit or step not found, or journey not projected",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "illegal transition",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "upstream HIS error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/service-points": {
+            "get": {
+                "description": "Active service points with their resolved place and floor — the service → destination mapping patients navigate by and staff see in the console.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "service-points"
+                ],
+                "summary": "List service points",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/servicepoint.ServicePoint"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/service-points/{code}": {
+            "get": {
+                "description": "One active service point (e.g. code LAB) with its resolved place and floor — the destination lookup for a care step's service code.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "service-points"
+                ],
+                "summary": "Get a service point by code",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Service code (e.g. REGISTRATION, DOCTOR, LAB, XRAY, PHARMACY)",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/servicepoint.ServicePoint"
+                        }
+                    },
+                    "404": {
+                        "description": "service point not found",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/staff/visits": {
+            "get": {
+                "description": "Every projected journey, freshest sync first — the same per-visit shape as the single-journey read (ordered steps, resolved service points, deterministic current/next). Reads the CarePath projection only; a visit not yet ingested is absent until its first event lands.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "staff"
+                ],
+                "summary": "List visits for the staff monitor",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/journey.View"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/visits/{visitId}": {
             "get": {
                 "description": "Returns the HIS visit enriched with the next actionable step and its service point.",
@@ -227,12 +445,127 @@ const docTemplate = `{
                 }
             }
         },
+        "hospitalmap.Floor": {
+            "type": "object",
+            "properties": {
+                "buildingId": {
+                    "type": "string"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "levelOrder": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "hospitalmap.Place": {
+            "type": "object",
+            "properties": {
+                "entryNodeId": {
+                    "type": "string"
+                },
+                "floor": {
+                    "$ref": "#/definitions/hospitalmap.Floor"
+                },
+                "floorId": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "x": {
+                    "type": "number"
+                },
+                "y": {
+                    "type": "number"
+                }
+            }
+        },
         "httpx.ErrorResponse": {
             "type": "object",
             "properties": {
                 "error": {
                     "type": "string",
                     "example": "visit not found"
+                }
+            }
+        },
+        "journey.StepView": {
+            "type": "object",
+            "properties": {
+                "sequence": {
+                    "type": "integer"
+                },
+                "serviceCode": {
+                    "type": "string"
+                },
+                "servicePoint": {
+                    "$ref": "#/definitions/servicepoint.ServicePoint"
+                },
+                "servicePointId": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "journey.View": {
+            "type": "object",
+            "properties": {
+                "completed": {
+                    "type": "boolean"
+                },
+                "current": {
+                    "$ref": "#/definitions/journey.StepView"
+                },
+                "next": {
+                    "$ref": "#/definitions/journey.StepView"
+                },
+                "patientRef": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/journey.StepView"
+                    }
+                },
+                "syncedAt": {
+                    "type": "string"
+                },
+                "visitId": {
+                    "type": "string"
+                }
+            }
+        },
+        "journey.transitionRequestBody": {
+            "type": "object",
+            "properties": {
+                "commandId": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
                 }
             }
         },
@@ -260,6 +593,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "place": {
+                    "$ref": "#/definitions/hospitalmap.Place"
                 },
                 "placeId": {
                     "type": "string"

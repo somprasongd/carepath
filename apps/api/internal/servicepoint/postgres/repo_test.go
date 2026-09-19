@@ -74,7 +74,7 @@ func TestQueriesJoinAmbientTransaction(t *testing.T) {
 
 	err := database.WithinTransaction(ctx, func(ctx context.Context) error {
 		_, err := database.Querier(ctx).Exec(ctx,
-			`INSERT INTO carepath.service_point (id, code, name, place_id) VALUES ('SP-TX', 'TX-TEST', 'Tx Test', 'TX-01')`)
+			`INSERT INTO carepath.service_point (id, code, name, place_id) VALUES ('SP-TX', 'TX-TEST', 'Tx Test', 'REG-01')`)
 		return err
 	})
 	if err != nil {
@@ -101,7 +101,7 @@ func TestRollbackDiscardsWrites(t *testing.T) {
 
 	err := database.WithinTransaction(ctx, func(ctx context.Context) error {
 		_, err := database.Querier(ctx).Exec(ctx,
-			`INSERT INTO carepath.service_point (id, code, name, place_id) VALUES ('SP-RB', 'RB-TEST', 'Rollback', 'RB-01')`)
+			`INSERT INTO carepath.service_point (id, code, name, place_id) VALUES ('SP-RB', 'RB-TEST', 'Rollback', 'REG-01')`)
 		if err != nil {
 			return err
 		}

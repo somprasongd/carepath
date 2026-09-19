@@ -2,6 +2,10 @@ package journey
 
 import (
 	"context"
+	"fmt"
+	"sort"
+
+	"github.com/google/uuid"
 
 	"carepath/apps/api/internal/his"
 	"carepath/apps/api/internal/platform/apperr"
@@ -20,6 +24,19 @@ type Service interface {
 	ApplyHISEvent(ctx context.Context, event his.Event) error
 	// GetVisit returns the projected journey for reading.
 	GetVisit(ctx context.Context, visitID string) (Visit, error)
+	// GetJourney returns the patient-facing view of the projection: steps
+	// ordered by sequence, each resolved to its service point, with the
+	// deterministic current (first STARTED) and next (first READY) step.
+	GetJourney(ctx context.Context, visitID string) (View, error)
+	// ListJourneys returns the projected journey of every visit for the
+	// staff visit monitor (#37), freshest sync first, with the same
+	// per-visit resolution as GetJourney.
+	ListJourneys(ctx context.Context) ([]View, error)
+	// TransitionStep forwards one step-status command to the HIS (the system
+	// of record per ADR-0008 §2), then re-projects the visit synchronously
+	// and records the command in the audit log. The returned view carries the
+	// recalculated next step immediately.
+	TransitionStep(ctx context.Context, visitID string, sequence int, cmd his.TransitionCommand, source string) (View, error)
 }
 
 type service struct {
@@ -98,6 +115,150 @@ func (s *service) ApplyHISEvent(ctx context.Context, event his.Event) error {
 
 func (s *service) GetVisit(ctx context.Context, visitID string) (Visit, error) {
 	return s.repo.GetVisit(ctx, visitID)
+}
+
+func (s *service) GetJourney(ctx context.Context, visitID string) (View, error) {
+	var view View
+	err := s.tx.WithinTransaction(ctx, func(ctx context.Context) error {
+		visit, err := s.repo.GetVisit(ctx, visitID)
+		if err != nil {
+			return err
+		}
+		points, err := s.servicePoints.List(ctx)
+		if err != nil {
+			return err
+		}
+		view = assembleView(visit, points)
+		return nil
+	})
+	if err != nil {
+		return View{}, err
+	}
+	return view, nil
+}
+
+func (s *service) ListJourneys(ctx context.Context) ([]View, error) {
+	var views []View
+	err := s.tx.WithinTransaction(ctx, func(ctx context.Context) error {
+		visits, err := s.repo.ListVisits(ctx)
+		if err != nil {
+			return err
+		}
+		// One service-point read feeds every row — the bindings are the
+		// same catalog the single-journey read resolves against.
+		points, err := s.servicePoints.List(ctx)
+		if err != nil {
+			return err
+		}
+		views = make([]View, len(visits))
+		for i, visit := range visits {
+			views[i] = assembleView(visit, points)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return views, nil
+}
+
+func (s *service) TransitionStep(ctx context.Context, visitID string, sequence int, cmd his.TransitionCommand, source string) (View, error) {
+	switch cmd.To {
+	case his.CommandToStarted, his.CommandToCompleted, his.CommandToCancelled:
+	default:
+		return View{}, apperr.New(apperr.KindInvalid, fmt.Sprintf("unknown target status %q", cmd.To))
+	}
+	if cmd.CommandID == "" {
+		cmd.CommandID = uuid.NewString()
+	}
+	if source == "" {
+		source = "unknown"
+	}
+
+	// The HIS owns transition legality and never joins database transactions
+	// (ADR-0007/0008): send the command first, then read the resulting state.
+	step, err := s.his.TransitionStep(ctx, visitID, sequence, cmd)
+	if err != nil {
+		return View{}, err
+	}
+	snapshot, err := s.his.GetVisit(ctx, visitID)
+	if err != nil {
+		return View{}, err
+	}
+
+	err = s.tx.WithinTransaction(ctx, func(ctx context.Context) error {
+		visit, err := s.project(ctx, snapshot)
+		if err != nil {
+			return err
+		}
+		if err := s.repo.UpsertVisit(ctx, visit); err != nil {
+			return err
+		}
+		return s.repo.InsertCommandAudit(ctx, CommandAudit{
+			CommandID: cmd.CommandID,
+			VisitID:   visitID,
+			Sequence:  sequence,
+			ToStatus:  step.Status,
+			Source:    source,
+		})
+	})
+	if err != nil {
+		return View{}, err
+	}
+	logger.FromContext(ctx).Info("step transitioned",
+		"command_id", cmd.CommandID,
+		"visit_id", visitID,
+		"sequence", sequence,
+		"to", step.Status,
+		"source", source,
+	)
+	return s.GetJourney(ctx, visitID)
+}
+
+// assembleView resolves service points for the projection's stored bindings
+// and derives current/next. Resolution is deterministic: steps are ordered by
+// sequence, current is the first STARTED step, next the first READY one. The
+// caller fetches the service points and runs this inside the transaction so
+// both reads share it.
+func assembleView(visit Visit, points []servicepoint.ServicePoint) View {
+	byID := make(map[string]servicepoint.ServicePoint, len(points))
+	for _, sp := range points {
+		byID[sp.ID] = sp
+	}
+
+	steps := make([]StepView, len(visit.Steps))
+	for i, step := range visit.Steps {
+		steps[i] = StepView{
+			Sequence:       step.Sequence,
+			ServiceCode:    step.ServiceCode,
+			Status:         step.Status,
+			ServicePointID: step.ServicePointID,
+		}
+		if step.ServicePointID != nil {
+			if sp, ok := byID[*step.ServicePointID]; ok {
+				steps[i].ServicePoint = &sp
+			}
+		}
+	}
+	sort.Slice(steps, func(a, b int) bool { return steps[a].Sequence < steps[b].Sequence })
+
+	view := View{
+		VisitID:    visit.VisitID,
+		PatientRef: visit.PatientRef,
+		Status:     visit.Status,
+		Completed:  visit.Status == statusVisitCompleted,
+		Steps:      steps,
+		SyncedAt:   visit.SyncedAt,
+	}
+	for i := range steps {
+		switch {
+		case view.Current == nil && steps[i].Status == statusStepStarted:
+			view.Current = &steps[i]
+		case view.Next == nil && steps[i].Status == statusStepReady:
+			view.Next = &steps[i]
+		}
+	}
+	return view
 }
 
 // project resolves each step's service-point binding. A step whose service

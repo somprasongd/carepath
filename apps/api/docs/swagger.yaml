@@ -9,10 +9,85 @@ definitions:
       status:
         type: string
     type: object
+  hospitalmap.Floor:
+    properties:
+      buildingId:
+        type: string
+      code:
+        type: string
+      id:
+        type: string
+      levelOrder:
+        type: integer
+      name:
+        type: string
+    type: object
+  hospitalmap.Place:
+    properties:
+      entryNodeId:
+        type: string
+      floor:
+        $ref: '#/definitions/hospitalmap.Floor'
+      floorId:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+      x:
+        type: number
+      "y":
+        type: number
+    type: object
   httpx.ErrorResponse:
     properties:
       error:
         example: visit not found
+        type: string
+    type: object
+  journey.StepView:
+    properties:
+      sequence:
+        type: integer
+      serviceCode:
+        type: string
+      servicePoint:
+        $ref: '#/definitions/servicepoint.ServicePoint'
+      servicePointId:
+        type: string
+      status:
+        type: string
+    type: object
+  journey.View:
+    properties:
+      completed:
+        type: boolean
+      current:
+        $ref: '#/definitions/journey.StepView'
+      next:
+        $ref: '#/definitions/journey.StepView'
+      patientRef:
+        type: string
+      status:
+        type: string
+      steps:
+        items:
+          $ref: '#/definitions/journey.StepView'
+        type: array
+      syncedAt:
+        type: string
+      visitId:
+        type: string
+    type: object
+  journey.transitionRequestBody:
+    properties:
+      commandId:
+        type: string
+      source:
+        type: string
+      to:
         type: string
     type: object
   main.HealthResponse:
@@ -32,6 +107,8 @@ definitions:
         type: string
       name:
         type: string
+      place:
+        $ref: '#/definitions/hospitalmap.Place'
       placeId:
         type: string
     type: object
@@ -141,6 +218,162 @@ paths:
       summary: Create a patient session
       tags:
       - auth
+  /api/v1/journeys/{visitId}:
+    get:
+      description: 'Returns the CarePath-owned journey projection: steps ordered by
+        sequence, each resolved to its service point, with the deterministic current
+        (first STARTED) and next (first READY) step. A completed visit is reported
+        with completed=true and no current/next.'
+      parameters:
+      - description: Visit ID
+        in: path
+        name: visitId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/journey.View'
+        "404":
+          description: no journey projected for this visit
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Get the patient journey
+      tags:
+      - journeys
+  /api/v1/journeys/{visitId}/steps/{sequence}/transition:
+    post:
+      consumes:
+      - application/json
+      description: Forwards a step-status command to the HIS (the system of record,
+        ADR-0008) and returns the refreshed journey with the recalculated next step.
+        Illegal or out-of-order transitions are rejected by the HIS with 409. commandId
+        is an optional idempotency key; source names the acting surface for the audit
+        trail.
+      parameters:
+      - description: Visit ID
+        in: path
+        name: visitId
+        required: true
+        type: string
+      - description: Step sequence
+        in: path
+        name: sequence
+        required: true
+        type: integer
+      - description: Transition command
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/journey.transitionRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/journey.View'
+        "400":
+          description: invalid body or unknown target status
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: visit or step not found, or journey not projected
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "409":
+          description: illegal transition
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "502":
+          description: upstream HIS error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Transition one service step
+      tags:
+      - journeys
+  /api/v1/service-points:
+    get:
+      description: Active service points with their resolved place and floor — the
+        service → destination mapping patients navigate by and staff see in the console.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/servicepoint.ServicePoint'
+            type: array
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: List service points
+      tags:
+      - service-points
+  /api/v1/service-points/{code}:
+    get:
+      description: One active service point (e.g. code LAB) with its resolved place
+        and floor — the destination lookup for a care step's service code.
+      parameters:
+      - description: Service code (e.g. REGISTRATION, DOCTOR, LAB, XRAY, PHARMACY)
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/servicepoint.ServicePoint'
+        "404":
+          description: service point not found
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Get a service point by code
+      tags:
+      - service-points
+  /api/v1/staff/visits:
+    get:
+      description: Every projected journey, freshest sync first — the same per-visit
+        shape as the single-journey read (ordered steps, resolved service points,
+        deterministic current/next). Reads the CarePath projection only; a visit not
+        yet ingested is absent until its first event lands.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/journey.View'
+            type: array
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: List visits for the staff monitor
+      tags:
+      - staff
   /api/v1/visits/{visitId}:
     get:
       description: Returns the HIS visit enriched with the next actionable step and
