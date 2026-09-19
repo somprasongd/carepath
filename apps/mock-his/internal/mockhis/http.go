@@ -1,20 +1,35 @@
 package mockhis
 
 import (
+	_ "embed"
 	"net/http"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 )
 
+//go:embed console.html
+var consoleHTML []byte
+
 // New builds the Mock HIS HTTP app implementing the contract in
-// packages/contracts/openapi/mock-his.yaml.
+// packages/contracts/openapi/mock-his.yaml, plus the demo-driver surface
+// (/api/v1/demo/* and /console) that exists only on the mock — a real HIS
+// has its own operator tooling (see docs/integration/mock-his.md).
 func New() *fiber.App {
 	store := NewStore()
 	app := fiber.New()
 
 	app.Get("/health", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok", "service": "mock-his"})
+	})
+
+	// Console: single embedded page, same origin as the API.
+	app.Get("/", func(c fiber.Ctx) error {
+		return c.Redirect().Status(http.StatusFound).To("/console")
+	})
+	app.Get("/console", func(c fiber.Ctx) error {
+		c.Set(fiber.HeaderContentType, "text/html; charset=utf-8")
+		return c.Send(consoleHTML)
 	})
 
 	app.Get("/api/v1/visits/:visitId", func(c fiber.Ctx) error {
@@ -62,6 +77,50 @@ func New() *fiber.App {
 		}
 		events, next := store.Events(c.Query("after"), limit)
 		return c.JSON(fiber.Map{"events": events, "nextAfter": next})
+	})
+
+	// Demo-driver API (mock-only, deliberately outside the canonical
+	// contract): what the console uses to stage a demo. State changes here
+	// and via the transition command above are announced as canonical
+	// events, so CarePath still learns everything through the feed.
+	app.Get("/api/v1/demo/visits", func(c fiber.Ctx) error {
+		return c.JSON(store.ListVisits())
+	})
+
+	app.Post("/api/v1/demo/visits", func(c fiber.Ctx) error {
+		var body struct {
+			PatientRef   string   `json:"patientRef"`
+			ServiceCodes []string `json:"serviceCodes"`
+		}
+		if err := c.Bind().Body(&body); err != nil {
+			return errResponse(c, http.StatusBadRequest, "invalid request body")
+		}
+		visit, verr := store.CreateVisit(body.PatientRef, body.ServiceCodes)
+		if verr != nil {
+			return errResponse(c, http.StatusBadRequest, verr.Msg)
+		}
+		return c.Status(http.StatusCreated).JSON(visit)
+	})
+
+	app.Post("/api/v1/demo/visits/:visitId/orders", func(c fiber.Ctx) error {
+		var body struct {
+			ServiceCode string `json:"serviceCode"`
+		}
+		if err := c.Bind().Body(&body); err != nil {
+			return errResponse(c, http.StatusBadRequest, "invalid request body")
+		}
+		step, verr := store.AddOrder(c.Params("visitId"), body.ServiceCode)
+		if verr != nil {
+			switch verr.Kind {
+			case ErrNotFound:
+				return errResponse(c, http.StatusNotFound, verr.Msg)
+			case ErrConflict:
+				return errResponse(c, http.StatusConflict, verr.Msg)
+			default:
+				return errResponse(c, http.StatusBadRequest, verr.Msg)
+			}
+		}
+		return c.Status(http.StatusCreated).JSON(step)
 	})
 
 	return app
