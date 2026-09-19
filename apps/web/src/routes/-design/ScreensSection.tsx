@@ -1,5 +1,8 @@
 import { NavigateScreen } from '../patient/-NavigateScreen'
+import { LoginScreen } from '../-LoginScreen'
 import { Overview } from '../staff/-Overview'
+import { Queue } from '../staff/-Queue'
+import { Register } from '../staff/-Register'
 import { ServicePoints } from '../staff/-ServicePoints'
 import { ReferenceJourney } from './ReferenceJourney'
 import { ScreenFrame, Section, SubHead } from './CatalogueParts'
@@ -15,10 +18,12 @@ export function ScreensSection() {
       title="Reference screens"
       description={
         <>
-          หกหน้าจออ้างอิงจาก <code>docs/designs/patient-staff-ui.html</code> ประกอบใหม่เป็น React
-          จริงใน <code>src/routes/</code> — เลื่อนภายในกรอบได้ และกดเมนูของเจ้าหน้าที่ได้
-          (เมนูจะพาไปที่ URL จริง) หน้าเจ้าหน้าที่เป็นคอมโพเนนต์เดียว ปรับเองตามความกว้างของกรอบ
-          ด้วย container query — ไม่ใช่สองหน้าที่แยกกัน
+          หกหน้าจอฐานจาก <code>docs/designs/patient-staff-ui.html</code> ประกอบใหม่เป็น React จริง
+          ใน <code>src/routes/</code> — เลื่อนภายในกรอบได้ และกดเมนูของเจ้าหน้าที่ได้ (เมนูจะพาไปที่ URL
+          จริง) หน้าเจ้าหน้าที่เป็นคอมโพเนนต์เดียว ปรับเองตามความกว้างของกรอบด้วย container query —
+          ไม่ใช่สองหน้าที่แยกกัน ต่อจากนั้นคือ 3 หน้าจอที่ปิดช่องว่างใน{' '}
+          <code>docs/deliverables/03-prototype-wireframe.md</code> §3.3 (เข้าสู่ระบบ, ลงทะเบียน,
+          เรียกคิว) — ออกแบบไว้ก่อนใน canvas เดียวกัน แล้วนำมาสร้างเป็นคอมโพเนนต์จริงที่นี่
         </>
       }
     >
@@ -51,6 +56,23 @@ export function ScreensSection() {
       <div className="ds-frames mt-6">
         <ScreenFrame title="ผังจุดบริการ" {...DESKTOP}>
           <ServicePoints />
+        </ScreenFrame>
+      </div>
+
+      <SubHead>เจ้าหน้าที่ · เข้าสู่ระบบ, ลงทะเบียน, เรียกคิว (FR-13, FR-14, FR-15, FR-16, FR-18)</SubHead>
+      <div className="ds-frames">
+        <ScreenFrame title="เข้าสู่ระบบ · เลือกบทบาท" {...DESKTOP}>
+          <LoginScreen onSignIn={() => {}} />
+        </ScreenFrame>
+      </div>
+      <div className="ds-frames mt-6">
+        <ScreenFrame title="ลงทะเบียนผู้ป่วย" {...DESKTOP}>
+          <Register />
+        </ScreenFrame>
+      </div>
+      <div className="ds-frames mt-6">
+        <ScreenFrame title="เรียกคิว" {...DESKTOP}>
+          <Queue />
         </ScreenFrame>
       </div>
     </Section>

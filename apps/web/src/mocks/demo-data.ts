@@ -170,3 +170,159 @@ export const attentionList: AttentionItem[] = [
 
 export const lastUpdated = '09:42 น.'
 export const consoleDate = 'อังคาร 19 ก.ย. 2569'
+
+/* ── Login · role selection (FR-18) ───────────────────────────────────── */
+
+export type StaffRoleId = 'registration' | 'service-point' | 'admin' | 'executive'
+
+export type StaffRoleOption = {
+  id: StaffRoleId
+  label: string
+  /** What this role can reach — the visible half of role-based access. */
+  scope: string
+  /** Where signing in as this role lands. */
+  landing: string
+  /** The user story this role exists to serve, shown as a demo aid. */
+  story: string
+}
+
+/**
+ * Four of the six actors in docs/requirements/use-case-diagram.md. The patient
+ * and the relative are absent on purpose: they enter through LINE, never here.
+ */
+export const staffRoleOptions: StaffRoleOption[] = [
+  {
+    id: 'registration',
+    label: 'เจ้าหน้าที่ลงทะเบียน',
+    scope: 'เปิด visit ของวันนี้ และกำหนดแผนการดูแลให้ผู้ป่วย',
+    landing: '/staff/register',
+    story: 'US-13',
+  },
+  {
+    id: 'service-point',
+    label: 'เจ้าหน้าที่จุดบริการ',
+    scope: 'เรียกคิวและบันทึกสถานะ เห็นเฉพาะจุดบริการที่ประจำอยู่',
+    landing: '/staff/queue',
+    story: 'US-14 · US-15',
+  },
+  {
+    id: 'admin',
+    label: 'ผู้ดูแลระบบ',
+    scope: 'ผูกบริการทางคลินิกกับตำแหน่งจริง และดูแลแผนการดูแล',
+    landing: '/staff/service-points',
+    story: 'US-05 · US-16',
+  },
+  {
+    id: 'executive',
+    label: 'ผู้บริหาร',
+    scope: 'ดูภาพรวมเวลารอและจุดคอขวด อ่านอย่างเดียว',
+    landing: '/staff/overview',
+    story: 'US-18',
+  },
+]
+
+/* ── Registration · pathway templates (FR-13, FR-14) ──────────────────── */
+
+export type TemplateStep = { title: string; code: string }
+
+export type PathwayTemplate = {
+  id: string
+  name: string
+  description: string
+  steps: TemplateStep[]
+}
+
+export const pathwayTemplates: PathwayTemplate[] = [
+  {
+    id: 'opd-new',
+    name: 'ผู้ป่วยใหม่ OPD',
+    description: 'ผู้ป่วยนอกที่ยังไม่เคยมีประวัติในโรงพยาบาล',
+    steps: [
+      { title: 'ลงทะเบียน', code: 'REG-01' },
+      { title: 'คัดกรอง', code: 'TRIAGE-01' },
+      { title: 'ตรวจที่ห้องตรวจ OPD', code: 'OPD-EXAM-01' },
+      { title: 'การเงิน', code: 'CASHIER-01' },
+      { title: 'รับยา', code: 'PHARMACY-01' },
+    ],
+  },
+  {
+    id: 'dm-followup',
+    name: 'นัดติดตามเบาหวาน',
+    description: 'ผู้ป่วยเดิมที่ต้องเจาะเลือดก่อนพบแพทย์',
+    steps: [
+      { title: 'ลงทะเบียน', code: 'REG-01' },
+      { title: 'เจาะเลือด', code: 'LAB-01' },
+      { title: 'รอผลแล็บ', code: 'LAB-WAIT' },
+      { title: 'ตรวจที่ห้องตรวจ OPD', code: 'OPD-EXAM-01' },
+      { title: 'การเงิน', code: 'CASHIER-01' },
+      { title: 'รับยา', code: 'PHARMACY-01' },
+    ],
+  },
+  {
+    id: 'annual-checkup',
+    name: 'ตรวจสุขภาพประจำปี',
+    description: 'แพ็กเกจตรวจสุขภาพ ไม่ผ่านห้องตรวจ OPD',
+    steps: [
+      { title: 'ลงทะเบียน', code: 'REG-01' },
+      { title: 'เจาะเลือด', code: 'LAB-01' },
+      { title: 'เอกซเรย์', code: 'XRAY-01' },
+      { title: 'ตรวจร่างกาย', code: 'CHECKUP-01' },
+      { title: 'การเงิน', code: 'CASHIER-01' },
+    ],
+  },
+]
+
+/** What the HIS returns for a looked-up HN — CarePath never stores this. */
+export const patientLookup = {
+  hn: '0012345',
+  name: 'นายสมชาย ใจดี',
+  age: '58 ปี',
+  coverage: 'สิทธิหลักประกันสุขภาพถ้วนหน้า',
+  appointment: 'คลินิกอายุรกรรม · 09:30 น.',
+}
+
+/* ── Service point · queue console (FR-15, FR-16) ─────────────────────── */
+
+export type QueueTicket = {
+  ticket: string
+  visitRef: string
+  /** How long they have been waiting at this point. */
+  waited: string
+}
+
+export const station = {
+  code: 'LAB-01',
+  name: 'ห้องเจาะเลือด',
+  floor: 'ชั้น 2',
+  zone: 'diagnostic' as Zone,
+}
+
+export const nowServing = {
+  ticket: '12',
+  visitRef: 'V-2384',
+  patient: 'นายสมชาย ใจดี',
+  step: 'เจาะเลือด',
+  position: 'ขั้นที่ 3 จาก 5',
+  calledAt: '09:41 น.',
+}
+
+export const waitingQueue: QueueTicket[] = [
+  { ticket: '13', visitRef: 'V-2385', waited: '4 นาที' },
+  { ticket: '14', visitRef: 'V-2390', waited: '6 นาที' },
+  { ticket: '15', visitRef: 'V-2401', waited: '9 นาที' },
+  { ticket: '16', visitRef: 'V-2404', waited: '11 นาที' },
+  { ticket: '17', visitRef: 'V-2412', waited: '14 นาที' },
+  { ticket: '18', visitRef: 'V-2415', waited: '16 นาที' },
+  { ticket: '19', visitRef: 'V-2418', waited: '18 นาที' },
+]
+
+/**
+ * Steps a service point can add to a visit that was not planned for them
+ * (FR-16). Each carries where the scheduler would put it, because the
+ * prerequisite order is the constraint staff most need to see before adding.
+ */
+export const unplannedStepOptions = [
+  { code: 'XRAY-01', title: 'เอกซเรย์', insertBefore: 'การเงิน' },
+  { code: 'ECG-01', title: 'ตรวจคลื่นไฟฟ้าหัวใจ', insertBefore: 'ตรวจที่ห้องตรวจ OPD' },
+  { code: 'US-01', title: 'อัลตราซาวด์ช่องท้อง', insertBefore: 'การเงิน' },
+]

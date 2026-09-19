@@ -100,6 +100,15 @@
   --text-display-stat: 34px;
   --text-display-stat--line-height: 1.1;
   --text-display-stat--font-weight: 700;
+  /*
+   * A counter display read from across a room — the service point's
+   * now-serving ticket, and nothing else. Deliberately outside the eight
+   * DESIGN.md text tokens: it is a different job from a dashboard figure,
+   * not a bigger version of one.
+   */
+  --text-display-queue: 64px;
+  --text-display-queue--line-height: 1;
+  --text-display-queue--font-weight: 700;
   --text-h1: 26px;
   --text-h1--line-height: 1.28;
   --text-h1--font-weight: 700;

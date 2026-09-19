@@ -119,3 +119,81 @@ export function PatientsIcon(props: IconProps) {
     </Glyph>
   )
 }
+
+/*
+ * Station glyphs — added for the login, registration and queue-call screens.
+ * CallIcon is the only one that is not a generic mark: it is the floor plan's
+ * own vocabulary, a route arriving at a node, because calling a ticket is
+ * exactly the moment a patient is sent along that route.
+ */
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <Glyph size={18} {...props}>
+      <circle cx="11" cy="11" r="6.5" />
+      <line x1="16" y1="16" x2="20.5" y2="20.5" />
+    </Glyph>
+  )
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <Glyph size={16} strokeWidth={2.5} {...props}>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </Glyph>
+  )
+}
+
+export function SkipIcon(props: IconProps) {
+  return (
+    <Glyph size={16} {...props}>
+      <polyline points="7 6 13 12 7 18" />
+      <line x1="17" y1="6" x2="17" y2="18" />
+    </Glyph>
+  )
+}
+
+/** A route arriving at a navigation node — "send the next patient here". */
+export function CallIcon(props: IconProps) {
+  return (
+    <Glyph size={18} {...props}>
+      <line x1="3" y1="12" x2="11.5" y2="12" />
+      <polyline points="8.5 8.5 12 12 8.5 15.5" />
+      <circle cx="18" cy="12" r="3" />
+    </Glyph>
+  )
+}
+
+export function SignOutIcon(props: IconProps) {
+  return (
+    <Glyph size={16} {...props}>
+      <path d="M14 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4" />
+      <line x1="4" y1="12" x2="13" y2="12" />
+      <polyline points="9.5 8.5 13 12 9.5 15.5" />
+    </Glyph>
+  )
+}
+
+/** Registration desk: the day's list a clerk opens a visit on. */
+export function RegistrationIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M8 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1h-2" />
+      <rect x="8.5" y="2.5" width="7" height="3.5" rx="1" />
+      <line x1="9" y1="11" x2="15" y2="11" />
+      <line x1="9" y1="15" x2="13" y2="15" />
+    </Glyph>
+  )
+}
+
+/** Service point: tickets stacked at a counter. */
+export function QueueIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="3" y="5" width="18" height="5" rx="1.5" />
+      <rect x="5" y="13" width="14" height="4" rx="1.5" />
+      <line x1="8" y1="20" x2="16" y2="20" />
+    </Glyph>
+  )
+}
