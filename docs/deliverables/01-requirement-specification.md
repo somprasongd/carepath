@@ -11,7 +11,7 @@ CarePath is a patient journey and indoor navigation web application for a hospit
 | Primary users | Patient / relative (LINE OA + LIFF/web); registration & screening staff; service-point staff (exam room, lab, X-ray, pharmacy); hospital admin; hospital executive |
 | Core idea | Separate *what's next* (Care Graph / Pathway) from *how to get there* (Hospital Map + Navigation Graph), joined by a `ServicePoint → Place` mapping |
 | Location without GPS | QR-code scan as the baseline provider; manual selection as fallback; Zigbee as an optional phase-2 provider — all behind one location-provider interface |
-| HIS integration | CarePath does not read the hospital's HIS database directly; Mock HIS stands in for a real HIS behind a stable adapter/port (see [ADR-0005](../adr/0005-his-adapter-and-mock-his.md), [ADR-0008](../adr/0008-his-canonical-event-contract.md)) |
+| HIS integration | CarePath does not read the hospital's HIS database directly; Mock HIS stands in for a real HIS behind a stable adapter/port. The HIS reports visit/clinic/order/encounter **facts** only — it has no concept of an ordered journey — and CarePath derives the patient's plan from them (see [ADR-0005](../adr/0005-his-adapter-and-mock-his.md), [ADR-0009](../adr/0009-carepath-owns-journey-plan.md), superseding [ADR-0008](../adr/0008-his-canonical-event-contract.md) on this point) |
 
 Full narrative: [Product Requirements](../requirements/product-requirements.md).
 
@@ -20,7 +20,7 @@ Full narrative: [Product Requirements](../requirements/product-requirements.md).
 | Actor | Role in the system |
 |---|---|
 | Patient / relative | Views their own visit journey, gets routed to the next step, receives queue notifications; a relative can follow progress via a shared link |
-| Registration / screening staff | Picks a Care Pathway Template and reads off its service-code checklist to enter into the HIS when opening the patient's visit there |
+| Registration / screening staff | Looks up a visit CarePath has already derived a plan for, once the HIS reports it opened (ADR-0009); does not create the visit or enter anything into the HIS from CarePath |
 | Service-point staff | Calls the queue, updates step status, inserts unplanned steps |
 | Hospital admin | Maintains hospital map data, service-point mapping, pathway templates, and user/role access |
 | Hospital executive | Views wait-time and bottleneck reporting across service points |
@@ -33,8 +33,8 @@ Full detail and current build status: [MVP Scope](../requirements/mvp-scope.md).
 | ID | Requirement | Priority | Functional requirement |
 |---|---|---|---|
 | M1 | Hospital map data: buildings, floors, places/service points, connecting routes | Must | [FR-05](../requirements/functional-requirements.md), [FR-11](../requirements/functional-requirements.md) |
-| M2 | Care Pathway Template management | Must | [FR-13](../requirements/functional-requirements.md) |
-| M3 | Pathway-template service-code checklist for registration staff | Must | [FR-14](../requirements/functional-requirements.md) |
+| M2 | Journey planning rules (hospital policy encoded in CarePath's planner, ADR-0009 — supersedes the earlier "Care Pathway Template" design) | Must | [FR-13](../requirements/functional-requirements.md) |
+| M3 | Journey visibility for registration staff (look up a visit's derived plan) | Must | [FR-14](../requirements/functional-requirements.md) |
 | M4 | Patient journey screen (steps, status, what's next) | Must | [FR-03](../requirements/functional-requirements.md) |
 | M5 | Step-by-step navigation instructions with distance/time | Must | [FR-04](../requirements/functional-requirements.md), [FR-08](../requirements/functional-requirements.md) |
 | M6 | Shortest-route calculation from graph data (no hardcoded routes) | Must | [FR-07](../requirements/functional-requirements.md) |
@@ -70,8 +70,8 @@ Full detail: [Functional Requirements](../requirements/functional-requirements.m
 | FR-10 | CarePath core depends only on a stable HIS contract, never vendor-specific endpoints |
 | FR-11 | Staff can configure buildings/floors/places/service points and their mappings |
 | FR-12 | Zigbee observations can update location without touching journey-domain code |
-| FR-13 | Admin creates/edits/versions Care Pathway Templates with step ordering and prerequisites |
-| FR-14 | Registration staff picks a pathway template and sees its service-code checklist for the HIS; HIS remains sole system of record for visit opening (ADR-0008) |
+| FR-13 | *(Superseded by ADR-0009)* Admin can review the journey-planning rules CarePath's planner applies — no longer a per-patient template staff assemble, since the HIS reports no ordered step list to template against |
+| FR-14 | Registration staff looks up a visit by VN and sees the plan CarePath derived for it; HIS remains sole system of record for visit opening and orders (ADR-0009) |
 | FR-15 | Service-point staff call the queue and update step status |
 | FR-16 | Staff insert an unplanned step without breaking prerequisite ordering |
 | FR-17 | Display queue length and estimated wait time per service point |
@@ -84,6 +84,10 @@ Full detail: [Functional Requirements](../requirements/functional-requirements.m
 | FR-24 | (Stretch) Relative tracking via time-limited link |
 | FR-25 | (Stretch) Voice-guided navigation instructions |
 | FR-26 | (Stretch) Nearby amenity suggestions along the route |
+| FR-27 | *(Added by ADR-0009)* CarePath derives the journey plan from HIS-reported facts, not a step list |
+| FR-28 | *(Added by ADR-0009)* The plan recomputes on every new fact, preserving in-progress/completed steps |
+| FR-29 | *(Added by ADR-0009)* A mid-encounter diagnostic order infers a return to the same clinic; the clinic can confirm or override |
+| FR-30 | *(Added by ADR-0009)* Independent steps (e.g. a lab and an X-ray both ordered before the same clinic visit) are actionable concurrently |
 
 ## 1.5 Non-functional requirements (summary)
 
@@ -118,12 +122,12 @@ Full stories with acceptance rationale: [User Stories](../requirements/user-stor
 | US-10 | Patient | be notified when my queue is near | I can rest elsewhere without missing my turn | Should (S6) |
 | US-11 | Patient | switch the app to English | I can understand my journey as a foreign patient | Should (S4) |
 | US-12 | Relative | follow the patient's current step via a shared link | I can arrive to pick them up on time | Could (C2) |
-| US-13 | Registration staff | pick a pathway template and see its service-code checklist | I enter the correct codes into the HIS when opening the visit | Must (M3) |
+| US-13 | Registration staff | look up a visit by VN and see its derived plan | I can hand the patient a clear starting point | Must (M3) |
 | US-14 | Service-point staff | call the queue and mark a step complete | the patient auto-advances to the next step | Must (M7) |
 | US-15 | Service-point staff | send a patient to an extra unplanned step | the visit plan matches reality without breaking ordering | Must (M7) |
 | US-05 | Hospital admin | map a logical service (e.g. LAB) to a physical place | workflow changes are independent of floor-plan design | Must (M1) |
 | US-06 | Hospital admin | maintain floor/route data independently of clinical flow | facility changes (e.g. a moved room) don't break pathways or routes | Must (M1, M6) |
-| US-16 | Hospital admin | create and edit Care Pathway Templates | registration staff can assign a consistent, reusable plan | Must (M2) |
+| US-16 | Hospital admin | review the journey-planning rules CarePath applies | I can tell when a patient's derived plan reflects hospital policy correctly | Must (M2) |
 | US-17 | Hospital admin | manage user accounts and role permissions | each role sees/does only what it should | Must (M8) |
 | US-18 | Hospital executive | see bottlenecks and average wait time | I can allocate staff where needed | Should (S7) |
 | US-07 | Developer | use Mock HIS for deterministic visits/service states | demo and tests don't depend on production HIS | Must (supports M3–M7) |
@@ -154,11 +158,11 @@ flowchart LR
         UC5(["Get queue-proximity notification"])
         UC6(["Switch language / accessibility mode"])
         UC7(["Track visit progress<br/>via shared link"])
-        UC8(["View pathway-template<br/>service-code checklist"])
+        UC8(["Look up a visit's<br/>derived journey plan"])
         UC9(["Call queue /<br/>update step status"])
         UC10(["Insert unplanned step"])
         UC11(["Manage hospital map &amp;<br/>service-point mapping"])
-        UC12(["Manage pathway templates"])
+        UC12(["Review journey-planning rules"])
         UC13(["Manage users &amp; roles"])
         UC14(["View bottleneck &amp;<br/>wait-time dashboard"])
         UC15(["Sync visit / service state<br/>with HIS"])
@@ -186,12 +190,13 @@ flowchart LR
     UC15 --> HIS
 ```
 
-Authentication and role-based access (FR-18) is a precondition of every staff/admin/executive use case (UC8–UC14) and is omitted as an edge to keep the diagram readable. UC8 has no edge into UC15: per ADR-0008 the HIS opens the visit and orders services itself, so CarePath only reads the resulting events rather than sending a command.
+Authentication and role-based access (FR-18) is a precondition of every staff/admin/executive use case (UC8–UC14) and is omitted as an edge to keep the diagram readable. UC8 has no edge into UC15: per ADR-0009 the HIS opens the visit and reports orders/clinics/encounters itself, and CarePath derives the journey plan from those facts — it never sends a step-related command back to the HIS. The fact→plan flow this collapses into one edge is spelled out in [docs/integration/mock-his.md § How CarePath turns HIS facts into a journey plan](../integration/mock-his.md#how-carepath-turns-his-facts-into-a-journey-plan).
 
 ## 1.8 Key design constraints (from the brief and ADRs)
 
 - No GPS indoors — location is established via QR scan, manual selection, or (optionally) Zigbee, behind one provider interface ([ADR-0004](../adr/0004-location-provider-abstraction.md)).
-- CarePath never reads the HIS database directly; all HIS access is through an adapter, with Mock HIS as the interim implementation ([ADR-0005](../adr/0005-his-adapter-and-mock-his.md), [ADR-0008](../adr/0008-his-canonical-event-contract.md)).
+- CarePath never reads the HIS database directly; all HIS access is through an adapter, with Mock HIS as the interim implementation ([ADR-0005](../adr/0005-his-adapter-and-mock-his.md)).
+- The HIS has no concept of an ordered patient journey — it reports visit/clinic/order/encounter facts and CarePath derives the plan itself ([ADR-0009](../adr/0009-carepath-owns-journey-plan.md), amending [ADR-0008](../adr/0008-his-canonical-event-contract.md)).
 - Care Graph (what's next) and Navigation Graph (how to get there) are kept as separate models ([ADR-0002](../adr/0002-separate-care-and-navigation-graphs.md)).
 - Floor plans are SVG for the MVP — no 3D ([ADR-0003](../adr/0003-svg-floor-plan.md)).
 - The relational database must reach at least 3NF (covered in deliverable 2, ER Diagram and Database Design — not yet produced).

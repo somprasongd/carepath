@@ -65,6 +65,94 @@ warning log — mapping stays CarePath configuration in the `servicepoint`
 module. See ADR-0009 for the ordering rules, the return-to-doctor inference,
 and result-gated `WAITING` status.
 
+## How CarePath turns HIS facts into a journey plan
+
+This is the mechanism above, made concrete — from an action in a real HIS (or
+the Mock HIS console) to what a patient or staff member sees.
+
+### End-to-end flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Staff as HIS user<br/>(registration/clinic/lab)
+    participant HIS as HIS<br/>(Mock HIS in the demo)
+    participant Poller as apps/api<br/>internal/his/ingest
+    participant Planner as apps/api<br/>internal/journey (Plan)
+    participant DB as Postgres<br/>journey_visit / journey_step
+    participant API as CarePath API<br/>GET /api/v1/journeys/{visitId}
+    participant Screen as Patient app /<br/>staff console
+
+    Staff->>HIS: open visit / assign clinic /<br/>place order / report result /<br/>complete encounter
+    HIS-->>HIS: append canonical fact<br/>to the event feed
+    loop every HIS_INGEST_INTERVAL (default 5s)
+        Poller->>HIS: GET /api/v1/events?after=&lt;cursor&gt;
+        HIS-->>Poller: facts since the cursor
+    end
+    Poller->>HIS: GET /api/v1/visits/{visitId}<br/>(fresh snapshot for this fact)
+    HIS-->>Poller: visit + clinics[] + orders[]
+    Poller->>Planner: ApplyHISEvent(fact, snapshot)
+    Planner->>DB: read the visit's current steps<br/>(prior status + closed rounds)
+    Planner-->>Planner: Plan(snapshot, prior, closedRounds)<br/>— pure function, ADR-0009 §3
+    Planner->>DB: upsert the recomputed steps<br/>(stepKey-keyed, service points resolved)
+    Note over Screen,API: independent of ingest timing
+    Screen->>API: GET /api/v1/journeys/{visitId}
+    API->>DB: read stored steps
+    API-->>Screen: steps + actionable[] + recommended
+```
+
+The two loops are independent: the poller drives the plan forward whenever a
+new fact exists (default every 5s); a patient's or staff member's screen
+reads whatever the plan currently is, whenever it asks. Neither ever calls
+the other directly — Postgres is the only handoff between them.
+
+### Worked example: the return-to-doctor case (ADR-0009 §4/§5)
+
+The scenario that makes CarePath's side of this worth having: an appointment
+patient with a pre-visit lab order, whose doctor orders an X-ray mid-consult.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant HIS as HIS
+    participant CP as CarePath<br/>(planner)
+    participant Pt as Patient
+
+    HIS->>CP: visit.opened<br/>(APPOINTMENT, clinic MED,<br/>pre-visit order: LAB "CBC")
+    CP-->>CP: plan = [REGISTRATION✅, LAB:1 READY, CLINIC:MED:1 PENDING, CASHIER PENDING]
+    Pt->>Pt: does the blood draw
+    HIS->>CP: order.performed (LAB "CBC")
+    CP-->>CP: LAB:1 → COMPLETED<br/>CLINIC:MED:1 → READY (phase gate clear)
+    Pt->>Pt: sees the doctor — staff starts CLINIC:MED:1
+    CP-->>CP: CLINIC:MED:1 → STARTED
+    HIS->>CP: order.placed (XRAY "Chest X-Ray",<br/>ordered while MED round is STARTED)
+    CP-->>CP: infer a return: add XRAY:1 READY<br/>and CLINIC:MED:2 WAITING (§4)
+    Pt->>Pt: gets the X-ray taken
+    HIS->>CP: order.performed (XRAY)
+    CP-->>CP: XRAY:1 → COMPLETED<br/>CLINIC:MED:2 stays WAITING — no result yet (§5)
+    HIS->>CP: order.resulted (XRAY)
+    CP-->>CP: CLINIC:MED:2 → READY — "กลับไปพบแพทย์" becomes actionable
+    Pt->>Pt: returns, doctor finishes
+    alt HIS reports it
+        HIS->>CP: encounter.completed (clinic MED)
+    else HIS can't, or staff acts first
+        Note over CP: staff clicks "close round" in the console (§4 override)
+    end
+    CP-->>CP: CLINIC:MED:2 → COMPLETED<br/>CASHIER → READY (everything else terminal)
+    HIS->>CP: visit.closed (COMPLETED, after cashier)
+```
+
+Every `CP-->>CP` step above is one call to `journey.Plan()` — the same pure
+function, re-run from scratch each time on the latest facts plus whatever the
+plan already had. Nothing here is a special case in the code: `CLINIC:MED:2`
+existing at all is just what the planner outputs when it sees an order placed
+while `CLINIC:MED:1` is `STARTED`. Had the doctor confirmed the round was
+finished (`encounter.completed`, or the staff override) *before* `CLINIC:MED:2`
+ever started, the planner would drop it from the plan instead — the patient
+never sees a "return to the doctor" step that doesn't apply to them (ADR-0009
+§4/§7). See [`internal/journey/planner.go`](../../apps/api/internal/journey/planner.go)
+and its test file for the rules in full, and ADR-0009 for why each one exists.
+
 ## Demo-driver API and console (#22)
 
 The console is the demo operator's steering wheel, served by Mock HIS at

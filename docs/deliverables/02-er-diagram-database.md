@@ -20,8 +20,8 @@ ADR-0005 requires that "CarePath must not query the HIS database directly." For 
 | | `his` schema | `carepath` schema |
 |---|---|---|
 | Owned/written by | `apps/mock-his` only | `apps/api` only |
-| Holds | Patient, Visit, VisitStep — the clinical/visit state a real hospital HIS would own | Hospital map, service points, pathway templates, queue, users/roles, audit log, location — CarePath's own operational and spatial data |
-| Cross-references | none into `carepath` | Stores HIS ids (`visit_id`, `visit_step_id`) as **opaque text, not a database foreign key** — `apps/api` reaches HIS data only through the HIS adapter/API (ADR-0005, ADR-0008), never a cross-schema SQL join |
+| Holds | Patient, Visit, clinic assignments, orders, encounters — the clinical facts a real hospital HIS would own (no step list; ADR-0009) | Hospital map, service points, the derived journey plan (`journey_step`), queue, users/roles, audit log, location — CarePath's own operational and spatial data |
+| Cross-references | none into `carepath` | Stores HIS ids (`visit_id`, `order_id`) as **opaque text, not a database foreign key** — `apps/api` reaches HIS data only through the HIS adapter/API (ADR-0005, ADR-0009), never a cross-schema SQL join |
 
 This mirrors the trade-off ADR-0007 already accepts for cross-module boundaries inside `apps/api` ("module discipline relies on review rather than the compiler") — here it's enforced by which service holds which `DATABASE_URL`, not by a database-level constraint. If/when a real HIS replaces Mock HIS, only the adapter changes; nothing in the `carepath` schema does.
 
@@ -102,14 +102,16 @@ erDiagram
     }
 ```
 
-### B. Patient and visit (`his` schema)
+### B. Patient and visit (`his` schema) — revised per ADR-0009
+
+> **Superseded design note.** The version of this section originally written here modeled `his.visit_step` with `display_order` and `visit_step_dependency` — i.e., it assumed the HIS reports (and CarePath must not overwrite) an ordered step list. [ADR-0009](../adr/0009-carepath-owns-journey-plan.md) found that assumption doesn't hold: the HIS has no step concept at all. It only knows a visit, which clinic(s) it's assigned to, and orders (with a performed/resulted lifecycle) and encounter-completion facts. The diagram below replaces the old `VISIT_STEP`/`VISIT_STEP_DEPENDENCY` pair with what the HIS actually has; the derived, ordered plan now lives in `carepath.journey_step` (§B′ below), which is CarePath-owned, not `his`-owned.
 
 ```mermaid
 erDiagram
     PATIENT ||--o{ VISIT : has
-    VISIT ||--o{ VISIT_STEP : contains
-    VISIT_STEP ||--o{ VISIT_STEP_DEPENDENCY : "as step"
-    VISIT_STEP ||--o{ VISIT_STEP_DEPENDENCY : "as prerequisite"
+    VISIT ||--o{ VISIT_CLINIC : "assigned to"
+    VISIT ||--o{ ORDER_ : places
+    VISIT ||--o{ ENCOUNTER : "seen at"
 
     PATIENT {
         text patient_id PK
@@ -120,29 +122,75 @@ erDiagram
     VISIT {
         text visit_id PK
         text patient_id FK
+        text visit_type "WALKIN or APPOINTMENT"
         text status
         timestamptz opened_at
         timestamptz closed_at
     }
-    VISIT_STEP {
-        text visit_step_id PK
+    VISIT_CLINIC {
         text visit_id FK
-        text service_code
-        int display_order
-        text status
-        boolean is_planned
-        timestamptz due_by
-        timestamptz arrived_at
-        timestamptz started_at
-        timestamptz completed_at
+        text clinic_code
+        int assignment_order
     }
-    VISIT_STEP_DEPENDENCY {
-        text visit_step_id FK
-        text requires_visit_step_id FK
+    ORDER_ {
+        text order_id PK
+        text visit_id FK
+        text order_type "LAB, XRAY, EKG, US, DRUG"
+        text order_name
+        text ordered_by_clinic
+        timestamptz ordered_at
+        text status "PLACED, PERFORMED, RESULTED, CANCELLED"
+        timestamptz performed_at
+        timestamptz resulted_at
+    }
+    ENCOUNTER {
+        text visit_id FK
+        text clinic_code
+        int round
+        timestamptz completed_at "set once the clinic confirms this round is done"
     }
 ```
 
-### C. Care pathway templates (M2)
+*(`ORDER_` is named with a trailing underscore only because `ORDER` is a reserved SQL keyword; the real column/table name is `order`, quoted.)*
+
+### B′. Journey plan (`carepath` schema, ADR-0009) — replaces the old Care Pathway Template step list
+
+The plan CarePath derives from the facts in §B, addressed by a stable `step_key` rather than a renumberable sequence — see [`internal/journey/planner.go`](../../apps/api/internal/journey/planner.go) for the derivation rules and [`infra/postgres/migrations/000010_journey_plan.up.sql`](../../infra/postgres/migrations/000010_journey_plan.up.sql) for the actual (already-implemented) table.
+
+```mermaid
+erDiagram
+    JOURNEY_VISIT ||--o{ JOURNEY_STEP : contains
+    JOURNEY_VISIT ||--o{ JOURNEY_CLOSED_ROUND : "round confirmed done"
+    JOURNEY_STEP ||--o| SERVICE_POINT : "resolves to"
+
+    JOURNEY_VISIT {
+        text visit_id PK "HIS visit_id, opaque"
+        text patient_ref
+        text patient_name "the one PHI field CarePath stores, ADR-0009 §8"
+        text status
+        timestamptz synced_at
+    }
+    JOURNEY_STEP {
+        text visit_id FK
+        text step_key PK "e.g. CLINIC:MED:2, LAB:1 — stable across replans"
+        int sequence "display order only, not identity"
+        text kind "REGISTRATION, CLINIC, LAB, XRAY, EKG, ULTRASOUND, CASHIER, PHARMACY"
+        text clinic_code
+        int round
+        text_array order_refs "HIS order ids this step represents"
+        text status "PENDING, WAITING, READY, STARTED, COMPLETED, CANCELLED"
+        text service_point_id FK
+    }
+    JOURNEY_CLOSED_ROUND {
+        text visit_id FK
+        text step_key "the CLINIC round confirmed finished"
+        timestamptz closed_at
+    }
+```
+
+### C. Care pathway templates (M2) — superseded by ADR-0009, kept for historical context
+
+> **Do not build this table set.** [ADR-0009](../adr/0009-carepath-owns-journey-plan.md) found that "a per-patient template staff assemble ahead of time" doesn't fit how the HIS actually reports facts — the plan has to react to orders and encounters as they happen, not follow a pre-picked template. What this section called "pathway rules" now lives as ordering logic in [`internal/journey/planner.go`](../../apps/api/internal/journey/planner.go) (phase-based: registration → pre-visit diagnostics → clinic → mid-visit diagnostics → return-to-clinic → cashier → pharmacy), not as configuration rows. Kept below only so the design rationale for the original brief-driven M2 scope isn't lost.
 
 ```mermaid
 erDiagram
@@ -268,8 +316,8 @@ erDiagram
 **Are walking connections always bidirectional?**
 No, and the schema doesn't force an answer either way: every connection is **one directed row**. An ordinary two-way corridor is simply two rows (A→B and B→A) with the same distance/time. A one-way fire-escape stair is a single row. An elevator that skips a floor needs no special "floor restriction" flag — it just has no edge row connecting to that floor's elevator node, which falls straight out of the graph model.
 
-**How does an unplanned step get inserted without breaking existing before/after ordering?**
-This is why prerequisites are **not** encoded as a bare integer sequence. `display_order` is only a free-to-renumber display hint; the actual "must happen after" rule lives in `visit_step_dependency` (and, at the template level, `pathway_template_step_dependency`) as an explicit self-referencing edge. Inserting an unplanned step (M7) means: insert one `visit_step` row (`is_planned = false`) and one or more `visit_step_dependency` rows pointing at whatever step it must follow — none of the existing rows or their dependencies need to change.
+**How does an unplanned step get inserted without breaking existing before/after ordering?** *(revised under ADR-0009 — see §B′)*
+The original answer here (`visit_step_dependency` self-referencing edges) assumed CarePath persists explicit prerequisite rows staff insert against. ADR-0009 replaces that with a **pure function**: `journey.Plan(visit, prior, closedRounds) -> []Step` recomputes the whole plan from HIS facts on every new event, and the result is diffed against what's stored — never hand-edited. "Ordering" is a `phase` number baked into the planner's rules (registration=0, pre-visit diagnostics=10, clinic=20, mid-visit diagnostics=30, return-to-clinic=40, cashier=90, pharmacy=95), not a per-row dependency edge. An "unplanned" order placed mid-visit (M7/FR-16) is simply a new fact (`order.placed`) the next replan picks up automatically — inserting `journey_step` rows for it and, if it was ordered while a clinic encounter was open, inferring a return-to-clinic step; no staff action creates a dependency row. `journey_step`'s own primary key (`visit_id`, `step_key`) is what "does not disturb existing rows" now means: a step that is `STARTED`/`COMPLETED`/`CANCELLED` is never reordered or removed by a replan (ADR-0009 §7) — only a still-`PENDING`/`WAITING` step may be added, removed, or reordered.
 
 **What data is sensitive and shouldn't appear on a public screen?**
 `his.patient.full_name`, `his.care_category`-derived diagnosis/category names, and any free-text visit detail must never be joined into a public-facing view — e.g., the service-point queue-call screen (US-14) should display only `queue_ticket.ticket_number`, never the patient's name or care category. This is [NFR-03](../requirements/non-functional-requirements.md) applied at the schema/view level, not just the API layer.
