@@ -1,20 +1,36 @@
 # MVP Scope
 
-## Included in hackathon MVP
+Mirrors the MoSCoW prioritization in the hackathon brief (§5). See [Functional Requirements](functional-requirements.md) for the FR-numbered detail behind each item and [User Stories](user-stories.md) for the per-role stories.
 
-- LINE OA entry point
-- LIFF/web patient experience
-- Patient visit from Mock HIS
-- Care/service flow
-- Current and next step
-- ServicePoint -> Place mapping
-- SVG floor plan
-- Navigation graph
-- Route calculation
-- Route overlay
-- QR current-location baseline
-- Mock HIS service
-- Replaceable HIS adapter interface
+## Must Have — required to pass the baseline bar
+
+- LINE OA entry point, LIFF/web patient experience (M4)
+- Hospital map data: buildings, floors, places/service points, connecting routes (M1)
+- Care Pathway Template management (M2)
+- Patient registration for the day, with pathway template assignment and auto-generated visit steps (M3)
+- Patient journey screen: all steps in order with status, and what's next (M4)
+- Navigation from current location to next destination, as step-by-step instructions with distance/time estimate (M5)
+- Shortest-route calculation from the navigation graph — no hardcoded routes (M6)
+- Service-point staff console: call queue, update step status, insert unplanned steps (M7)
+- Authentication and role-based access control (M8)
+- Mock HIS service and a replaceable HIS adapter interface
+
+## Should Have — after Must Have works
+
+- Current queue length and wait-time estimate per service point (S1)
+- QR-code current-location scanning (S2)
+- Floor plan image with the route drawn on it (S3)
+- Thai/English language switch (S4)
+- Accessibility mode: large text, stairs-avoiding route for wheelchair users (S5)
+- Queue-proximity notification (S6)
+- Executive summary: average wait time per service point and bottleneck identification (S7)
+
+## Could Have — if time remains
+
+- Automatic re-sequencing when a service point's queue is abnormally long (C1)
+- Relative tracking via a time-limited link (C2)
+- Voice-guided navigation instructions (C3)
+- Nearby amenity suggestions along the route (C4)
 
 ## Optional demonstration
 
@@ -28,6 +44,6 @@
 - 3D floor plan
 - Production-grade Zigbee location precision
 - Complex multi-building routing
-- Full hospital map administration suite
+- Full hospital map administration UI (CRUD screens) — data can be seeded/edited without a polished admin UI
 
-The architecture should allow these later without making them dependencies of the MVP.
+The architecture should allow all of the above later without making them dependencies of the MVP.

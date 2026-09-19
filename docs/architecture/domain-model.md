@@ -1,5 +1,10 @@
 # Domain Model
 
+> This is the **conceptual** target model — the shape the domain is heading
+> toward, not necessarily what's persisted today. For the **current**
+> Postgres schema, auto-generated from the live database via `make docs-erd`
+> (`tbls`), see [docs/architecture/erd/README.md](erd/README.md).
+
 ## Main concepts
 
 ### Pathway

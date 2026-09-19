@@ -1,0 +1,323 @@
+{
+  "name": "carepath",
+  "tables": [
+    {
+      "name": "carepath.service_point",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "place_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "service_point_pkey",
+          "def": "CREATE UNIQUE INDEX service_point_pkey ON carepath.service_point USING btree (id)",
+          "table": "carepath.service_point",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "service_point_code_key",
+          "def": "CREATE UNIQUE INDEX service_point_code_key ON carepath.service_point USING btree (code)",
+          "table": "carepath.service_point",
+          "columns": [
+            "code"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "service_point_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "carepath.service_point",
+          "referenced_table": "",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "service_point_code_key",
+          "type": "UNIQUE",
+          "def": "UNIQUE (code)",
+          "table": "carepath.service_point",
+          "referenced_table": "",
+          "columns": [
+            "code"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.journey_visit",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "visit_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "patient_ref",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "synced_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "journey_visit_pkey",
+          "def": "CREATE UNIQUE INDEX journey_visit_pkey ON carepath.journey_visit USING btree (visit_id)",
+          "table": "carepath.journey_visit",
+          "columns": [
+            "visit_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "journey_visit_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (visit_id)",
+          "table": "carepath.journey_visit",
+          "referenced_table": "",
+          "columns": [
+            "visit_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.journey_step",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "visit_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "sequence",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "service_code",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "service_point_id",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "journey_step_pkey",
+          "def": "CREATE UNIQUE INDEX journey_step_pkey ON carepath.journey_step USING btree (visit_id, sequence)",
+          "table": "carepath.journey_step",
+          "columns": [
+            "visit_id",
+            "sequence"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "journey_step_visit_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE",
+          "table": "carepath.journey_step",
+          "referenced_table": "carepath.journey_visit",
+          "columns": [
+            "visit_id"
+          ],
+          "referenced_columns": [
+            "visit_id"
+          ]
+        },
+        {
+          "name": "journey_step_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (visit_id, sequence)",
+          "table": "carepath.journey_step",
+          "referenced_table": "",
+          "columns": [
+            "visit_id",
+            "sequence"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.his_applied_event",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "event_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "visit_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "applied_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "his_applied_event_pkey",
+          "def": "CREATE UNIQUE INDEX his_applied_event_pkey ON carepath.his_applied_event USING btree (event_id)",
+          "table": "carepath.his_applied_event",
+          "columns": [
+            "event_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "his_applied_event_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (event_id)",
+          "table": "carepath.his_applied_event",
+          "referenced_table": "",
+          "columns": [
+            "event_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.his_ingest_state",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "singleton",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true"
+        },
+        {
+          "name": "last_event_id",
+          "type": "text",
+          "nullable": false,
+          "default": "''::text"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "his_ingest_state_pkey",
+          "def": "CREATE UNIQUE INDEX his_ingest_state_pkey ON carepath.his_ingest_state USING btree (singleton)",
+          "table": "carepath.his_ingest_state",
+          "columns": [
+            "singleton"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "his_ingest_state_singleton_check",
+          "type": "CHECK",
+          "def": "CHECK (singleton)",
+          "table": "carepath.his_ingest_state",
+          "referenced_table": "",
+          "columns": [
+            "singleton"
+          ]
+        },
+        {
+          "name": "his_ingest_state_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (singleton)",
+          "table": "carepath.his_ingest_state",
+          "referenced_table": "",
+          "columns": [
+            "singleton"
+          ]
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "table": "carepath.journey_step",
+      "columns": [
+        "visit_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.journey_visit",
+      "parent_columns": [
+        "visit_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE"
+    }
+  ],
+  "driver": {
+    "name": "postgres",
+    "database_version": "PostgreSQL 17.7 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+    "meta": {
+      "current_schema": "carepath",
+      "search_paths": [
+        "carepath",
+        "public"
+      ],
+      "dict": {
+        "Functions": "Stored procedures and functions"
+      }
+    }
+  }
+}
