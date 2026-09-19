@@ -30,6 +30,14 @@ export const journeySteps: JourneyStep[] = [
   { id: 'cashier', state: 'pending', title: 'การเงิน', meta: 'รอดำเนินการ · CASHIER-01' },
 ]
 
+/** The same visit after its last step (#34's completed state, for /design). */
+export const journeyStepsDone: JourneyStep[] = journeySteps.map((step) => ({
+  ...step,
+  state: 'done',
+  queue: undefined,
+  meta: 'เสร็จสิ้นแล้ว',
+}))
+
 export const floor1Rooms: MapRoom[] = [
   { id: 'reg', zone: 'public', label: 'รับลงทะเบียน', x: 0, y: 0, width: 76, height: 60 },
   { id: 'cashier', zone: 'public', label: 'การเงิน', x: 80, y: 0, width: 52, height: 60 },

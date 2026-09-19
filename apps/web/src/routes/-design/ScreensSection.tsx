@@ -4,7 +4,7 @@ import { Overview } from '../staff/-Overview'
 import { Queue } from '../staff/-Queue'
 import { PathwayTemplates } from '../staff/-PathwayTemplates'
 import { ServicePoints } from '../staff/-ServicePoints'
-import { ReferenceJourney } from './ReferenceJourney'
+import { ReferenceJourney, ReferenceJourneyDone } from './ReferenceJourney'
 import { ScreenFrame, Section, SubHead } from './CatalogueParts'
 
 const MOBILE = { width: 390, height: 844, scale: 0.82 }
@@ -34,6 +34,9 @@ export function ScreensSection() {
       <div className="ds-frames">
         <ScreenFrame title="หน้าแรกเส้นทาง" {...MOBILE}>
           <ReferenceJourney />
+        </ScreenFrame>
+        <ScreenFrame title="หน้าแรกเส้นทาง · เสร็จสิ้น" {...MOBILE}>
+          <ReferenceJourneyDone />
         </ScreenFrame>
         <ScreenFrame title="นำทางไปจุดบริการ" {...MOBILE}>
           <NavigateScreen />
