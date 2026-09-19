@@ -1,5 +1,43 @@
 basePath: /
 definitions:
+  auth.identityResponse:
+    properties:
+      displayName:
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+      userId:
+        type: string
+      username:
+        type: string
+    type: object
+  auth.loginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  auth.refreshRequest:
+    properties:
+      refreshToken:
+        type: string
+    type: object
+  auth.tokensResponse:
+    properties:
+      accessToken:
+        type: string
+      expiresAt:
+        type: string
+      identity:
+        $ref: '#/definitions/auth.identityResponse'
+      refreshExpiresAt:
+        type: string
+      refreshToken:
+        type: string
+    type: object
   hospitalmap.Floor:
     properties:
       buildingId:
@@ -248,6 +286,119 @@ info:
   title: CarePath API
   version: 1.0.0
 paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Verifies a username against an argon2id password hash and returns
+        a short-lived JWT access token plus a rotating opaque refresh token. Unknown
+        username, wrong password, and deactivated account are deliberately indistinguishable
+        (same 401 body, same timing).
+      parameters:
+      - description: username and password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.tokensResponse'
+        "400":
+          description: invalid request body
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "401":
+          description: invalid credentials
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Staff/admin login
+      tags:
+      - auth
+  /api/v1/auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Revokes the presented refresh token. Idempotent — an unknown, expired
+        or already-revoked token also returns 204, so a client can always clear its
+        own state.
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: invalid request body
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Log out
+      tags:
+      - auth
+  /api/v1/auth/me:
+    get:
+      description: The staff/admin identity and role codes behind the presented access
+        token. The console calls it on boot to restore a session from a stored refresh
+        token.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.identityResponse'
+        "401":
+          description: missing, malformed, or expired access token
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: The current staff identity
+      tags:
+      - auth
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: 'Exchanges a refresh token for a new access + refresh pair; the
+        presented token is spent. Presenting an already-spent token is treated as
+        a leak: every refresh token of that user is revoked and the call returns 401.'
+      parameters:
+      - description: the refresh token issued by login or a previous refresh
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.refreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.tokensResponse'
+        "400":
+          description: invalid request body
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "401":
+          description: unknown, expired, revoked, or already-spent refresh token
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Refresh the token pair
+      tags:
+      - auth
   /api/v1/auth/session:
     get:
       description: 'Resolves the Authorization: Bearer session token to the identity

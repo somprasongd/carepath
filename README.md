@@ -77,7 +77,7 @@ flowchart TB
     end
 
     subgraph APP["CarePath API · Go + Fiber v3 · modular monolith"]
-      AUTH["auth · login เจ้าหน้าที่<br/>argon2id + JWT · ออกแบบแล้ว"]
+      AUTH["auth · login เจ้าหน้าที่<br/>argon2id + JWT"]
       SESSION["session · ยืนยันตัวตน LINE/demo"]
       JOURNEY["journey · planner + projection"]
       SP["servicepoint · service → place"]
@@ -129,7 +129,7 @@ flowchart TB
 
 | บทบาท | เข้าระบบทาง | ทำอะไรได้ | สถานะ |
 |---|---|---|---|
-| เจ้าหน้าที่ทุกบทบาท + ผู้ดูแลระบบ | หน้า `/login` ด้วย username + password | เข้าคอนโซลเจ้าหน้าที่ตามสิทธิ์ของบทบาท (`STAFF` / `ADMIN`) | ออกแบบครบแล้ว ([ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md)) · ยังไม่ implement |
+| เจ้าหน้าที่ทุกบทบาท + ผู้ดูแลระบบ | หน้า `/login` ด้วย username + password | เข้าคอนโซลเจ้าหน้าที่ตามสิทธิ์ของบทบาท (`STAFF` / `ADMIN`) | ใช้งานได้จริง ([ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md) · บัญชีสาธิต `admin/demo`, `staff/demo`) |
 | ผู้ป่วย | LINE OA → LIFF | ดูเส้นทางทั้งวัน, ดูขั้นตอนถัดไป, นำทางไปจุดบริการ, สแกน QR ระบุตำแหน่ง | ใช้งานได้จริง (ยกเว้น QR ใน UI และเส้นทางแบบ turn-by-turn) |
 | เจ้าหน้าที่จุดบริการ | คอนโซลเจ้าหน้าที่ | ดูผู้ป่วยวันนี้, เปลี่ยนสถานะขั้นตอน, ปิดรอบตรวจของคลินิก | ใช้งานได้จริง (เรียกคิวยังเป็นหน้าจอ demo) |
 | เจ้าหน้าที่ประชาสัมพันธ์ / คัดกรอง | คอนโซลเจ้าหน้าที่ | ค้น visit แล้วดูแผนที่ CarePath คำนวณให้ | ใช้งานได้จริง |
@@ -139,7 +139,7 @@ flowchart TB
 
 ### 0. การเข้าสู่ระบบของเจ้าหน้าที่ (Staff / Admin)
 
-> **ออกแบบครบแล้ว · ยังไม่ implement** — รายละเอียดทั้งหมดอยู่ใน [ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md) และ contract ใน `packages/contracts/openapi/carepath.yaml`
+> **ใช้งานได้จริง** — รายละเอียดการออกแบบอยู่ใน [ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md) และ contract ใน `packages/contracts/openapi/carepath.yaml` · บัญชีสาธิตจาก migration: `admin/demo` (ADMIN), `staff/demo` (STAFF)
 
 ผู้ป่วยเข้าระบบผ่าน LINE (`session`) ส่วนเจ้าหน้าที่เข้าด้วย username/password ที่โรงพยาบาลออกให้ (`auth`) — **แยกกันคนละกลไก** เพราะพยาบาลที่จุดบริการไม่มี LINE identity มายืนยัน และผู้ป่วยไม่มีรหัสผ่านในระบบ CarePath
 
@@ -340,7 +340,7 @@ sequenceDiagram
     Note over AD: เปลี่ยนผังอาคารไม่กระทบกติกาการวางแผนเส้นทางการรักษา
 ```
 
-**หมายเหตุสถานะ:** หน้า "ผังจุดบริการ" อ่านข้อมูลจริง · หน้า "ผังอาคาร" ยังเป็น placeholder · หน้าจอ CRUD ผังอาคารอยู่นอกขอบเขต MVP โดยตั้งใจ · RBAC ออกแบบครบแล้วใน [ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md) (argon2id + JWT, บทบาท `STAFF`/`ADMIN`) แต่ยังไม่ implement — หน้า `/login` ปัจจุบันยังเป็นหน้าจอเลือกบทบาทที่ไม่ได้ยืนยันตัวตนจริง และหน้าจอจัดการผู้ใช้ไม่อยู่ใน MVP (บัญชีสร้างจาก migration แล้วแก้ที่ฐานข้อมูล)
+**หมายเหตุสถานะ:** หน้า "ผังจุดบริการ" อ่านข้อมูลจริง · หน้า "ผังอาคาร" ยังเป็น placeholder · หน้าจอ CRUD ผังอาคารอยู่นอกขอบเขต MVP โดยตั้งใจ · RBAC ใช้งานได้จริงตาม [ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md) (argon2id + JWT, บทบาท `STAFF`/`ADMIN`) — หน้า `/login` ยืนยันตัวตนกับ API จริง และ API ของเจ้าหน้าที่ (monitor, transition, close-round) ต้องแนบ access token ส่วนหน้าจอจัดการผู้ใช้ไม่อยู่ใน MVP (บัญชีสร้างจาก migration แล้วแก้ที่ฐานข้อมูล)
 
 ### 5. ผู้บริหารโรงพยาบาล (Executive)
 
@@ -600,7 +600,7 @@ carepath-monorepo/
 │   │       ├── location/     QR / manual provider
 │   │       ├── identity/     ตรวจ LINE ID token
 │   │       ├── session/      session token ของผู้ป่วย
-│   │       ├── auth/         login เจ้าหน้าที่ · argon2id + JWT (ออกแบบแล้ว)
+│   │       ├── auth/         login เจ้าหน้าที่ · argon2id + JWT
 │   │       └── platform/     db, logger, apperr, httpx
 │   ├── mock-his/         HIS จำลอง + console ขับ demo
 │   └── web/              React + TS + Vite (มี AGENTS.md ของตัวเอง)
@@ -632,7 +632,7 @@ carepath-monorepo/
 | ระบุตำแหน่งด้วย QR | ⚠️ API พร้อม · ยังไม่ผูกกับ UI |
 | เส้นทาง turn-by-turn + ลากเส้นบนผัง | 🚧 มีใน contract · ยังไม่มี handler |
 | Session ผ่าน LINE LIFF | ⚠️ API พร้อม · ต้องตั้ง `LINE_CHANNEL_ID` |
-| Login เจ้าหน้าที่ + RBAC (argon2id · JWT access/refresh) | 📐 ออกแบบครบใน [ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md) + contract · ยังไม่ implement |
+| Login เจ้าหน้าที่ + RBAC (argon2id · JWT access/refresh) | ✅ ใช้งานได้จริง ([ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md)) |
 | เรียกคิว / เวลารอ | 🚧 หน้าจอ demo |
 | Dashboard ผู้บริหาร · ลิงก์ให้ญาติ · แจ้งเตือนใกล้ถึงคิว | 🚧 ยังไม่พัฒนา |
 | Zigbee positioning | 🔭 นอกขอบเขต MVP · ออกแบบ interface รองรับไว้แล้ว |

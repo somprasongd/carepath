@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { useStaffAuth } from '@/auth/StaffAuthContext'
 
 /**
  * Header for a single-task staff screen (registration, the queue console) —
  * a dedicated workstation view, not part of the four-tab staff console, so it
- * carries no side rail or tab bar. Only "ออกจากระบบ" (sign out, back to role
- * select) and whatever identifies the task belong here.
+ * carries no side rail or tab bar. Only "ออกจากระบบ" (revoke the session,
+ * ADR-0010 §9) and whatever identifies the task belong here.
  *
  * Wraps onto two rows below the console width rather than switching layout at
  * a named breakpoint — there's no useful intermediate state to design for
@@ -13,6 +14,7 @@ import { useNavigate } from '@tanstack/react-router'
  */
 export function TaskHeader({ role, station }: { role: string; station?: ReactNode }) {
   const navigate = useNavigate()
+  const { logout } = useStaffAuth()
 
   return (
     <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line bg-surface px-gutter py-3.5 @7xl:px-gutter-desktop @7xl:py-4">
@@ -27,7 +29,7 @@ export function TaskHeader({ role, station }: { role: string; station?: ReactNod
         <button
           type="button"
           className="cursor-pointer border-0 bg-none p-0 font-sans text-body-sm font-semibold whitespace-nowrap text-secondary"
-          onClick={() => navigate({ to: '/login' })}
+          onClick={() => void logout().then(() => navigate({ to: '/login', replace: true }))}
         >
           ออกจากระบบ
         </button>

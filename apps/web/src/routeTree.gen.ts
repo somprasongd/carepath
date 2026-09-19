@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DesignRouteImport } from './routes/design'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PatientRouteImport } from './routes/patient'
+import { Route as StaffRouteImport } from './routes/staff'
 import { Route as PatientJourneyRouteImport } from './routes/patient/journey'
 import { Route as PatientNavigateRouteImport } from './routes/patient/navigate'
 import { Route as StaffFloorPlanRouteImport } from './routes/staff/floor-plan'
@@ -42,6 +43,11 @@ const PatientRoute = PatientRouteImport.update({
   path: '/patient',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StaffRoute = StaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PatientJourneyRoute = PatientJourneyRouteImport.update({
   id: '/journey',
   path: '/journey',
@@ -53,34 +59,34 @@ const PatientNavigateRoute = PatientNavigateRouteImport.update({
   getParentRoute: () => PatientRoute,
 } as any)
 const StaffFloorPlanRoute = StaffFloorPlanRouteImport.update({
-  id: '/staff/floor-plan',
-  path: '/staff/floor-plan',
-  getParentRoute: () => rootRouteImport,
+  id: '/floor-plan',
+  path: '/floor-plan',
+  getParentRoute: () => StaffRoute,
 } as any)
 const StaffOverviewRoute = StaffOverviewRouteImport.update({
-  id: '/staff/overview',
-  path: '/staff/overview',
-  getParentRoute: () => rootRouteImport,
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => StaffRoute,
 } as any)
 const StaffPathwayTemplatesRoute = StaffPathwayTemplatesRouteImport.update({
-  id: '/staff/pathway-templates',
-  path: '/staff/pathway-templates',
-  getParentRoute: () => rootRouteImport,
+  id: '/pathway-templates',
+  path: '/pathway-templates',
+  getParentRoute: () => StaffRoute,
 } as any)
 const StaffPatientsRoute = StaffPatientsRouteImport.update({
-  id: '/staff/patients',
-  path: '/staff/patients',
-  getParentRoute: () => rootRouteImport,
+  id: '/patients',
+  path: '/patients',
+  getParentRoute: () => StaffRoute,
 } as any)
 const StaffQueueRoute = StaffQueueRouteImport.update({
-  id: '/staff/queue',
-  path: '/staff/queue',
-  getParentRoute: () => rootRouteImport,
+  id: '/queue',
+  path: '/queue',
+  getParentRoute: () => StaffRoute,
 } as any)
 const StaffServicePointsRoute = StaffServicePointsRouteImport.update({
-  id: '/staff/service-points',
-  path: '/staff/service-points',
-  getParentRoute: () => rootRouteImport,
+  id: '/service-points',
+  path: '/service-points',
+  getParentRoute: () => StaffRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -88,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/design': typeof DesignRoute
   '/login': typeof LoginRoute
   '/patient': typeof PatientRouteWithChildren
+  '/staff': typeof StaffRouteWithChildren
   '/patient/journey': typeof PatientJourneyRoute
   '/patient/navigate': typeof PatientNavigateRoute
   '/staff/floor-plan': typeof StaffFloorPlanRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/design': typeof DesignRoute
   '/login': typeof LoginRoute
   '/patient': typeof PatientRouteWithChildren
+  '/staff': typeof StaffRouteWithChildren
   '/patient/journey': typeof PatientJourneyRoute
   '/patient/navigate': typeof PatientNavigateRoute
   '/staff/floor-plan': typeof StaffFloorPlanRoute
@@ -117,6 +125,7 @@ export interface FileRoutesById {
   '/design': typeof DesignRoute
   '/login': typeof LoginRoute
   '/patient': typeof PatientRouteWithChildren
+  '/staff': typeof StaffRouteWithChildren
   '/patient/journey': typeof PatientJourneyRoute
   '/patient/navigate': typeof PatientNavigateRoute
   '/staff/floor-plan': typeof StaffFloorPlanRoute
@@ -133,6 +142,7 @@ export interface FileRouteTypes {
     | '/design'
     | '/login'
     | '/patient'
+    | '/staff'
     | '/patient/journey'
     | '/patient/navigate'
     | '/staff/floor-plan'
@@ -147,6 +157,7 @@ export interface FileRouteTypes {
     | '/design'
     | '/login'
     | '/patient'
+    | '/staff'
     | '/patient/journey'
     | '/patient/navigate'
     | '/staff/floor-plan'
@@ -161,6 +172,7 @@ export interface FileRouteTypes {
     | '/design'
     | '/login'
     | '/patient'
+    | '/staff'
     | '/patient/journey'
     | '/patient/navigate'
     | '/staff/floor-plan'
@@ -176,12 +188,7 @@ export interface RootRouteChildren {
   DesignRoute: typeof DesignRoute
   LoginRoute: typeof LoginRoute
   PatientRoute: typeof PatientRouteWithChildren
-  StaffFloorPlanRoute: typeof StaffFloorPlanRoute
-  StaffOverviewRoute: typeof StaffOverviewRoute
-  StaffPathwayTemplatesRoute: typeof StaffPathwayTemplatesRoute
-  StaffPatientsRoute: typeof StaffPatientsRoute
-  StaffQueueRoute: typeof StaffQueueRoute
-  StaffServicePointsRoute: typeof StaffServicePointsRoute
+  StaffRoute: typeof StaffRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -214,6 +221,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PatientRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/staff': {
+      id: '/staff'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof StaffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/patient/journey': {
       id: '/patient/journey'
       path: '/journey'
@@ -230,45 +244,45 @@ declare module '@tanstack/react-router' {
     }
     '/staff/floor-plan': {
       id: '/staff/floor-plan'
-      path: '/staff/floor-plan'
+      path: '/floor-plan'
       fullPath: '/staff/floor-plan'
       preLoaderRoute: typeof StaffFloorPlanRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof StaffRoute
     }
     '/staff/overview': {
       id: '/staff/overview'
-      path: '/staff/overview'
+      path: '/overview'
       fullPath: '/staff/overview'
       preLoaderRoute: typeof StaffOverviewRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof StaffRoute
     }
     '/staff/pathway-templates': {
       id: '/staff/pathway-templates'
-      path: '/staff/pathway-templates'
+      path: '/pathway-templates'
       fullPath: '/staff/pathway-templates'
       preLoaderRoute: typeof StaffPathwayTemplatesRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof StaffRoute
     }
     '/staff/patients': {
       id: '/staff/patients'
-      path: '/staff/patients'
+      path: '/patients'
       fullPath: '/staff/patients'
       preLoaderRoute: typeof StaffPatientsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof StaffRoute
     }
     '/staff/queue': {
       id: '/staff/queue'
-      path: '/staff/queue'
+      path: '/queue'
       fullPath: '/staff/queue'
       preLoaderRoute: typeof StaffQueueRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof StaffRoute
     }
     '/staff/service-points': {
       id: '/staff/service-points'
-      path: '/staff/service-points'
+      path: '/service-points'
       fullPath: '/staff/service-points'
       preLoaderRoute: typeof StaffServicePointsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof StaffRoute
     }
   }
 }
@@ -286,17 +300,32 @@ const PatientRouteChildren: PatientRouteChildren = {
 const PatientRouteWithChildren =
   PatientRoute._addFileChildren(PatientRouteChildren)
 
-const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  DesignRoute: DesignRoute,
-  LoginRoute: LoginRoute,
-  PatientRoute: PatientRouteWithChildren,
+interface StaffRouteChildren {
+  StaffFloorPlanRoute: typeof StaffFloorPlanRoute
+  StaffOverviewRoute: typeof StaffOverviewRoute
+  StaffPathwayTemplatesRoute: typeof StaffPathwayTemplatesRoute
+  StaffPatientsRoute: typeof StaffPatientsRoute
+  StaffQueueRoute: typeof StaffQueueRoute
+  StaffServicePointsRoute: typeof StaffServicePointsRoute
+}
+
+const StaffRouteChildren: StaffRouteChildren = {
   StaffFloorPlanRoute: StaffFloorPlanRoute,
   StaffOverviewRoute: StaffOverviewRoute,
   StaffPathwayTemplatesRoute: StaffPathwayTemplatesRoute,
   StaffPatientsRoute: StaffPatientsRoute,
   StaffQueueRoute: StaffQueueRoute,
   StaffServicePointsRoute: StaffServicePointsRoute,
+}
+
+const StaffRouteWithChildren = StaffRoute._addFileChildren(StaffRouteChildren)
+
+const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
+  DesignRoute: DesignRoute,
+  LoginRoute: LoginRoute,
+  PatientRoute: PatientRouteWithChildren,
+  StaffRoute: StaffRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

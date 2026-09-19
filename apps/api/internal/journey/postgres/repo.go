@@ -197,10 +197,12 @@ func (r *Repo) EventApplied(ctx context.Context, eventID string) (bool, error) {
 // duplicate row.
 func (r *Repo) InsertCommandAudit(ctx context.Context, audit journey.CommandAudit) error {
 	_, err := r.database.Querier(ctx).Exec(ctx,
-		`INSERT INTO carepath.journey_command_audit (command_id, visit_id, step_key, to_status, source)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO carepath.journey_command_audit
+		       (command_id, visit_id, step_key, to_status, source, actor_user_id, actor_username)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (command_id) DO NOTHING`,
 		audit.CommandID, audit.VisitID, audit.StepKey, audit.ToStatus, audit.Source,
+		audit.ActorUserID, audit.ActorUsername,
 	)
 	if err != nil {
 		return apperr.Wrapf(apperr.KindInternal, err,

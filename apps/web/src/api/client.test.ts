@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, apiGet, apiPost, setApiAuthToken } from './client'
+import {
+  ApiError,
+  adoptStaffTokens,
+  apiGet,
+  apiPost,
+  clearStaffSession,
+  loadStaffRefreshToken,
+  onStaffSessionExpired,
+  restoreStaffSession,
+  setApiAuthToken,
+} from './client'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -166,5 +176,158 @@ describe('setApiAuthToken', () => {
     await apiGet('/api/v1/journeys/V-1')
     const init = vi.mocked(fetch).mock.calls[0]?.[1]
     expect(new Headers(init?.headers).get('authorization')).toBeNull()
+  })
+})
+
+describe('staff session surface', () => {
+  afterEach(() => {
+    setApiAuthToken(undefined)
+    clearStaffSession()
+    onStaffSessionExpired(undefined)
+    vi.unstubAllGlobals()
+  })
+
+  const staffPair = (access: string, refresh = 'refresh-1') => ({
+    accessToken: access,
+    refreshToken: refresh,
+    identity: { userId: 'user-1', username: 'staff', displayName: 'Demo Staff', roles: ['STAFF'] },
+  })
+
+  // The node test environment has no localStorage; a tiny memory stub stands in.
+  const memoryStorage = () => {
+    const map = new Map<string, string>()
+    return {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => void map.set(k, v),
+      removeItem: (k: string) => void map.delete(k),
+    }
+  }
+
+  it('adopts the staff pair: access token attached, refresh token persisted', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    adoptStaffTokens(staffPair('staff-access-1'))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ visits: [] })))
+
+    await apiGet('/api/v1/staff/visits')
+    const init = vi.mocked(fetch).mock.calls[0]?.[1]
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer staff-access-1')
+    expect(loadStaffRefreshToken()).toBe('refresh-1')
+  })
+
+  it('prefers the staff token while both surfaces are signed in', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    setApiAuthToken('patient-token')
+    adoptStaffTokens(staffPair('staff-access-1'))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ visits: [] })))
+
+    await apiGet('/api/v1/staff/visits')
+    const init = vi.mocked(fetch).mock.calls[0]?.[1]
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer staff-access-1')
+  })
+
+  it('rotates through one refresh on a 401 and replays the request with the new token', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    adoptStaffTokens(staffPair('staff-access-1', 'refresh-1'))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'missing or invalid access token' }, 401))
+      .mockResolvedValueOnce(jsonResponse(staffPair('staff-access-2', 'refresh-2'), 200))
+      .mockResolvedValueOnce(jsonResponse({ visits: ['V-1'] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await apiGet('/api/v1/staff/visits')
+    expect(result).toEqual({ visits: ['V-1'] })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    // The replayed call carries the rotated access token…
+    const replayInit = fetchMock.mock.calls[2]?.[1]
+    expect(new Headers(replayInit?.headers).get('authorization')).toBe('Bearer staff-access-2')
+    // …and the new refresh token replaced the spent one.
+    expect(loadStaffRefreshToken()).toBe('refresh-2')
+  })
+
+  it('shares one refresh across concurrent 401s', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    adoptStaffTokens(staffPair('staff-access-1', 'refresh-1'))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'expired' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ error: 'expired' }, 401))
+      .mockResolvedValueOnce(jsonResponse(staffPair('staff-access-2', 'refresh-2')))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await Promise.all([apiGet('/api/v1/staff/visits'), apiPost('/api/v1/journeys/V-1/steps/S/transition', { to: 'STARTED' })])
+    // Two failing calls + exactly one refresh + two replays.
+    expect(fetchMock).toHaveBeenCalledTimes(5)
+  })
+
+  it('clears the session and fires the expiry hook when the refresh is refused', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    adoptStaffTokens(staffPair('staff-access-1', 'refresh-1'))
+    const expired = vi.fn()
+    onStaffSessionExpired(expired)
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'expired' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ error: 'unknown refresh token' }, 401))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const failure = await apiGet('/api/v1/staff/visits').catch((e: unknown) => e)
+    expect(failure).toBeInstanceOf(ApiError)
+    expect((failure as ApiError).status).toBe(401)
+    expect(expired).toHaveBeenCalledTimes(1)
+    expect(loadStaffRefreshToken()).toBeNull()
+  })
+
+  it('never retries a 401 on the auth endpoints themselves', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    adoptStaffTokens(staffPair('staff-access-1', 'refresh-1'))
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ error: 'invalid credentials' }, 401))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const failure = await apiPost('/api/v1/auth/login', { username: 'x', password: 'y' }).catch(
+      (e: unknown) => e,
+    )
+    expect(failure).toBeInstanceOf(ApiError)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries a 401 at most once — the second 401 surfaces', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    adoptStaffTokens(staffPair('staff-access-1', 'refresh-1'))
+    const expired = vi.fn()
+    onStaffSessionExpired(expired)
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'expired' }, 401))
+      .mockResolvedValueOnce(jsonResponse(staffPair('staff-access-2', 'refresh-2')))
+      .mockResolvedValue(jsonResponse({ error: 'expired again' }, 401))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const failure = await apiGet('/api/v1/staff/visits').catch((e: unknown) => e)
+    expect((failure as ApiError).status).toBe(401)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('restores a session from a persisted refresh token exactly once', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    localStorage.setItem('carepath.staff.refreshToken', 'refresh-1')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(staffPair('staff-access-9', 'refresh-9')))
+      .mockResolvedValue(jsonResponse({ visits: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    // Two concurrent restores (StrictMode double-mount) share one refresh.
+    const [a, b] = await Promise.all([restoreStaffSession(), restoreStaffSession()])
+    expect(a).toEqual(b)
+    expect(a?.accessToken).toBe('staff-access-9')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(loadStaffRefreshToken()).toBe('refresh-9')
+
+    await apiGet('/api/v1/staff/visits')
+    const init = fetchMock.mock.calls[1]?.[1]
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer staff-access-9')
   })
 })

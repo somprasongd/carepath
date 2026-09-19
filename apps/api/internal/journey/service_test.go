@@ -269,7 +269,8 @@ func TestApplyHISEventEncounterCompletedClosesRound(t *testing.T) {
 	// (round 2 gets tentatively inferred) before confirming no return is
 	// needed.
 	if _, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
-		TransitionCommand{CommandID: "C1", To: CommandToStarted}, "staff-web"); err != nil {
+		TransitionCommand{CommandID: "C1", To: CommandToStarted}, "staff-web",
+		Actor{UserID: "user-1", Username: "tester"}); err != nil {
 		t.Fatalf("start clinic: %v", err)
 	}
 	view, err := svc.GetJourney(context.Background(), "VISIT-001")
@@ -479,7 +480,7 @@ func TestTransitionStepAppliesLocallyAndReplans(t *testing.T) {
 	}
 
 	view, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
-		TransitionCommand{CommandID: "CMD-1", To: CommandToStarted}, "staff-web")
+		TransitionCommand{CommandID: "CMD-1", To: CommandToStarted}, "staff-web", Actor{UserID: "user-1", Username: "tester"})
 	if err != nil {
 		t.Fatalf("start clinic: %v", err)
 	}
@@ -488,7 +489,7 @@ func TestTransitionStepAppliesLocallyAndReplans(t *testing.T) {
 	}
 
 	view, err = svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
-		TransitionCommand{CommandID: "CMD-2", To: CommandToCompleted}, "staff-web")
+		TransitionCommand{CommandID: "CMD-2", To: CommandToCompleted}, "staff-web", Actor{UserID: "user-1", Username: "tester"})
 	if err != nil {
 		t.Fatalf("complete clinic: %v", err)
 	}
@@ -510,7 +511,7 @@ func TestTransitionStepRejectsFromTerminal(t *testing.T) {
 	}
 
 	_, err := svc.TransitionStep(context.Background(), "VISIT-001", "REGISTRATION",
-		TransitionCommand{CommandID: "CMD-X", To: CommandToStarted}, "staff-web")
+		TransitionCommand{CommandID: "CMD-X", To: CommandToStarted}, "staff-web", Actor{UserID: "user-1", Username: "tester"})
 	if apperr.KindOf(err) != apperr.KindConflict {
 		t.Fatalf("error = %v, want KindConflict (REGISTRATION is already COMPLETED)", err)
 	}
@@ -530,7 +531,7 @@ func TestTransitionStepRejectsStartBeforeReady(t *testing.T) {
 	}
 
 	_, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
-		TransitionCommand{CommandID: "CMD-Y", To: CommandToStarted}, "staff-web")
+		TransitionCommand{CommandID: "CMD-Y", To: CommandToStarted}, "staff-web", Actor{UserID: "user-1", Username: "tester"})
 	if apperr.KindOf(err) != apperr.KindConflict {
 		t.Fatalf("error = %v, want KindConflict (clinic still PENDING behind the lab)", err)
 	}
@@ -543,7 +544,7 @@ func TestTransitionStepUnknownTargetRejected(t *testing.T) {
 	svc := newTestService(hisClient, repo)
 
 	_, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
-		TransitionCommand{To: "PAUSED"}, "staff-web")
+		TransitionCommand{To: "PAUSED"}, "staff-web", Actor{UserID: "user-1", Username: "tester"})
 	if apperr.KindOf(err) != apperr.KindInvalid {
 		t.Fatalf("error = %v, want KindInvalid", err)
 	}
@@ -557,7 +558,7 @@ func TestTransitionStepUnknownStepIsNotFound(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	_, err := svc.TransitionStep(context.Background(), "VISIT-001", "NOPE",
-		TransitionCommand{CommandID: "CMD-V", To: CommandToStarted}, "staff-web")
+		TransitionCommand{CommandID: "CMD-V", To: CommandToStarted}, "staff-web", Actor{UserID: "user-1", Username: "tester"})
 	if apperr.KindOf(err) != apperr.KindNotFound {
 		t.Fatalf("error = %v, want KindNotFound", err)
 	}
@@ -574,7 +575,8 @@ func TestTransitionStepAuditsCommand(t *testing.T) {
 	}
 
 	if _, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
-		TransitionCommand{To: CommandToStarted}, "patient-web"); err != nil {
+		TransitionCommand{To: CommandToStarted}, "patient-web",
+		Actor{UserID: "user-1", Username: "tester"}); err != nil {
 		t.Fatalf("transition without commandId: %v", err)
 	}
 	if len(repo.audits) != 1 {
@@ -601,7 +603,8 @@ func TestCloseRoundOverride(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	if _, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
-		TransitionCommand{CommandID: "C1", To: CommandToStarted}, "staff-web"); err != nil {
+		TransitionCommand{CommandID: "C1", To: CommandToStarted}, "staff-web",
+		Actor{UserID: "user-1", Username: "tester"}); err != nil {
 		t.Fatalf("start clinic: %v", err)
 	}
 	view, _ := svc.GetJourney(context.Background(), "VISIT-001")
@@ -609,7 +612,7 @@ func TestCloseRoundOverride(t *testing.T) {
 		t.Fatal("expected round 2 to be inferred before the override")
 	}
 
-	view, err := svc.CloseRound(context.Background(), "VISIT-001", "MED")
+	view, err := svc.CloseRound(context.Background(), "VISIT-001", "MED", "test", Actor{UserID: "user-1", Username: "tester"})
 	if err != nil {
 		t.Fatalf("CloseRound: %v", err)
 	}
@@ -625,7 +628,7 @@ func TestCloseRoundNoOpenRoundIsNotFound(t *testing.T) {
 	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	_, err := svc.CloseRound(context.Background(), "VISIT-001", "SURG")
+	_, err := svc.CloseRound(context.Background(), "VISIT-001", "SURG", "test", Actor{UserID: "user-1", Username: "tester"})
 	if !errors.Is(err, ErrNoOpenRound) {
 		t.Fatalf("error = %v, want ErrNoOpenRound", err)
 	}

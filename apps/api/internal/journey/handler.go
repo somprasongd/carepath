@@ -3,6 +3,7 @@ package journey
 import (
 	"github.com/gofiber/fiber/v3"
 
+	"carepath/apps/api/internal/auth"
 	"carepath/apps/api/internal/platform/apperr"
 	"carepath/apps/api/internal/platform/httpx"
 )
@@ -16,14 +17,15 @@ func NewHandler(service Service) *Handler {
 	return &Handler{service: service}
 }
 
-// Register mounts the journey routes under the given /api/v1 router.
-func (h *Handler) Register(router fiber.Router) {
+// Register mounts the journey routes under the given /api/v1 router. The
+// staff-only routes (the monitor read and both staff commands) are wrapped
+// in the given guard so the composition root decides the policy — per
+// ADR-0010 the patient journey read must stay open.
+func (h *Handler) Register(router fiber.Router, staffGuard fiber.Handler) {
 	router.Get("/journeys/:visitId", h.getJourney)
-	// Staff-facing reads live under /staff so the NFR-08 auth guard (#43)
-	// can cover the whole group.
-	router.Get("/staff/visits", h.listVisits)
-	router.Post("/journeys/:visitId/steps/:stepKey/transition", h.transitionStep)
-	router.Post("/journeys/:visitId/clinics/:clinicCode/close-round", h.closeRound)
+	router.Get("/staff/visits", staffGuard, h.listVisits)
+	router.Post("/journeys/:visitId/steps/:stepKey/transition", staffGuard, h.transitionStep)
+	router.Post("/journeys/:visitId/clinics/:clinicCode/close-round", staffGuard, h.closeRound)
 }
 
 // transitionRequestBody is the client-facing command. CommandID is optional —
@@ -97,8 +99,10 @@ func (h *Handler) transitionStep(c fiber.Ctx) error {
 	if stepKey == "" {
 		return httpx.Error(c, apperr.New(apperr.KindInvalid, "stepKey is required"))
 	}
+	p := auth.PrincipalFromContext(c.Context())
 	view, err := h.service.TransitionStep(c.Context(), c.Params("visitId"), stepKey,
-		TransitionCommand{CommandID: body.CommandID, To: body.To}, body.Source)
+		TransitionCommand{CommandID: body.CommandID, To: body.To}, body.Source,
+		Actor{UserID: p.UserID, Username: p.Username})
 	if err != nil {
 		return httpx.Error(c, err)
 	}
@@ -118,7 +122,11 @@ func (h *Handler) transitionStep(c fiber.Ctx) error {
 //	@Failure		500	{object}	httpx.ErrorResponse	"internal server error"
 //	@Router			/api/v1/journeys/{visitId}/clinics/{clinicCode}/close-round [post]
 func (h *Handler) closeRound(c fiber.Ctx) error {
-	view, err := h.service.CloseRound(c.Context(), c.Params("visitId"), c.Params("clinicCode"))
+	// The close-round body is empty, so the surface is named here rather
+	// than carried in the request like a transition's source field.
+	p := auth.PrincipalFromContext(c.Context())
+	view, err := h.service.CloseRound(c.Context(), c.Params("visitId"), c.Params("clinicCode"),
+		"staff-web", Actor{UserID: p.UserID, Username: p.Username})
 	if err != nil {
 		return httpx.Error(c, err)
 	}

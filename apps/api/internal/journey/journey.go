@@ -94,13 +94,25 @@ type Visit struct {
 }
 
 // CommandAudit is the CarePath-side operational record of one staff
-// transition command: timestamp and source at minimum.
+// command: timestamp, source surface, and — when the command arrived
+// through staff auth (ADR-0010 §11) — the acting user.
 type CommandAudit struct {
 	CommandID string
 	VisitID   string
 	StepKey   string
 	ToStatus  string
 	Source    string
+	// ActorUserID/ActorUsername name *who* commanded; empty for
+	// system-initiated writes.
+	ActorUserID   string
+	ActorUsername string
+}
+
+// Actor is the acting user behind a staff command, mapped from the auth
+// principal at the HTTP boundary. The zero value means the system itself.
+type Actor struct {
+	UserID   string
+	Username string
 }
 
 // Repo is the persistence port of this module. Only this package's postgres

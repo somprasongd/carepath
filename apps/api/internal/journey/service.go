@@ -34,13 +34,13 @@ type Service interface {
 	// TransitionStep applies a staff command to one step's status directly
 	// (ADR-0009 §1 — CarePath owns step status; this is never forwarded to
 	// the HIS), then recomputes the plan so downstream steps' gates react
-	// immediately, and records the command in the audit log.
-	TransitionStep(ctx context.Context, visitID, stepKey string, cmd TransitionCommand, source string) (View, error)
+	// immediately, and records the command in the audit log with its actor.
+	TransitionStep(ctx context.Context, visitID, stepKey string, cmd TransitionCommand, source string, actor Actor) (View, error)
 	// CloseRound is the staff override (ADR-0009 §4): confirms the visit's
 	// latest round at clinicCode is finished, dropping any not-yet-started
 	// inferred return, without waiting for (or in place of) the HIS's
-	// encounter.completed fact.
-	CloseRound(ctx context.Context, visitID, clinicCode string) (View, error)
+	// encounter.completed fact. Audited like any other staff command.
+	CloseRound(ctx context.Context, visitID, clinicCode, source string, actor Actor) (View, error)
 }
 
 type service struct {
@@ -104,7 +104,7 @@ func (s *service) ApplyHISEvent(ctx context.Context, event his.Event) error {
 
 		if event.Type == his.EventEncounterCompleted {
 			if clinicCode, _ := event.Payload["clinicCode"].(string); clinicCode != "" {
-				if _, err := s.closeLatestRoundIn(ctx, event.VisitID, clinicCode, existing); err != nil {
+				if _, _, err := s.closeLatestRoundIn(ctx, event.VisitID, clinicCode, existing); err != nil {
 					return err
 				}
 			}
@@ -175,7 +175,7 @@ func (s *service) ListJourneys(ctx context.Context) ([]View, error) {
 	return views, nil
 }
 
-func (s *service) TransitionStep(ctx context.Context, visitID, stepKey string, cmd TransitionCommand, source string) (View, error) {
+func (s *service) TransitionStep(ctx context.Context, visitID, stepKey string, cmd TransitionCommand, source string, actor Actor) (View, error) {
 	switch cmd.To {
 	case CommandToStarted, CommandToCompleted, CommandToCancelled:
 	default:
@@ -222,6 +222,7 @@ func (s *service) TransitionStep(ctx context.Context, visitID, stepKey string, c
 		}
 		return s.repo.InsertCommandAudit(ctx, CommandAudit{
 			CommandID: cmd.CommandID, VisitID: visitID, StepKey: stepKey, ToStatus: cmd.To, Source: source,
+			ActorUserID: actor.UserID, ActorUsername: actor.Username,
 		})
 	})
 	if err != nil {
@@ -233,43 +234,61 @@ func (s *service) TransitionStep(ctx context.Context, visitID, stepKey string, c
 	return s.GetJourney(ctx, visitID)
 }
 
-func (s *service) CloseRound(ctx context.Context, visitID, clinicCode string) (View, error) {
+func (s *service) CloseRound(ctx context.Context, visitID, clinicCode, source string, actor Actor) (View, error) {
 	snapshot, err := s.his.GetVisit(ctx, visitID)
 	if err != nil {
 		return View{}, err
 	}
+
+	if source == "" {
+		source = "unknown"
+	}
+	commandID := uuid.NewString()
 
 	err = s.tx.WithinTransaction(ctx, func(ctx context.Context) error {
 		existing, err := s.repo.GetVisit(ctx, visitID)
 		if err != nil {
 			return err
 		}
-		found, err := s.closeLatestRoundIn(ctx, visitID, clinicCode, existing)
+		closedKey, found, err := s.closeLatestRoundIn(ctx, visitID, clinicCode, existing)
 		if err != nil {
 			return err
 		}
 		if !found {
 			return ErrNoOpenRound
 		}
-		_, err = s.replanFromPrior(ctx, visitID, snapshot, existing)
-		return err
+		if _, err := s.replanFromPrior(ctx, visitID, snapshot, existing); err != nil {
+			return err
+		}
+		// The override is a staff command like a transition (NFR-09): it is
+		// audited with its own command id, so a repeated close is visible as
+		// the (idempotent, side-effect-free) command it was.
+		return s.repo.InsertCommandAudit(ctx, CommandAudit{
+			CommandID: commandID, VisitID: visitID, StepKey: closedKey, ToStatus: CommandToCompleted,
+			Source: source, ActorUserID: actor.UserID, ActorUsername: actor.Username,
+		})
 	})
 	if err != nil {
 		return View{}, err
 	}
+	logger.FromContext(ctx).Info("clinic round closed",
+		"command_id", commandID, "visit_id", visitID, "clinic_code", clinicCode, "source", source,
+		"actor_user_id", actor.UserID, "actor_username", actor.Username,
+	)
 	return s.GetJourney(ctx, visitID)
 }
 
 // closeLatestRoundIn resolves the round CLINIC step "in encounter" for
-// clinicCode in the given (already-loaded) visit and records it closed.
-// Preferring the highest STARTED round over a merely-inferred, not-yet-begun
-// next round matters: a mid-encounter order tentatively creates that next
-// round (WAITING/READY) before the patient ever returns, and closing must
-// target the round the doctor is actually finishing, not that placeholder —
-// dropping it is a side effect of closing the right one (ADR-0009 §4),
-// handled by Plan. Falls back to the highest round overall when none is
-// STARTED. Reports false when the visit has no round at that clinic yet.
-func (s *service) closeLatestRoundIn(ctx context.Context, visitID, clinicCode string, existing Visit) (bool, error) {
+// clinicCode in the given (already-loaded) visit and records it closed,
+// returning the stepKey it closed. Preferring the highest STARTED round over
+// a merely-inferred, not-yet-begun next round matters: a mid-encounter order
+// tentatively creates that next round (WAITING/READY) before the patient
+// ever returns, and closing must target the round the doctor is actually
+// finishing, not that placeholder — dropping it is a side effect of closing
+// the right one (ADR-0009 §4), handled by Plan. Falls back to the highest
+// round overall when none is STARTED. Reports found=false when the visit has
+// no round at that clinic yet.
+func (s *service) closeLatestRoundIn(ctx context.Context, visitID, clinicCode string, existing Visit) (string, bool, error) {
 	latestKey, latestRound := "", 0
 	startedKey, startedRound := "", 0
 	for _, st := range existing.Steps {
@@ -288,12 +307,12 @@ func (s *service) closeLatestRoundIn(ctx context.Context, visitID, clinicCode st
 		key = latestKey
 	}
 	if key == "" {
-		return false, nil
+		return "", false, nil
 	}
 	if err := s.repo.CloseRound(ctx, visitID, key); err != nil {
-		return false, err
+		return "", false, err
 	}
-	return true, nil
+	return key, true, nil
 }
 
 // replan recomputes the plan from the visit's currently-stored steps.
