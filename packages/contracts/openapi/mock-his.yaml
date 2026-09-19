@@ -1,0 +1,47 @@
+openapi: 3.1.0
+info:
+  title: CarePath Mock HIS API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8090
+paths:
+  /health:
+    get:
+      responses:
+        '200':
+          description: Healthy
+  /api/v1/visits/{visitId}:
+    get:
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Visit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Visit'
+        '404':
+          description: Visit not found
+components:
+  schemas:
+    VisitStep:
+      type: object
+      required: [sequence, serviceCode, status]
+      properties:
+        sequence: { type: integer }
+        serviceCode: { type: string }
+        status: { type: string }
+    Visit:
+      type: object
+      required: [visitId, patientRef, status, steps]
+      properties:
+        visitId: { type: string }
+        patientRef: { type: string }
+        status: { type: string }
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/VisitStep' }
