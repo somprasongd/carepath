@@ -66,6 +66,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/auth/session:
+    post:
+      description: >
+        Exchanges a LINE ID token (source "line"), or a demo identity (source
+        "demo", only when the server has ALLOW_DEMO_AUTH enabled), for an
+        opaque CarePath session token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '200':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSessionResponse'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid identity token, or demo auth disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      description: Resolves the Authorization Bearer session token to the identity behind it.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current session identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Identity'
+        '401':
+          description: Session not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/navigation/route:
     get:
       description: Not implemented yet — reserved for the navigation module.
@@ -82,6 +130,11 @@ paths:
         '200':
           description: Navigation route
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: A CarePath session token from POST /api/v1/auth/session.
   schemas:
     Error:
       type: object
@@ -141,3 +194,30 @@ components:
           type: array
           items: { $ref: '#/components/schemas/VisitStep' }
         next: { $ref: '#/components/schemas/NextStep' }
+    Identity:
+      type: object
+      description: A verified external identity behind a CarePath session.
+      required: [source, externalId]
+      properties:
+        source:
+          type: string
+          enum: [line, demo]
+        externalId: { type: string }
+        displayName: { type: string }
+    CreateSessionRequest:
+      type: object
+      required: [source, idToken]
+      properties:
+        source:
+          type: string
+          enum: [line, demo]
+        idToken:
+          type: string
+          description: The LINE ID token. Ignored (may be empty) for source "demo".
+    CreateSessionResponse:
+      type: object
+      required: [sessionToken, identity, expiresAt]
+      properties:
+        sessionToken: { type: string }
+        identity: { $ref: '#/components/schemas/Identity' }
+        expiresAt: { type: string, format: date-time }

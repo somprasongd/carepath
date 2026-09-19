@@ -16,12 +16,16 @@ import (
 	"carepath/apps/api/internal/his/httpclient"
 	"carepath/apps/api/internal/his/ingest"
 	ingestpostgres "carepath/apps/api/internal/his/ingest/postgres"
+	"carepath/apps/api/internal/identity"
+	"carepath/apps/api/internal/identity/line"
 	"carepath/apps/api/internal/journey"
 	journeypostgres "carepath/apps/api/internal/journey/postgres"
 	"carepath/apps/api/internal/platform/db"
 	"carepath/apps/api/internal/platform/logger"
 	"carepath/apps/api/internal/servicepoint"
 	servicepointpostgres "carepath/apps/api/internal/servicepoint/postgres"
+	"carepath/apps/api/internal/session"
+	sessionpostgres "carepath/apps/api/internal/session/postgres"
 	"carepath/apps/api/internal/visit"
 )
 
@@ -67,6 +71,24 @@ func run(ctx context.Context, log *slog.Logger) error {
 	go poller.Run(context.Background(), interval)
 	log.Info("HIS ingest poller started", "interval", interval.String())
 
+	// Identity/session (#15/#16): LINE_CHANNEL_ID is only required for real
+	// LINE logins — a demo-only deployment can leave it unset, in which case
+	// "line" source requests fail clearly (ErrLineAuthNotConfigured) instead
+	// of the server refusing to boot.
+	var lineVerifier identity.Verifier
+	if channelID := os.Getenv("LINE_CHANNEL_ID"); channelID != "" {
+		verifier, err := line.New(ctx, channelID, line.JWKSURL)
+		if err != nil {
+			return err
+		}
+		lineVerifier = verifier
+	} else {
+		log.Warn("LINE_CHANNEL_ID not set; source=line session requests will fail")
+	}
+	allowDemoAuth := envOrDefault("ALLOW_DEMO_AUTH", "false") == "true"
+	sessionTTL := envDuration("SESSION_TTL", 24*time.Hour)
+	sessions := session.NewService(sessionpostgres.New(database), lineVerifier, allowDemoAuth, sessionTTL)
+
 	app := fiber.New()
 	app.Use(logger.Middleware(log))
 	app.Use(func(c fiber.Ctx) error {
@@ -95,6 +117,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	})
 
 	visit.NewHandler(visits).Register(app.Group("/api/v1"))
+	session.NewHandler(sessions).Register(app.Group("/api/v1"))
 
 	return app.Listen(":" + envOrDefault("PORT", "8080"))
 }
