@@ -382,6 +382,28 @@ func TestDemoActionsSurfaceAsCanonicalEvents(t *testing.T) {
 	}
 }
 
+// #22 follow-up: the console detail panel shows a QR of the visit id.
+func TestVisitQrcode(t *testing.T) {
+	app := New()
+
+	status, png := doRaw(t, app, http.MethodGet, "/api/v1/demo/visits/VISIT-001/qrcode.png", "")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if len(png) < 8 || string(png[:8]) != "\x89PNG\r\n\x1a\n" {
+		t.Fatalf("body does not start with the PNG magic bytes")
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/demo/visits/NOPE/qrcode.png", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("unknown visit qr: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown visit qr status = %d, want 404", resp.StatusCode)
+	}
+}
+
 func TestConsoleServed(t *testing.T) {
 	app := New()
 

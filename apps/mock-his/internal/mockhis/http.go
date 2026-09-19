@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/skip2/go-qrcode"
 )
 
 //go:embed console.html
@@ -100,6 +101,21 @@ func New() *fiber.App {
 			return errResponse(c, http.StatusBadRequest, verr.Msg)
 		}
 		return c.Status(http.StatusCreated).JSON(visit)
+	})
+
+	// QR of the visit id — demo prop for the console detail panel (scan to
+	// type the id into the patient view instead of keying it by hand).
+	app.Get("/api/v1/demo/visits/:visitId/qrcode.png", func(c fiber.Ctx) error {
+		visitID := c.Params("visitId")
+		if _, ok := store.GetVisit(visitID); !ok {
+			return errResponse(c, http.StatusNotFound, "visit not found")
+		}
+		png, err := qrcode.Encode(visitID, qrcode.Medium, 256)
+		if err != nil {
+			return errResponse(c, http.StatusInternalServerError, "qr encode failed")
+		}
+		c.Set(fiber.HeaderContentType, "image/png")
+		return c.Send(png)
 	})
 
 	app.Post("/api/v1/demo/visits/:visitId/orders", func(c fiber.Ctx) error {

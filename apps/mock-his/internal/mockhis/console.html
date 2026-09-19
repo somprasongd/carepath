@@ -50,6 +50,9 @@
   .chip button { border: none; background: none; padding: 0 4px; font-size: 13px; color: var(--muted); cursor: pointer; }
   .chip button:hover { color: var(--bad); }
   .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .qr { text-align: center; }
+  .qr img { display: block; width: 132px; height: 132px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
   .empty { color: var(--muted); padding: 12px 0; text-align: center; }
   #events { list-style: none; margin: 0; padding: 0; font-size: 12px; max-height: 70vh; overflow: auto; }
   #events li { display: flex; gap: 8px; padding: 5px 2px; border-bottom: 1px dashed var(--line); }
@@ -57,6 +60,7 @@
   #events .typ { font-weight: 600; min-width: 140px; }
   #events .typ.visit { color: var(--accent); }
   #events .typ.service { color: var(--ok); }
+  #events .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #toast { position: fixed; bottom: 16px; right: 16px; background: #10233c; color: #fff; border-radius: 8px; padding: 9px 14px; font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 420px; }
   #toast.show { opacity: .96; }
   .actions { display: flex; gap: 6px; }
@@ -195,10 +199,19 @@ function renderDetail(visit) {
   box.replaceChildren();
 
   const head = document.createElement("div");
-  head.innerHTML =
+  head.className = "detail-head";
+  const info = document.createElement("div");
+  info.innerHTML =
     "<div style=\"font-weight:600;font-size:16px\">" + visit.visitId +
     ' <span class="badge b-' + visit.status + '">' + visit.status + "</span></div>" +
     '<div class="hint">' + visit.patientRef + "</div>";
+  const qr = document.createElement("div");
+  qr.className = "qr";
+  qr.innerHTML =
+    '<img src="/api/v1/demo/visits/' + encodeURIComponent(visit.visitId) + '/qrcode.png"' +
+    ' alt="QR code for ' + visit.visitId + '" width="132" height="132">' +
+    '<div class="hint">' + visit.visitId + "</div>";
+  head.append(info, qr);
   box.appendChild(head);
 
   const table = document.createElement("table");
@@ -262,7 +275,7 @@ function renderEvents(events) {
     li.innerHTML =
       '<span class="eid">' + e.eventId + "</span>" +
       '<span class="typ ' + kind + '">' + e.type + "</span>" +
-      "<span>" + e.visitId + (e.payload && e.payload.serviceCode ? " &middot; " + e.payload.serviceCode : "") + "</span>";
+      '<span class="who">' + e.visitId + (e.payload && e.payload.serviceCode ? " &middot; " + e.payload.serviceCode : "") + "</span>";
     return li;
   }));
 }
