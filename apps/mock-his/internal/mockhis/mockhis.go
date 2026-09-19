@@ -132,15 +132,26 @@ type Store struct {
 	now      func() time.Time
 }
 
-// NewStore returns a seeded store. The seed visit is an appointment patient
-// with one pre-visit lab order — the ADR-0009 example flow — so the console
-// and CarePath's journey planner both have something to show on first boot.
+// NewStore returns a seeded store. Two deterministic demo scenarios replay
+// identically on every start:
+//
+//   - VISIT-001 is the ADR-0009 example flow — an appointment patient with
+//     one pre-visit lab order — so the console and CarePath's journey
+//     planner both have something to show on first boot.
+//   - VISIT-002 is the #39 demo happy path (registration → OPD → X-ray →
+//     return to doctor → pharmacy): a walk-in MED patient whose chest X-ray
+//     is ordered mid-visit, so the seeded journey already shows the clinic
+//     and X-ray steps while the later beats (return round, cashier,
+//     pharmacy) are driven from the console/demo API in a fixed order.
+//
+// Seed facts sit on the same minute cadence as appendSeed's event stamps, so
+// each event's OccurredAt equals the fact time it announces.
 func NewStore() *Store {
 	s := &Store{
 		visits:   map[string]*Visit{},
 		orderVis: map[string]string{},
-		visitSeq: 1, // VISIT-001 is the seed
-		orderSeq: 1, // ORD-001 is the seed
+		visitSeq: 2, // VISIT-001 and VISIT-002 are the seeds
+		orderSeq: 2, // ORD-001 and ORD-002 are the seeds
 		seedBase: time.Date(2026, 9, 19, 9, 0, 0, 0, time.FixedZone("ICT", 7*60*60)),
 		now:      time.Now,
 	}
@@ -161,6 +172,24 @@ func NewStore() *Store {
 		"patientName": v.PatientName, "visitType": v.VisitType, "clinics": v.Clinics,
 	})
 	s.appendSeed(EventOrderPlaced, v, orderPayload(v.Orders[0]))
+
+	scenario := &Visit{
+		VisitID: "VISIT-002", PatientRef: "PATIENT-DEMO-002", PatientName: "สมหญิง รักษ์ดี",
+		VisitType: VisitWalkin, Status: VisitActive,
+		Clinics:  []Clinic{{Code: "MED", Name: "อายุรกรรม"}},
+		OpenedAt: s.seedBase.Add(3 * time.Minute),
+		Orders: []Order{
+			{OrderRef: "ORD-002", OrderType: OrderTypeXray, OrderName: "Chest X-ray", OrderedByClinic: "MED",
+				OrderedAt: s.seedBase.Add(4 * time.Minute), Status: OrderPlaced},
+		},
+	}
+	s.visits[scenario.VisitID] = scenario
+	s.orderVis["ORD-002"] = scenario.VisitID
+
+	s.appendSeed(EventVisitOpened, scenario, map[string]any{
+		"patientName": scenario.PatientName, "visitType": scenario.VisitType, "clinics": scenario.Clinics,
+	})
+	s.appendSeed(EventOrderPlaced, scenario, orderPayload(scenario.Orders[0]))
 	return s
 }
 

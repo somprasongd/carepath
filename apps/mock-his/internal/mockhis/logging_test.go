@@ -71,7 +71,7 @@ func TestStateChangesAreLogged(t *testing.T) {
 	// come from the request-scoped logger), so assert on the two spans.
 	for _, want := range []string{
 		`msg="visit opened"`,
-		`visit_id=VISIT-002 patient_ref=PATIENT-X visit_type=WALKIN clinics=1 orders=0`,
+		`visit_id=VISIT-003 patient_ref=PATIENT-X visit_type=WALKIN clinics=1 orders=0`,
 	} {
 		if !strings.Contains(buf.String(), want) {
 			t.Fatalf("open-visit log missing %q:\n%s", want, buf.String())
@@ -79,36 +79,36 @@ func TestStateChangesAreLogged(t *testing.T) {
 	}
 
 	buf.Reset()
-	if s := post(t, app, "/api/v1/demo/visits/VISIT-002/orders",
+	if s := post(t, app, "/api/v1/demo/visits/VISIT-003/orders",
 		`{"orderType":"XRAY","orderName":"Chest X-Ray","orderedByClinic":"MED"}`); s != http.StatusOK {
 		t.Fatalf("place order = %d, want 200", s)
 	}
-	if !strings.Contains(buf.String(), `visit_id=VISIT-002 order_ref=ORD-002 order_type=XRAY order_name="Chest X-Ray"`) {
+	if !strings.Contains(buf.String(), `visit_id=VISIT-003 order_ref=ORD-003 order_type=XRAY order_name="Chest X-Ray"`) {
 		t.Fatalf("order-placed log missing:\n%s", buf.String())
 	}
 
 	buf.Reset()
-	if s := post(t, app, "/api/v1/demo/orders/ORD-002/performed", ""); s != http.StatusOK {
+	if s := post(t, app, "/api/v1/demo/orders/ORD-003/performed", ""); s != http.StatusOK {
 		t.Fatalf("perform order = %d, want 200", s)
 	}
 	if !strings.Contains(buf.String(), `msg="order performed"`) ||
-		!strings.Contains(buf.String(), `visit_id=VISIT-002 order_ref=ORD-002`) {
+		!strings.Contains(buf.String(), `visit_id=VISIT-003 order_ref=ORD-003`) {
 		t.Fatalf("order-performed log missing:\n%s", buf.String())
 	}
 
 	buf.Reset()
-	if s := post(t, app, "/api/v1/demo/visits/VISIT-002/clinics/MED/complete-encounter", ""); s != http.StatusOK {
+	if s := post(t, app, "/api/v1/demo/visits/VISIT-003/clinics/MED/complete-encounter", ""); s != http.StatusOK {
 		t.Fatalf("complete encounter = %d, want 200", s)
 	}
-	if !strings.Contains(buf.String(), `visit_id=VISIT-002 clinic_code=MED`) {
+	if !strings.Contains(buf.String(), `visit_id=VISIT-003 clinic_code=MED`) {
 		t.Fatalf("encounter-completed log missing:\n%s", buf.String())
 	}
 
 	buf.Reset()
-	if s := post(t, app, "/api/v1/demo/visits/VISIT-002/complete", ""); s != http.StatusOK {
+	if s := post(t, app, "/api/v1/demo/visits/VISIT-003/complete", ""); s != http.StatusOK {
 		t.Fatalf("complete visit = %d, want 200", s)
 	}
-	if !strings.Contains(buf.String(), `msg="visit completed"`) || !strings.Contains(buf.String(), `visit_id=VISIT-002`) {
+	if !strings.Contains(buf.String(), `msg="visit completed"`) || !strings.Contains(buf.String(), `visit_id=VISIT-003`) {
 		t.Fatalf("visit-completed log missing:\n%s", buf.String())
 	}
 }

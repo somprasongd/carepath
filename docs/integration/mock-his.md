@@ -16,20 +16,28 @@ Per [ADR-0009](../adr/0009-carepath-owns-journey-plan.md), the HIS has no concep
 
 It does **not** decide step order, own step status, or calculate indoor routes — those are CarePath's (journey planner and navigation module respectively).
 
-## Demo visit
+## Demo visits
 
-The starter project contains one sample visit:
+The starter project seeds two deterministic scenarios (identifiers are
+stable across resets — see the repository README's reset procedure):
 
 ```text
 VISIT-001  สมชาย ใจดี (HN PATIENT-DEMO-001)  APPOINTMENT
   clinic MED assigned
   order ORD-001 LAB "CBC"  PLACED, ordered before the visit opened
+
+VISIT-002  สมหญิง รักษ์ดี (HN PATIENT-DEMO-002)  WALKIN   (#39 demo happy path)
+  clinic MED assigned
+  order ORD-002 XRAY "Chest X-ray"  PLACED, ordered mid-visit by MED
 ```
 
-CarePath's journey planner turns this into: registration (done at open) → lab
-(pre-visit order) → clinic MED → cashier. The CarePath API maps clinic codes
-and order types to internal service points such as `LAB-01` (the `servicepoint`
-module).
+CarePath's journey planner turns VISIT-001 into: registration (done at
+open) → lab (pre-visit order) → clinic MED → cashier, and VISIT-002 into:
+registration (done) → clinic MED → X-ray (mid-visit order), with the
+return round and pharmacy appearing as the demo drives the later facts
+(start the clinic step, result the X-ray, place a DRUG order). The
+CarePath API maps clinic codes and order types to internal service points
+such as `LAB-01` (the `servicepoint` module).
 
 ## Integration contract (ADR-0008, amended by ADR-0009)
 

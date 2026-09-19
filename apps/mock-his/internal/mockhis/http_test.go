@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -92,6 +93,51 @@ func TestVisitSnapshotMatchesContract(t *testing.T) {
 	}
 }
 
+// The #39 deterministic demo scenario: VISIT-002 is a walk-in MED patient
+// whose chest X-ray is ordered mid-visit, with stable identifiers the E2E
+// happy path (#40) and the demo script (#41) rely on.
+func TestSeedScenarioVisit(t *testing.T) {
+	app := New(discardLogger())
+
+	status, body := do(t, app, http.MethodGet, "/api/v1/visits/VISIT-002", "")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %v)", status, body)
+	}
+	if body["visitId"] != "VISIT-002" || body["patientRef"] != "PATIENT-DEMO-002" ||
+		body["visitType"] != "WALKIN" || body["status"] != "ACTIVE" {
+		t.Fatalf("scenario header = %v, want VISIT-002 / PATIENT-DEMO-002 / WALKIN / ACTIVE", body)
+	}
+	orders := body["orders"].([]any)
+	order, ok := orders[0].(map[string]any)
+	if !ok || len(orders) != 1 {
+		t.Fatalf("orders = %v, want exactly the scenario X-ray", orders)
+	}
+	if order["orderRef"] != "ORD-002" || order["orderType"] != "XRAY" ||
+		order["orderedByClinic"] != "MED" || order["status"] != "PLACED" {
+		t.Fatalf("scenario order = %v, want ORD-002 XRAY by MED PLACED", order)
+	}
+	// The order must be mid-visit (ordered after the visit opened) so
+	// CarePath's planner puts X-ray after the clinic round, not before it.
+	openedAt, _ := time.Parse(time.RFC3339, body["openedAt"].(string))
+	orderedAt, _ := time.Parse(time.RFC3339, order["orderedAt"].(string))
+	if !orderedAt.After(openedAt) {
+		t.Fatalf("orderedAt %v not after openedAt %v — scenario X-ray would become pre-visit", orderedAt, openedAt)
+	}
+
+	// The scenario announces itself through the canonical feed like any
+	// real visit: opened then placed, right after the VISIT-001 seed events.
+	_, page := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000002&limit=2", "")
+	scenarioTypes := eventTypes(page)
+	if len(scenarioTypes) != 2 || scenarioTypes[0] != "visit.opened" || scenarioTypes[1] != "order.placed" {
+		t.Fatalf("scenario events = %v, want [visit.opened order.placed]", scenarioTypes)
+	}
+	for _, raw := range page["events"].([]any) {
+		if raw.(map[string]any)["visitId"] != "VISIT-002" {
+			t.Fatalf("event %v not on VISIT-002", raw)
+		}
+	}
+}
+
 func TestOpenVisit(t *testing.T) {
 	app := New(discardLogger())
 
@@ -101,22 +147,22 @@ func TestOpenVisit(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %v)", status, body)
 	}
-	if body["visitId"] != "VISIT-002" || body["patientRef"] != "HN-X" || body["status"] != "ACTIVE" {
-		t.Fatalf("opened visit = %v, want VISIT-002 / HN-X / ACTIVE", body)
+	if body["visitId"] != "VISIT-003" || body["patientRef"] != "HN-X" || body["status"] != "ACTIVE" {
+		t.Fatalf("opened visit = %v, want VISIT-003 / HN-X / ACTIVE", body)
 	}
 	clinics := body["clinics"].([]any)
 	if len(clinics) != 1 || clinics[0].(map[string]any)["code"] != "SURG" {
-		t.Fatalf("clinics = %v, want [{code: SURG}]", clinics)
+		t.Fatalf("clinics = %v, want [{code: SURG}]", body)
 	}
 
 	// Defaults: no patientRef -> a demo id is generated.
 	status, body = do(t, app, http.MethodPost, "/api/v1/demo/visits",
 		`{"visitType":"APPOINTMENT","clinics":[{"clinicCode":"MED"}]}`)
-	if status != http.StatusOK || body["visitId"] != "VISIT-003" {
-		t.Fatalf("second open = %d %v, want 200 VISIT-003", status, body)
+	if status != http.StatusOK || body["visitId"] != "VISIT-004" {
+		t.Fatalf("second open = %d %v, want 200 VISIT-004", status, body)
 	}
-	if body["patientRef"] != "PATIENT-DEMO-003" {
-		t.Fatalf("generated patientRef = %v, want PATIENT-DEMO-003", body["patientRef"])
+	if body["patientRef"] != "PATIENT-DEMO-004" {
+		t.Fatalf("generated patientRef = %v, want PATIENT-DEMO-004", body["patientRef"])
 	}
 
 	if status, _ := do(t, app, http.MethodPost, "/api/v1/demo/visits", `not json`); status != http.StatusBadRequest {
@@ -279,10 +325,10 @@ func TestEventFeedCursorAndEnvelope(t *testing.T) {
 		t.Fatalf("first event = %v, want EVT-000001 visit.opened", first)
 	}
 
-	// Seed history is 1 opened + 1 placed = 2 events.
-	_, tail := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000002", "")
+	// Seed history is 2x (opened + placed) = 4 events.
+	_, tail := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000004", "")
 	if got := len(tail["events"].([]any)); got != 0 {
-		t.Fatalf("events after EVT-000002 = %d, want 0", got)
+		t.Fatalf("events after EVT-000004 = %d, want 0", got)
 	}
 	if tail["nextAfter"] != "" {
 		t.Fatalf("nextAfter on empty page = %v, want empty", tail["nextAfter"])
@@ -297,8 +343,8 @@ func TestListDemoVisits(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200", status)
 	}
-	if len(visits) != 2 {
-		t.Fatalf("visits = %d, want seed + created", len(visits))
+	if len(visits) != 3 {
+		t.Fatalf("visits = %d, want 2 seeds + created", len(visits))
 	}
 	first := visits[0].(map[string]any)
 	if first["visitId"] != "VISIT-001" {
@@ -318,7 +364,7 @@ func TestDemoActionsSurfaceAsCanonicalEvents(t *testing.T) {
 	do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics/MED/complete-encounter", "")
 	do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/complete", "")
 
-	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000002&limit=100", "")
+	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000004&limit=100", "")
 	want := []string{
 		"order.placed",        // xray ordered
 		"order.performed",     // xray performed
@@ -376,7 +422,7 @@ func TestCancelVisit(t *testing.T) {
 		t.Fatalf("orders = %v, want the open lab order cancelled", orders)
 	}
 
-	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000002&limit=100", "")
+	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000004&limit=100", "")
 	want := []string{"order.cancelled", "visit.closed"}
 	got := eventTypes(feed)
 	if len(got) != len(want) {
@@ -387,7 +433,7 @@ func TestCancelVisit(t *testing.T) {
 	if status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/cancel", ""); status != http.StatusOK || body["status"] != "CANCELLED" {
 		t.Fatalf("re-cancel = %d %v, want 200 no-op", status, body["status"])
 	}
-	_, feed = do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000004&limit=100", "")
+	_, feed = do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000006&limit=100", "")
 	if n := len(feed["events"].([]any)); n != 0 {
 		t.Fatalf("events after re-cancel = %d, want 0", n)
 	}
