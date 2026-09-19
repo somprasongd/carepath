@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { Journey, JourneyStep } from './queries'
 import {
+  stepAction,
   stepProgress,
   stepStatusLabel,
   stepTone,
   syncedAtLabel,
+  transitionErrorText,
   visitPosition,
   visitStatusLabel,
   visitTone,
@@ -99,5 +101,38 @@ describe('stepProgress', () => {
 describe('syncedAtLabel', () => {
   it('formats the sync timestamp as a clock time', () => {
     expect(syncedAtLabel('2026-09-19T04:05:00Z')).toMatch(/^\d{2}:\d{2}$/)
+  })
+})
+
+describe('stepAction (#38)', () => {
+  it('starts a READY step and completes a STARTED one', () => {
+    expect(stepAction('READY')).toEqual({ to: 'STARTED', label: 'เริ่มขั้นตอน' })
+    expect(stepAction('STARTED')).toEqual({ to: 'COMPLETED', label: 'ทำเสร็จแล้ว' })
+  })
+
+  it('offers nothing for statuses with no legal forward move', () => {
+    expect(stepAction('PENDING')).toBeNull()
+    expect(stepAction('COMPLETED')).toBeNull()
+    expect(stepAction('CANCELLED')).toBeNull()
+  })
+})
+
+describe('transitionErrorText (#38)', () => {
+  it('blames a stale projection on 409 and tells staff to retry', () => {
+    expect(transitionErrorText(409, 'step is not READY')).toBe(
+      'ตอนนี้เปลี่ยนสถานะนี้ไม่ได้ (step is not READY) — รีเฟรชแล้วลองใหม่',
+    )
+  })
+
+  it('labels a bad request and keeps the server detail', () => {
+    expect(transitionErrorText(400, 'unknown target status')).toBe(
+      'คำสั่งไม่ถูกต้อง (unknown target status)',
+    )
+  })
+
+  it('covers network loss and unexpected statuses without losing the detail', () => {
+    expect(transitionErrorText(0, 'เชื่อมต่อ API ไม่ได้ (Error)')).toContain('เปลี่ยนสถานะไม่สำเร็จ')
+    expect(transitionErrorText(500, 'boom')).toBe('เปลี่ยนสถานะไม่สำเร็จ (สถานะ 500 · boom)')
+    expect(transitionErrorText(502, '')).toBe('เปลี่ยนสถานะไม่สำเร็จ (สถานะ 502)')
   })
 })

@@ -78,3 +78,24 @@ export function syncedAtLabel(syncedAt: string): string {
     minute: '2-digit',
   })
 }
+
+/** What the staff controls may do to a step (#38) — null when nothing is legal. */
+export type StepAction = { to: 'STARTED' | 'COMPLETED'; label: string }
+
+export function stepAction(status: string): StepAction | null {
+  if (status === 'READY') return { to: 'STARTED', label: 'เริ่มขั้นตอน' }
+  if (status === 'STARTED') return { to: 'COMPLETED', label: 'ทำเสร็จแล้ว' }
+  return null
+}
+
+/**
+ * Thai phrasing for a failed transition. The server detail (already a plain
+ * message) rides along; 409 is the HIS rejecting an illegal move — the
+ * common case when two staff race on the same step.
+ */
+export function transitionErrorText(status: number, detail: string): string {
+  if (status === 0) return `เปลี่ยนสถานะไม่สำเร็จ — ${detail}`
+  if (status === 409) return `ตอนนี้เปลี่ยนสถานะนี้ไม่ได้ (${detail}) — รีเฟรชแล้วลองใหม่`
+  if (status === 400) return `คำสั่งไม่ถูกต้อง (${detail})`
+  return `เปลี่ยนสถานะไม่สำเร็จ (สถานะ ${status}${detail ? ` · ${detail}` : ''})`
+}
