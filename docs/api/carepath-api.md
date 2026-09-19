@@ -52,12 +52,13 @@ Returns route node IDs/coordinates for overlay on the floor plan.
 
 Normalizes provider input such as QR into a CarePath location result.
 
-## Deprecated
+## Removed
 
-`GET /api/v1/visits/{visitId}` and `GET /api/v1/visits/{visitId}/next` predate
-the journey planner and assumed the HIS reports an ordered step list, which it
-does not (ADR-0009). Superseded by `GET /api/v1/journeys/{visitId}`; kept only
-until patient/staff clients finish migrating.
+`GET /api/v1/visits/{visitId}` and `GET /api/v1/visits/{visitId}/next` (the
+`visit` module) predated the journey planner and assumed the HIS reports an
+ordered step list, which it does not (ADR-0009). They were deprecated when the
+contract first moved to the planner model and removed once nothing depended on
+them any longer — superseded fully by `GET /api/v1/journeys/{visitId}`.
 
 Implemented today: health, auth session, the journey projection with step
 transitions and the clinic round override, the staff visit monitor, and the

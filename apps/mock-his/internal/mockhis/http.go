@@ -41,32 +41,6 @@ func New() *fiber.App {
 		return c.JSON(visit)
 	})
 
-	app.Post("/api/v1/visits/:visitId/steps/:sequence/transition", func(c fiber.Ctx) error {
-		sequence, err := strconv.Atoi(c.Params("sequence"))
-		if err != nil || sequence < 1 {
-			return errResponse(c, http.StatusBadRequest, "invalid step sequence")
-		}
-		var cmd TransitionCommand
-		if err := c.Bind().Body(&cmd); err != nil {
-			return errResponse(c, http.StatusBadRequest, "invalid request body")
-		}
-		if cmd.CommandID == "" {
-			return errResponse(c, http.StatusBadRequest, "commandId is required")
-		}
-		step, terr := store.Transition(c.Params("visitId"), sequence, cmd)
-		if terr != nil {
-			switch terr.Kind {
-			case ErrNotFound:
-				return errResponse(c, http.StatusNotFound, terr.Msg)
-			case ErrConflict:
-				return errResponse(c, http.StatusConflict, terr.Msg)
-			default:
-				return errResponse(c, http.StatusBadRequest, terr.Msg)
-			}
-		}
-		return c.JSON(step)
-	})
-
 	app.Get("/api/v1/events", func(c fiber.Ctx) error {
 		limit := 50
 		if raw := c.Query("limit"); raw != "" {
@@ -81,26 +55,126 @@ func New() *fiber.App {
 	})
 
 	// Demo-driver API (mock-only, deliberately outside the canonical
-	// contract): what the console uses to stage a demo. State changes here
-	// and via the transition command above are announced as canonical
-	// events, so CarePath still learns everything through the feed.
+	// contract): what the console uses to stage a demo. Every state change
+	// is announced as a canonical event, so CarePath still learns everything
+	// through the feed.
 	app.Get("/api/v1/demo/visits", func(c fiber.Ctx) error {
 		return c.JSON(store.ListVisits())
 	})
 
 	app.Post("/api/v1/demo/visits", func(c fiber.Ctx) error {
 		var body struct {
-			PatientRef   string   `json:"patientRef"`
-			ServiceCodes []string `json:"serviceCodes"`
+			PatientRef  string `json:"patientRef"`
+			PatientName string `json:"patientName"`
+			VisitType   string `json:"visitType"`
+			Clinics     []struct {
+				ClinicCode string `json:"clinicCode"`
+				ClinicName string `json:"clinicName"`
+			} `json:"clinics"`
+			Orders []struct {
+				OrderType       string `json:"orderType"`
+				OrderName       string `json:"orderName"`
+				OrderedByClinic string `json:"orderedByClinic"`
+			} `json:"orders"`
 		}
 		if err := c.Bind().Body(&body); err != nil {
 			return errResponse(c, http.StatusBadRequest, "invalid request body")
 		}
-		visit, verr := store.CreateVisit(body.PatientRef, body.ServiceCodes)
-		if verr != nil {
-			return errResponse(c, http.StatusBadRequest, verr.Msg)
+		clinics := make([]OpenVisitClinic, len(body.Clinics))
+		for i, cl := range body.Clinics {
+			clinics[i] = OpenVisitClinic{Code: cl.ClinicCode, Name: cl.ClinicName}
 		}
-		return c.Status(http.StatusCreated).JSON(visit)
+		orders := make([]OpenVisitOrder, len(body.Orders))
+		for i, o := range body.Orders {
+			orders[i] = OpenVisitOrder{OrderType: o.OrderType, OrderName: o.OrderName, OrderedByClinic: o.OrderedByClinic}
+		}
+		visit, verr := store.OpenVisit(body.PatientRef, body.PatientName, body.VisitType, clinics, orders)
+		if verr != nil {
+			return storeErrResponse(c, verr)
+		}
+		return c.JSON(visit)
+	})
+
+	app.Post("/api/v1/demo/visits/:visitId/clinics", func(c fiber.Ctx) error {
+		var body struct {
+			ClinicCode string `json:"clinicCode"`
+			ClinicName string `json:"clinicName"`
+		}
+		if err := c.Bind().Body(&body); err != nil {
+			return errResponse(c, http.StatusBadRequest, "invalid request body")
+		}
+		visit, verr := store.AddClinic(c.Params("visitId"), body.ClinicCode, body.ClinicName)
+		if verr != nil {
+			return storeErrResponse(c, verr)
+		}
+		return c.JSON(visit)
+	})
+
+	app.Post("/api/v1/demo/visits/:visitId/orders", func(c fiber.Ctx) error {
+		var body struct {
+			OrderType       string `json:"orderType"`
+			OrderName       string `json:"orderName"`
+			OrderedByClinic string `json:"orderedByClinic"`
+		}
+		if err := c.Bind().Body(&body); err != nil {
+			return errResponse(c, http.StatusBadRequest, "invalid request body")
+		}
+		order, verr := store.PlaceOrder(c.Params("visitId"), body.OrderType, body.OrderName, body.OrderedByClinic)
+		if verr != nil {
+			return storeErrResponse(c, verr)
+		}
+		return c.JSON(order)
+	})
+
+	app.Post("/api/v1/demo/orders/:orderRef/performed", func(c fiber.Ctx) error {
+		order, verr := store.MarkPerformed(c.Params("orderRef"))
+		if verr != nil {
+			return storeErrResponse(c, verr)
+		}
+		return c.JSON(order)
+	})
+
+	app.Post("/api/v1/demo/orders/:orderRef/resulted", func(c fiber.Ctx) error {
+		order, verr := store.MarkResulted(c.Params("orderRef"))
+		if verr != nil {
+			return storeErrResponse(c, verr)
+		}
+		return c.JSON(order)
+	})
+
+	app.Post("/api/v1/demo/orders/:orderRef/cancel", func(c fiber.Ctx) error {
+		order, verr := store.CancelOrder(c.Params("orderRef"))
+		if verr != nil {
+			return storeErrResponse(c, verr)
+		}
+		return c.JSON(order)
+	})
+
+	app.Post("/api/v1/demo/visits/:visitId/clinics/:clinicCode/complete-encounter", func(c fiber.Ctx) error {
+		visit, verr := store.CompleteEncounter(c.Params("visitId"), c.Params("clinicCode"))
+		if verr != nil {
+			return storeErrResponse(c, verr)
+		}
+		return c.JSON(visit)
+	})
+
+	app.Post("/api/v1/demo/visits/:visitId/complete", func(c fiber.Ctx) error {
+		visit, verr := store.CompleteVisit(c.Params("visitId"))
+		if verr != nil {
+			return storeErrResponse(c, verr)
+		}
+		return c.JSON(visit)
+	})
+
+	// Visit cancellation — demo story: the patient cancels the appointment,
+	// so every open order and the visit itself are cancelled and announced
+	// as canonical events.
+	app.Post("/api/v1/demo/visits/:visitId/cancel", func(c fiber.Ctx) error {
+		visit, verr := store.CancelVisit(c.Params("visitId"))
+		if verr != nil {
+			return storeErrResponse(c, verr)
+		}
+		return c.JSON(visit)
 	})
 
 	// QR of the visit id — demo prop for the console detail panel (scan to
@@ -118,48 +192,20 @@ func New() *fiber.App {
 		return c.Send(png)
 	})
 
-	// Visit cancellation — demo story: the patient cancels the appointment,
-	// so every open step and the visit itself are cancelled and announced as
-	// canonical events.
-	app.Post("/api/v1/demo/visits/:visitId/cancel", func(c fiber.Ctx) error {
-		visit, verr := store.CancelVisit(c.Params("visitId"))
-		if verr != nil {
-			switch verr.Kind {
-			case ErrNotFound:
-				return errResponse(c, http.StatusNotFound, verr.Msg)
-			case ErrConflict:
-				return errResponse(c, http.StatusConflict, verr.Msg)
-			default:
-				return errResponse(c, http.StatusBadRequest, verr.Msg)
-			}
-		}
-		return c.JSON(visit)
-	})
-
-	app.Post("/api/v1/demo/visits/:visitId/orders", func(c fiber.Ctx) error {
-		var body struct {
-			ServiceCode string `json:"serviceCode"`
-		}
-		if err := c.Bind().Body(&body); err != nil {
-			return errResponse(c, http.StatusBadRequest, "invalid request body")
-		}
-		step, verr := store.AddOrder(c.Params("visitId"), body.ServiceCode)
-		if verr != nil {
-			switch verr.Kind {
-			case ErrNotFound:
-				return errResponse(c, http.StatusNotFound, verr.Msg)
-			case ErrConflict:
-				return errResponse(c, http.StatusConflict, verr.Msg)
-			default:
-				return errResponse(c, http.StatusBadRequest, verr.Msg)
-			}
-		}
-		return c.Status(http.StatusCreated).JSON(step)
-	})
-
 	return app
 }
 
 func errResponse(c fiber.Ctx, status int, msg string) error {
 	return c.Status(status).JSON(fiber.Map{"error": msg})
+}
+
+func storeErrResponse(c fiber.Ctx, err *Error) error {
+	switch err.Kind {
+	case ErrNotFound:
+		return errResponse(c, http.StatusNotFound, err.Msg)
+	case ErrConflict:
+		return errResponse(c, http.StatusConflict, err.Msg)
+	default:
+		return errResponse(c, http.StatusBadRequest, err.Msg)
+	}
 }

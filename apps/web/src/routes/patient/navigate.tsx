@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { DEFAULT_VISIT_ID, thaiStepTitle, useVisit, type VisitView } from '@/features/visit'
+import { DEFAULT_VISIT_ID, thaiStepTitle, useJourney, type Journey } from '@/features/visit'
 import { NavigateScreen, type NavigateDestination } from './-NavigateScreen'
 
 /** `?visit=<id>` — same parameter as the journey screen, forwarded by its CTA. */
@@ -17,7 +17,7 @@ function PatientNavigateRoute() {
 
   // Same query key as the journey screen, so this is a cache read, not a
   // second round trip.
-  const { data, isPending } = useVisit(visitId)
+  const { data, isPending } = useJourney(visitId)
 
   return (
     <div className="h-dvh">
@@ -29,20 +29,17 @@ function PatientNavigateRoute() {
   )
 }
 
-function destinationFor(data: VisitView | undefined, isPending: boolean): NavigateDestination {
+function destinationFor(journey: Journey | undefined, isPending: boolean): NavigateDestination {
   if (isPending) return { title: 'กำลังโหลดจุดหมาย…', subtitle: '' }
-  if (!data?.next) return { title: 'จุดบริการของคุณ', subtitle: '', placeId: 'unknown' }
+  const recommended = journey?.recommended
+  if (!recommended) return { title: 'จุดบริการของคุณ', subtitle: '', placeId: 'unknown' }
 
-  const next = data.next
-  const step = data.steps.find((s) => s.sequence === next.sequence)
-  const title = thaiStepTitle(step?.serviceCode ?? '')
-  const servicePoint = next.servicePoint
+  const title = thaiStepTitle(recommended)
+  const servicePoint = recommended.servicePoint
 
   return {
     title: `เส้นทางไป${title}`,
-    subtitle: servicePoint
-      ? `${servicePoint.name} · ${servicePoint.placeId}`
-      : (step?.serviceCode ?? ''),
+    subtitle: servicePoint ? `${servicePoint.name} · ${servicePoint.placeId}` : recommended.kind,
     placeId: servicePoint?.placeId,
   }
 }

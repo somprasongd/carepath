@@ -88,10 +88,10 @@ export function Patients() {
                     <StepTransitionControls
                       action={stepAction(step.status)}
                       pending={
-                        transition.isPending && transition.variables?.sequence === step.sequence
+                        transition.isPending && transition.variables?.stepKey === step.stepKey
                       }
                       errorText={
-                        transition.isError && transition.variables?.sequence === step.sequence
+                        transition.isError && transition.variables?.stepKey === step.stepKey
                           ? transitionErrorText(
                               transition.error.status,
                               transition.error.message,
@@ -99,7 +99,7 @@ export function Patients() {
                           : null
                       }
                       onTransition={(to) =>
-                        transition.mutate({ sequence: step.sequence, to })
+                        transition.mutate({ stepKey: step.stepKey, to })
                       }
                     />
                   )}

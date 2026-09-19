@@ -48,8 +48,7 @@ Planned module list — a module gets a package when it has real features, never
 
 ```text
 identity       (implemented, incl. identity/line verifier)
-visit          (implemented — deprecated per ADR-0009, superseded by journey)
-journey        (implemented — CarePath-owned journey plan derived from HIS facts, ADR-0008 amended by ADR-0009)
+journey        (implemented — CarePath-owned journey plan derived from HIS facts, ADR-0008 amended by ADR-0009; superseded and removed the visit module)
 servicepoint   (implemented)
 hospitalmap    (implemented, #24)
 navigation     (planned)

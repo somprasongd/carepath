@@ -12,6 +12,7 @@ const STEP_TONES: Record<string, StaffTone> = {
   COMPLETED: 'routable',
   STARTED: 'busy',
   READY: 'ready',
+  WAITING: 'quiet',
   PENDING: 'quiet',
   CANCELLED: 'quiet',
 }
@@ -34,6 +35,7 @@ const STEP_LABELS: Record<string, string> = {
   COMPLETED: 'เสร็จสิ้น',
   STARTED: 'กำลังให้บริการ',
   READY: 'พร้อมให้บริการ',
+  WAITING: 'รอผลตรวจ',
   PENDING: 'รอคิว',
   CANCELLED: 'ยกเลิก',
 }
@@ -55,13 +57,16 @@ export function visitStatusLabel(status: string): string {
 
 /**
  * Where this patient is right now — the one-line summary of a list row.
- * A started step wins over a ready one; a finished visit is explicit.
+ * A started step wins over the recommended one; a finished visit is
+ * explicit. More than one step may be actionable at once (ADR-0009 §6) —
+ * this shows CarePath's single recommendation, not the full set.
  */
 export function visitPosition(journey: Journey): string {
   if (journey.completed) return 'เสร็จสิ้นทุกขั้นตอน'
   if (journey.status === 'CANCELLED') return 'การมารับบริการถูกยกเลิก'
-  if (journey.current) return `กำลัง${thaiStepTitle(journey.current.serviceCode)}`
-  if (journey.next) return `ถัดไป · ${thaiStepTitle(journey.next.serviceCode)}`
+  const started = journey.steps.find((step) => step.status === 'STARTED')
+  if (started) return `กำลัง${thaiStepTitle(started)}`
+  if (journey.recommended) return `ถัดไป · ${thaiStepTitle(journey.recommended)}`
   return 'ไม่มีขั้นตอนที่ดำเนินการได้'
 }
 

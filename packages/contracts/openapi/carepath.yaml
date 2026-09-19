@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.5.0
+  version: 0.6.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -10,69 +10,6 @@ paths:
       responses:
         '200':
           description: Healthy
-  /api/v1/visits/{visitId}:
-    get:
-      deprecated: true
-      description: >
-        Deprecated: predates the journey planner (ADR-0009) and assumed the
-        HIS reports an ordered step list, which it does not. Superseded by
-        `GET /api/v1/journeys/{visitId}`. Kept only until patient/staff
-        clients finish migrating; scheduled for removal.
-      parameters:
-        - in: path
-          name: visitId
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Normalized visit view
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VisitView'
-        '404':
-          description: Visit not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '502':
-          description: Upstream HIS error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /api/v1/visits/{visitId}/next:
-    get:
-      deprecated: true
-      description: >
-        Deprecated for the same reason as `GET /api/v1/visits/{visitId}`
-        (ADR-0009) — superseded by the `actionable`/`recommended` steps on
-        `GET /api/v1/journeys/{visitId}`.
-      parameters:
-        - in: path
-          name: visitId
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Next actionable step
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NextStep'
-        '404':
-          description: No next actionable step, or visit not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '502':
-          description: Upstream HIS error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
   /api/v1/auth/session:
     post:
       description: >
@@ -350,31 +287,6 @@ components:
       required: [error]
       properties:
         error: { type: string }
-    VisitStep:
-      type: object
-      deprecated: true
-      description: Deprecated with the endpoints that return it (ADR-0009); a care step as the pre-planner HIS shape reported it.
-      required: [sequence, serviceCode, status]
-      properties:
-        sequence: { type: integer }
-        serviceCode: { type: string }
-        status:
-          type: string
-          description: HIS step status, e.g. COMPLETED, READY, PENDING.
-    Visit:
-      type: object
-      deprecated: true
-      description: Deprecated with the endpoints that return it (ADR-0009); a visit as the pre-planner HIS shape reported it.
-      required: [visitId, patientRef, status, steps]
-      properties:
-        visitId: { type: string }
-        patientRef: { type: string }
-        status:
-          type: string
-          description: HIS visit status, e.g. ACTIVE.
-        steps:
-          type: array
-          items: { $ref: '#/components/schemas/VisitStep' }
     ServicePoint:
       type: object
       description: Links a service code to a physical Place in the hospital map.
@@ -422,15 +334,6 @@ components:
         code: { type: string }
         name: { type: string }
         levelOrder: { type: integer }
-    NextStep:
-      type: object
-      deprecated: true
-      description: Deprecated with the endpoint that returns it (ADR-0009); the first READY step under the pre-planner single-next model.
-      required: [sequence, status]
-      properties:
-        sequence: { type: integer }
-        status: { type: string }
-        servicePoint: { $ref: '#/components/schemas/ServicePoint' }
     StepKind:
       type: string
       description: >
@@ -538,19 +441,6 @@ components:
         source:
           type: string
           description: Acting surface for the audit trail, e.g. staff-web or patient-web. Defaults to unknown.
-    VisitView:
-      type: object
-      deprecated: true
-      description: Deprecated with the endpoint that returns it (ADR-0009); the Visit fields plus the resolved next step, under the pre-planner model.
-      required: [visitId, patientRef, status, steps]
-      properties:
-        visitId: { type: string }
-        patientRef: { type: string }
-        status: { type: string }
-        steps:
-          type: array
-          items: { $ref: '#/components/schemas/VisitStep' }
-        next: { $ref: '#/components/schemas/NextStep' }
     Identity:
       type: object
       description: A verified external identity behind a CarePath session.

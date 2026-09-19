@@ -26,12 +26,10 @@ func (f *fakeTransactor) WithinTransaction(ctx context.Context, fn func(ctx cont
 }
 
 type fakeHIS struct {
-	visit          his.Visit
-	err            error
-	getCalls       int
-	getVisits      map[string]his.Visit
-	transitionErr  error
-	transitionCmds []his.TransitionCommand
+	visit     his.Visit
+	err       error
+	getCalls  int
+	getVisits map[string]his.Visit
 }
 
 func (f *fakeHIS) GetVisit(_ context.Context, visitID string) (his.Visit, error) {
@@ -46,47 +44,6 @@ func (f *fakeHIS) GetVisit(_ context.Context, visitID string) (his.Visit, error)
 
 func (f *fakeHIS) Events(_ context.Context, _ string, _ int) (his.EventPage, error) {
 	return his.EventPage{}, nil
-}
-
-// TransitionStep applies the canonical cascades on the stored snapshot so the
-// service under test sees realistic post-command state: completing a step
-// readies the next PENDING one, and closing the last open step completes the
-// visit. Legality itself is the HIS's job and faked via transitionErr.
-func (f *fakeHIS) TransitionStep(_ context.Context, visitID string, sequence int, cmd his.TransitionCommand) (his.VisitStep, error) {
-	f.transitionCmds = append(f.transitionCmds, cmd)
-	if f.transitionErr != nil {
-		return his.VisitStep{}, f.transitionErr
-	}
-	v, ok := f.getVisits[visitID]
-	if !ok {
-		return his.VisitStep{}, his.ErrVisitNotFound
-	}
-	for i := range v.Steps {
-		if v.Steps[i].Sequence != sequence {
-			continue
-		}
-		v.Steps[i].Status = cmd.To
-		if cmd.To == his.CommandToCompleted {
-			for j := range v.Steps {
-				if v.Steps[j].Status == "PENDING" {
-					v.Steps[j].Status = "READY"
-					break
-				}
-			}
-			open := 0
-			for _, st := range v.Steps {
-				if st.Status != "COMPLETED" && st.Status != "CANCELLED" {
-					open++
-				}
-			}
-			if open == 0 {
-				v.Status = "COMPLETED"
-			}
-		}
-		f.getVisits[visitID] = v
-		return v.Steps[i], nil
-	}
-	return his.VisitStep{}, apperr.New(apperr.KindNotFound, "step not found")
 }
 
 type fakeServicepoint struct {
@@ -113,6 +70,7 @@ func (f *fakeServicepoint) List(context.Context) ([]servicepoint.ServicePoint, e
 type fakeRepo struct {
 	visits     map[string]Visit
 	applied    map[string]string
+	closed     map[string]map[string]bool
 	upserts    int
 	marks      int
 	audits     []CommandAudit
@@ -120,7 +78,7 @@ type fakeRepo struct {
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{visits: map[string]Visit{}, applied: map[string]string{}}
+	return &fakeRepo{visits: map[string]Visit{}, applied: map[string]string{}, closed: map[string]map[string]bool{}}
 }
 
 func (f *fakeRepo) UpsertVisit(ctx context.Context, visit Visit) error {
@@ -166,16 +124,28 @@ func (f *fakeRepo) InsertCommandAudit(ctx context.Context, audit CommandAudit) e
 	return nil
 }
 
+func (f *fakeRepo) CloseRound(_ context.Context, visitID, stepKey string) error {
+	if f.closed[visitID] == nil {
+		f.closed[visitID] = map[string]bool{}
+	}
+	f.closed[visitID][stepKey] = true
+	return nil
+}
+
+func (f *fakeRepo) ClosedRounds(_ context.Context, visitID string) (map[string]bool, error) {
+	out := map[string]bool{}
+	for k, v := range f.closed[visitID] {
+		out[k] = v
+	}
+	return out, nil
+}
+
 func snapshot() his.Visit {
 	return his.Visit{
-		VisitID:    "VISIT-001",
-		PatientRef: "PAT-001",
-		Status:     "ACTIVE",
-		Steps: []his.VisitStep{
-			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED"},
-			{Sequence: 2, ServiceCode: "LAB", Status: "READY"},
-			{Sequence: 3, ServiceCode: "MYSTERY", Status: "PENDING"},
-		},
+		VisitID: "VISIT-001", PatientRef: "PAT-001", PatientName: "สมชาย",
+		VisitType: his.VisitTypeAppointment, Status: his.VisitActive,
+		Clinics:  []his.Clinic{{Code: "MED"}},
+		OpenedAt: openedAt,
 	}
 }
 
@@ -189,7 +159,7 @@ func openedEvent() his.Event {
 }
 
 func newTestService(hisClient his.Client, repo *fakeRepo) Service {
-	sp := &fakeServicepoint{known: map[string]bool{"REGISTRATION": true, "LAB": true, "PHARMACY": true}}
+	sp := &fakeServicepoint{known: map[string]bool{"REGISTRATION": true, "ORDERTYPE:LAB": true, "PHARMACY": true, "CLINIC:MED": true}}
 	return NewService(hisClient, sp, repo, &fakeTransactor{})
 }
 
@@ -205,18 +175,19 @@ func TestApplyHISEventProjectsJourney(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetVisit: %v", err)
 	}
-	if got.Status != "ACTIVE" || len(got.Steps) != 3 {
-		t.Fatalf("projected visit = %+v, want ACTIVE with 3 steps", got)
+	if got.Status != his.VisitActive {
+		t.Fatalf("projected visit status = %s, want ACTIVE", got.Status)
 	}
-	if got.Steps[1].ServicePointID == nil || *got.Steps[1].ServicePointID != "SP-LAB" {
-		t.Fatalf("LAB step service point = %v, want SP-LAB", got.Steps[1].ServicePointID)
+	clinic, ok := stepByKey(got.Steps, "CLINIC:MED:1")
+	if !ok || clinic.ServicePointID == nil || *clinic.ServicePointID != "SP-CLINIC:MED" {
+		t.Fatalf("clinic step = %+v, want resolved to SP-CLINIC:MED", clinic)
 	}
 	if !repo.inTxMarker {
-		t.Fatal("projection writes did not run inside a transaction")
+		t.Fatal("plan writes did not run inside a transaction")
 	}
 }
 
-// AC2 of #21: a duplicate event never re-projects and never duplicates steps.
+// AC2 of #21 (still holds under ADR-0009): a duplicate event never re-applies.
 func TestDuplicateEventIsNoOp(t *testing.T) {
 	repo := newFakeRepo()
 	hisClient := &fakeHIS{visit: snapshot()}
@@ -234,34 +205,29 @@ func TestDuplicateEventIsNoOp(t *testing.T) {
 	if repo.upserts != 1 || repo.marks != 1 {
 		t.Fatalf("upserts = %d, marks = %d, want 1 and 1", repo.upserts, repo.marks)
 	}
-	if got := repo.visits["VISIT-001"]; len(got.Steps) != 3 {
-		t.Fatalf("projected steps = %d, want 3 (no duplicates)", len(got.Steps))
-	}
 }
 
-// AC3 of #21: a service code without a configured service point is projected
-// with an explicit nil binding, not an error.
-func TestUnmappedServiceCodeProjectsExplicitly(t *testing.T) {
+// A binding with no configured service point is projected with an explicit
+// nil binding, not an error (#21 AC3, still holds under ADR-0009).
+func TestUnmappedBindingProjectsExplicitly(t *testing.T) {
 	repo := newFakeRepo()
-	svc := newTestService(&fakeHIS{visit: snapshot()}, repo)
+	sp := &fakeServicepoint{known: map[string]bool{}} // nothing mapped
+	svc := NewService(&fakeHIS{visit: snapshot()}, sp, repo, &fakeTransactor{})
 
 	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
 		t.Fatalf("ApplyHISEvent: %v", err)
 	}
 
-	got, _ := repo.visits["VISIT-001"]
-	mystery := got.Steps[2]
-	if mystery.ServiceCode != "MYSTERY" || mystery.ServicePointID != nil {
-		t.Fatalf("unmapped step = %+v, want service point nil", mystery)
-	}
-	if len(got.Steps) != 3 {
-		t.Fatalf("steps = %d, want the unmapped step kept alongside mapped ones", len(got.Steps))
+	got := repo.visits["VISIT-001"]
+	clinic, ok := stepByKey(got.Steps, "CLINIC:MED:1")
+	if !ok || clinic.ServicePointID != nil {
+		t.Fatalf("unmapped clinic step = %+v, want service point nil", clinic)
 	}
 }
 
-// A later event re-reads the snapshot, so an HIS-side transition shows up in
-// the projection — the event "drives" the journey.
-func TestApplyHISEventReconcilesStatus(t *testing.T) {
+// A later event re-reads the snapshot, so an HIS-side fact shows up in the
+// plan on replan.
+func TestApplyHISEventReplansOnNewFacts(t *testing.T) {
 	repo := newFakeRepo()
 	latest := snapshot()
 	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": latest}}
@@ -271,21 +237,72 @@ func TestApplyHISEventReconcilesStatus(t *testing.T) {
 		t.Fatalf("first apply: %v", err)
 	}
 
-	latest.Steps[1].Status = "STARTED"
-	latest.Steps[2].Status = "READY"
-	next := his.Event{
-		EventID: "EVT-000002", VisitID: "VISIT-001", PatientRef: "PAT-001",
-		Type: his.EventServiceStarted,
+	latest.Orders = []his.Order{
+		{OrderRef: "ORD-1", OrderType: his.OrderTypeLab, OrderedByClinic: "MED", OrderedAt: openedAt.Add(-time.Hour), Status: his.OrderPlaced},
 	}
+	hisClient.getVisits["VISIT-001"] = latest
+	next := his.Event{EventID: "EVT-000002", VisitID: "VISIT-001", PatientRef: "PAT-001", Type: his.EventOrderPlaced}
 	if err := svc.ApplyHISEvent(context.Background(), next); err != nil {
 		t.Fatalf("second apply: %v", err)
 	}
 
-	got, _ := repo.visits["VISIT-001"]
-	if got.Steps[1].Status != "STARTED" || got.Steps[2].Status != "READY" {
-		t.Fatalf("statuses = %s/%s, want STARTED/READY after reconcile",
-			got.Steps[1].Status, got.Steps[2].Status)
+	got := repo.visits["VISIT-001"]
+	if _, ok := stepByKey(got.Steps, "LAB:1"); !ok {
+		t.Fatalf("expected a LAB step after the order.placed fact, got %+v", got.Steps)
 	}
+}
+
+// encounter.completed closes the visit's current round at that clinic.
+func TestApplyHISEventEncounterCompletedClosesRound(t *testing.T) {
+	repo := newFakeRepo()
+	visit := snapshot()
+	visit.Orders = []his.Order{
+		{OrderRef: "ORD-1", OrderType: his.OrderTypeLab, OrderedByClinic: "MED", OrderedAt: openedAt.Add(10 * time.Minute), Status: his.OrderPlaced},
+	}
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": visit}}
+	svc := newTestService(hisClient, repo)
+
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Staff starts the clinic round, then the doctor orders a mid-visit lab
+	// (round 2 gets tentatively inferred) before confirming no return is
+	// needed.
+	if _, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
+		TransitionCommand{CommandID: "C1", To: CommandToStarted}, "staff-web"); err != nil {
+		t.Fatalf("start clinic: %v", err)
+	}
+	view, err := svc.GetJourney(context.Background(), "VISIT-001")
+	if err != nil {
+		t.Fatalf("GetJourney: %v", err)
+	}
+	if _, ok := stepByViewKey(view.Steps, "CLINIC:MED:2"); !ok {
+		t.Fatalf("expected an inferred round 2 before closing, steps=%+v", view.Steps)
+	}
+
+	closeEvent := his.Event{
+		EventID: "EVT-000003", VisitID: "VISIT-001", PatientRef: "PAT-001", Type: his.EventEncounterCompleted,
+		Payload: map[string]any{"clinicCode": "MED"},
+	}
+	if err := svc.ApplyHISEvent(context.Background(), closeEvent); err != nil {
+		t.Fatalf("encounter.completed: %v", err)
+	}
+	view, _ = svc.GetJourney(context.Background(), "VISIT-001")
+	if _, ok := stepByViewKey(view.Steps, "CLINIC:MED:2"); ok {
+		t.Fatalf("round 2 should be dropped after encounter.completed, steps=%+v", view.Steps)
+	}
+	if s, _ := stepByViewKey(view.Steps, "CLINIC:MED:1"); s.Status != StepCompleted {
+		t.Fatalf("round 1 after close = %s, want COMPLETED", s.Status)
+	}
+}
+
+func stepByViewKey(steps []StepView, key string) (StepView, bool) {
+	for _, s := range steps {
+		if s.StepKey == key {
+			return s, true
+		}
+	}
+	return StepView{}, false
 }
 
 // An event for a visit the HIS no longer knows is recorded as applied so the
@@ -336,19 +353,17 @@ func TestGetVisitNotFound(t *testing.T) {
 	}
 }
 
-// #18 AC2/AC3: the view orders steps by sequence and resolves current (first
-// STARTED) and next (first READY) deterministically, with the bound service
-// point resolved for display and unmapped steps kept explicitly unbound.
-func TestGetJourneyOrdersStepsAndResolvesCurrentNext(t *testing.T) {
+// The view orders steps by sequence, lists every READY step as actionable,
+// and recommends the first of them.
+func TestGetJourneyResolvesActionableAndRecommended(t *testing.T) {
 	repo := newFakeRepo()
-	lab := "SP-LAB"
-	// Stored out of order: the view must sort by sequence, not trust insertion.
+	sp := "SP-CLINIC:MED"
 	repo.visits["VISIT-001"] = Visit{
-		VisitID: "VISIT-001", PatientRef: "PAT-001", Status: "ACTIVE",
+		VisitID: "VISIT-001", PatientRef: "PAT-001", Status: his.VisitActive,
 		Steps: []Step{
-			{Sequence: 3, ServiceCode: "MYSTERY", Status: "READY"},
-			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: &lab},
-			{Sequence: 2, ServiceCode: "LAB", Status: "STARTED", ServicePointID: &lab},
+			{StepKey: "REGISTRATION", Sequence: 1, Kind: KindRegistration, Status: StepCompleted},
+			{StepKey: "CLINIC:MED:1", Sequence: 2, Kind: KindClinic, ClinicCode: strPtr("MED"), Round: intPtr(1), Status: StepReady, ServicePointID: &sp},
+			{StepKey: "CASHIER", Sequence: 3, Kind: KindCashier, Status: StepPending},
 		},
 	}
 	svc := newTestService(&fakeHIS{}, repo)
@@ -357,33 +372,30 @@ func TestGetJourneyOrdersStepsAndResolvesCurrentNext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetJourney: %v", err)
 	}
-	if got.Steps[0].Sequence != 1 || got.Steps[1].Sequence != 2 || got.Steps[2].Sequence != 3 {
-		t.Fatalf("step order = %d,%d,%d, want 1,2,3",
-			got.Steps[0].Sequence, got.Steps[1].Sequence, got.Steps[2].Sequence)
+	if len(got.Steps) != 3 || got.Steps[0].Sequence != 1 || got.Steps[2].Sequence != 3 {
+		t.Fatalf("steps = %+v, want 3 ordered by sequence", got.Steps)
 	}
 	if got.Completed {
 		t.Fatal("completed = true, want false for an ACTIVE visit")
 	}
-	if got.Current == nil || got.Current.Sequence != 2 || got.Current.ServicePoint == nil || got.Current.ServicePoint.ID != "SP-LAB" {
-		t.Fatalf("current = %+v, want LAB (seq 2) resolved to SP-LAB", got.Current)
+	if len(got.Actionable) != 1 || got.Actionable[0].StepKey != "CLINIC:MED:1" {
+		t.Fatalf("actionable = %+v, want just CLINIC:MED:1", got.Actionable)
 	}
-	if got.Next == nil || got.Next.Sequence != 3 || got.Next.ServiceCode != "MYSTERY" {
-		t.Fatalf("next = %+v, want the unmapped READY step at seq 3", got.Next)
-	}
-	if got.Next.ServicePointID != nil || got.Next.ServicePoint != nil {
-		t.Fatalf("unmapped next = %+v, want explicit nil binding", got.Next)
+	if got.Recommended == nil || got.Recommended.StepKey != "CLINIC:MED:1" || got.Recommended.ServicePoint == nil {
+		t.Fatalf("recommended = %+v, want CLINIC:MED:1 resolved to its service point", got.Recommended)
 	}
 }
 
-// #18 AC4: a finished visit reports completed=true with no actionable step.
+func strPtr(v string) *string { return &v }
+
+// A finished visit reports completed=true with no actionable step.
 func TestGetJourneyCompletedVisitIsExplicit(t *testing.T) {
 	repo := newFakeRepo()
-	lab := "SP-LAB"
 	repo.visits["VISIT-001"] = Visit{
-		VisitID: "VISIT-001", PatientRef: "PAT-001", Status: "COMPLETED",
+		VisitID: "VISIT-001", PatientRef: "PAT-001", Status: his.VisitCompleted,
 		Steps: []Step{
-			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: &lab},
-			{Sequence: 2, ServiceCode: "LAB", Status: "COMPLETED", ServicePointID: &lab},
+			{StepKey: "REGISTRATION", Sequence: 1, Kind: KindRegistration, Status: StepCompleted},
+			{StepKey: "CASHIER", Sequence: 2, Kind: KindCashier, Status: StepCompleted},
 		},
 	}
 	svc := newTestService(&fakeHIS{}, repo)
@@ -392,16 +404,15 @@ func TestGetJourneyCompletedVisitIsExplicit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetJourney: %v", err)
 	}
-	if got.Status != "COMPLETED" || !got.Completed {
+	if got.Status != his.VisitCompleted || !got.Completed {
 		t.Fatalf("status/completed = %s/%v, want COMPLETED/true", got.Status, got.Completed)
 	}
-	if got.Current != nil || got.Next != nil {
-		t.Fatalf("current/next = %+v/%+v, want nil/nil on a completed visit", got.Current, got.Next)
+	if len(got.Actionable) != 0 || got.Recommended != nil {
+		t.Fatalf("actionable/recommended = %+v/%+v, want empty/nil on a completed visit", got.Actionable, got.Recommended)
 	}
 }
 
-// A visit the poller has not projected yet has no journey to serve (#18
-// design: no read-through fallback — 404 until the projection exists).
+// A visit the poller has not projected yet has no journey to serve.
 func TestGetJourneyNotFoundWhenNotProjected(t *testing.T) {
 	svc := newTestService(&fakeHIS{}, newFakeRepo())
 	if _, err := svc.GetJourney(context.Background(), "NOPE"); !errors.Is(err, ErrNotFound) {
@@ -409,25 +420,22 @@ func TestGetJourneyNotFoundWhenNotProjected(t *testing.T) {
 	}
 }
 
-// #37 AC1–AC3: the staff monitor lists every projected visit with the same
-// deterministic current/next resolution as the single-journey read, freshest
-// sync first.
+// #37: the staff monitor lists every projected visit, freshest sync first.
 func TestListJourneysResolvesEveryVisit(t *testing.T) {
 	repo := newFakeRepo()
-	lab := "SP-LAB"
 	repo.visits["VISIT-A"] = Visit{
-		VisitID: "VISIT-A", PatientRef: "PAT-A", Status: "ACTIVE",
+		VisitID: "VISIT-A", PatientRef: "PAT-A", Status: his.VisitActive,
 		SyncedAt: time.Now().Add(-time.Minute),
 		Steps: []Step{
-			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: &lab},
-			{Sequence: 2, ServiceCode: "LAB", Status: "STARTED", ServicePointID: &lab},
+			{StepKey: "REGISTRATION", Sequence: 1, Kind: KindRegistration, Status: StepCompleted},
+			{StepKey: "CLINIC:MED:1", Sequence: 2, Kind: KindClinic, Status: StepStarted},
 		},
 	}
 	repo.visits["VISIT-B"] = Visit{
-		VisitID: "VISIT-B", PatientRef: "PAT-B", Status: "COMPLETED",
+		VisitID: "VISIT-B", PatientRef: "PAT-B", Status: his.VisitCompleted,
 		SyncedAt: time.Now(),
 		Steps: []Step{
-			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: &lab},
+			{StepKey: "REGISTRATION", Sequence: 1, Kind: KindRegistration, Status: StepCompleted},
 		},
 	}
 	svc := newTestService(&fakeHIS{}, repo)
@@ -441,12 +449,6 @@ func TestListJourneysResolvesEveryVisit(t *testing.T) {
 	}
 	if got[0].VisitID != "VISIT-B" || got[1].VisitID != "VISIT-A" {
 		t.Fatalf("order = %s then %s, want freshest (VISIT-B) first", got[0].VisitID, got[1].VisitID)
-	}
-	if !got[0].Completed || got[0].Current != nil || got[0].Next != nil {
-		t.Fatalf("completed visit = %+v, want completed with no current/next", got[0])
-	}
-	if got[1].Current == nil || got[1].Current.Sequence != 2 || got[1].Current.ServicePoint == nil {
-		t.Fatalf("active visit current = %+v, want LAB at sequence 2 resolved to SP-LAB", got[1].Current)
 	}
 	if !repo.inTxMarker {
 		t.Fatal("list reads did not run inside a transaction")
@@ -466,120 +468,165 @@ func TestListJourneysEmptyIsArray(t *testing.T) {
 	}
 }
 
-// #19 AC1/AC3: an allowed transition is forwarded, the projection is
-// refreshed synchronously, and completing a step recomputes next — the
-// following PENDING step becomes the next READY one in the same response.
-func TestTransitionStepAllowedAndRecomputesNext(t *testing.T) {
+// A step transition is applied locally (never forwarded to the HIS) and the
+// plan is recomputed so downstream gates react immediately.
+func TestTransitionStepAppliesLocallyAndReplans(t *testing.T) {
 	repo := newFakeRepo()
 	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
 	svc := newTestService(hisClient, repo)
 	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
-		t.Fatalf("seed projection: %v", err)
-	}
-	repo.audits = nil
-
-	view, err := svc.TransitionStep(context.Background(), "VISIT-001", 2,
-		his.TransitionCommand{CommandID: "CMD-1", To: his.CommandToStarted}, "staff-web")
-	if err != nil {
-		t.Fatalf("start LAB: %v", err)
-	}
-	if view.Current == nil || view.Current.Sequence != 2 || view.Current.Status != "STARTED" {
-		t.Fatalf("current after start = %+v, want LAB STARTED", view.Current)
-	}
-	if view.Next != nil {
-		t.Fatalf("next after start = %+v, want nil (nothing READY yet)", view.Next)
+		t.Fatalf("seed: %v", err)
 	}
 
-	view, err = svc.TransitionStep(context.Background(), "VISIT-001", 2,
-		his.TransitionCommand{CommandID: "CMD-2", To: his.CommandToCompleted}, "staff-web")
+	view, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
+		TransitionCommand{CommandID: "CMD-1", To: CommandToStarted}, "staff-web")
 	if err != nil {
-		t.Fatalf("complete LAB: %v", err)
+		t.Fatalf("start clinic: %v", err)
 	}
-	if view.Current != nil {
-		t.Fatalf("current after complete = %+v, want nil", view.Current)
+	if s, ok := stepByViewKey(view.Steps, "CLINIC:MED:1"); !ok || s.Status != StepStarted {
+		t.Fatalf("clinic after start = %+v, want STARTED", s)
 	}
-	if view.Next == nil || view.Next.Sequence != 3 || view.Next.Status != "READY" {
-		t.Fatalf("next after complete = %+v, want MYSTERY READY at sequence 3", view.Next)
+
+	view, err = svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
+		TransitionCommand{CommandID: "CMD-2", To: CommandToCompleted}, "staff-web")
+	if err != nil {
+		t.Fatalf("complete clinic: %v", err)
 	}
-	if view.Completed {
-		t.Fatal("completed = true, want false while steps remain open")
+	if s, ok := stepByViewKey(view.Steps, "CASHIER"); !ok || s.Status != StepReady {
+		t.Fatalf("cashier after clinic completed = %+v, want READY", s)
+	}
+	if len(hisClient.getVisits) == 0 {
+		t.Fatal("sanity: fake HIS visits missing")
 	}
 }
 
-// #19 AC2: a transition the HIS rejects (illegal/out-of-order) surfaces as a
-// Conflict and leaves neither audit nor projection writes behind.
-func TestTransitionStepRejectsIllegalFromHIS(t *testing.T) {
+// A transition from a terminal status is rejected.
+func TestTransitionStepRejectsFromTerminal(t *testing.T) {
 	repo := newFakeRepo()
-	hisClient := &fakeHIS{
-		getVisits:     map[string]his.Visit{"VISIT-001": snapshot()},
-		transitionErr: apperr.New(apperr.KindConflict, "step 1 is COMPLETED and cannot transition to STARTED"),
-	}
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
 	svc := newTestService(hisClient, repo)
 	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
-		t.Fatalf("seed projection: %v", err)
+		t.Fatalf("seed: %v", err)
 	}
-	repo.audits = nil
-	upserts := repo.upserts
 
-	_, err := svc.TransitionStep(context.Background(), "VISIT-001", 1,
-		his.TransitionCommand{CommandID: "CMD-X", To: his.CommandToStarted}, "staff-web")
+	_, err := svc.TransitionStep(context.Background(), "VISIT-001", "REGISTRATION",
+		TransitionCommand{CommandID: "CMD-X", To: CommandToStarted}, "staff-web")
 	if apperr.KindOf(err) != apperr.KindConflict {
-		t.Fatalf("error = %v, want KindConflict", err)
-	}
-	if len(repo.audits) != 0 || repo.upserts != upserts {
-		t.Fatalf("audits = %d, upserts = %d (want 0 additional) after a rejected command", len(repo.audits), repo.upserts-upserts)
+		t.Fatalf("error = %v, want KindConflict (REGISTRATION is already COMPLETED)", err)
 	}
 }
 
-// An unknown target status never reaches the HIS.
-func TestTransitionStepUnknownTargetRejectedLocally(t *testing.T) {
+// STARTED is rejected on a step that is not yet READY.
+func TestTransitionStepRejectsStartBeforeReady(t *testing.T) {
+	repo := newFakeRepo()
+	visit := snapshot()
+	visit.Orders = []his.Order{
+		{OrderRef: "ORD-1", OrderType: his.OrderTypeLab, OrderedByClinic: "MED", OrderedAt: openedAt.Add(-time.Hour), Status: his.OrderPlaced},
+	}
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": visit}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	_, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
+		TransitionCommand{CommandID: "CMD-Y", To: CommandToStarted}, "staff-web")
+	if apperr.KindOf(err) != apperr.KindConflict {
+		t.Fatalf("error = %v, want KindConflict (clinic still PENDING behind the lab)", err)
+	}
+}
+
+// An unknown target status is rejected before touching the repo.
+func TestTransitionStepUnknownTargetRejected(t *testing.T) {
 	repo := newFakeRepo()
 	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
 	svc := newTestService(hisClient, repo)
 
-	_, err := svc.TransitionStep(context.Background(), "VISIT-001", 2,
-		his.TransitionCommand{To: "PAUSED"}, "staff-web")
+	_, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
+		TransitionCommand{To: "PAUSED"}, "staff-web")
 	if apperr.KindOf(err) != apperr.KindInvalid {
 		t.Fatalf("error = %v, want KindInvalid", err)
 	}
-	if len(hisClient.transitionCmds) != 0 {
-		t.Fatalf("HIS calls = %d, want 0", len(hisClient.transitionCmds))
-	}
 }
 
-func TestTransitionStepUnknownVisitIsNotFound(t *testing.T) {
-	svc := newTestService(&fakeHIS{getVisits: map[string]his.Visit{}}, newFakeRepo())
-	_, err := svc.TransitionStep(context.Background(), "NOPE", 1,
-		his.TransitionCommand{CommandID: "CMD-V", To: his.CommandToStarted}, "staff-web")
+func TestTransitionStepUnknownStepIsNotFound(t *testing.T) {
+	repo := newFakeRepo()
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	_, err := svc.TransitionStep(context.Background(), "VISIT-001", "NOPE",
+		TransitionCommand{CommandID: "CMD-V", To: CommandToStarted}, "staff-web")
 	if apperr.KindOf(err) != apperr.KindNotFound {
 		t.Fatalf("error = %v, want KindNotFound", err)
 	}
 }
 
-// #19 AC4: every forwarded command lands in the audit trail with its
-// idempotency key and source; the key is generated when the client omits it.
+// Every transition lands in the audit trail with its idempotency key and
+// source; the key is generated when the client omits it.
 func TestTransitionStepAuditsCommand(t *testing.T) {
 	repo := newFakeRepo()
 	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
 	svc := newTestService(hisClient, repo)
 	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
-		t.Fatalf("seed projection: %v", err)
+		t.Fatalf("seed: %v", err)
 	}
-	repo.audits = nil
 
-	if _, err := svc.TransitionStep(context.Background(), "VISIT-001", 2,
-		his.TransitionCommand{To: his.CommandToStarted}, "patient-web"); err != nil {
+	if _, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
+		TransitionCommand{To: CommandToStarted}, "patient-web"); err != nil {
 		t.Fatalf("transition without commandId: %v", err)
 	}
 	if len(repo.audits) != 1 {
 		t.Fatalf("audits = %d, want 1", len(repo.audits))
 	}
 	audit := repo.audits[0]
-	if audit.CommandID == "" || audit.VisitID != "VISIT-001" || audit.Sequence != 2 ||
-		audit.ToStatus != his.CommandToStarted || audit.Source != "patient-web" {
-		t.Fatalf("audit = %+v, want generated key, VISIT-001 seq 2 STARTED from patient-web", audit)
+	if audit.CommandID == "" || audit.VisitID != "VISIT-001" || audit.StepKey != "CLINIC:MED:1" ||
+		audit.ToStatus != CommandToStarted || audit.Source != "patient-web" {
+		t.Fatalf("audit = %+v, want generated key, VISIT-001 CLINIC:MED:1 STARTED from patient-web", audit)
 	}
-	if len(hisClient.transitionCmds) != 1 || hisClient.transitionCmds[0].CommandID != audit.CommandID {
-		t.Fatalf("HIS command = %+v, want it keyed by the generated id", hisClient.transitionCmds)
+}
+
+// The staff override drops a not-yet-started inferred return even without an
+// encounter.completed fact.
+func TestCloseRoundOverride(t *testing.T) {
+	repo := newFakeRepo()
+	visit := snapshot()
+	visit.Orders = []his.Order{
+		{OrderRef: "ORD-1", OrderType: his.OrderTypeLab, OrderedByClinic: "MED", OrderedAt: openedAt.Add(10 * time.Minute), Status: his.OrderPlaced},
+	}
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": visit}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
+		TransitionCommand{CommandID: "C1", To: CommandToStarted}, "staff-web"); err != nil {
+		t.Fatalf("start clinic: %v", err)
+	}
+	view, _ := svc.GetJourney(context.Background(), "VISIT-001")
+	if _, ok := stepByViewKey(view.Steps, "CLINIC:MED:2"); !ok {
+		t.Fatal("expected round 2 to be inferred before the override")
+	}
+
+	view, err := svc.CloseRound(context.Background(), "VISIT-001", "MED")
+	if err != nil {
+		t.Fatalf("CloseRound: %v", err)
+	}
+	if _, ok := stepByViewKey(view.Steps, "CLINIC:MED:2"); ok {
+		t.Fatal("round 2 should be dropped after the close-round override")
+	}
+}
+
+func TestCloseRoundNoOpenRoundIsNotFound(t *testing.T) {
+	repo := newFakeRepo()
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	_, err := svc.CloseRound(context.Background(), "VISIT-001", "SURG")
+	if !errors.Is(err, ErrNoOpenRound) {
+		t.Fatalf("error = %v, want ErrNoOpenRound", err)
 	}
 }

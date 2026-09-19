@@ -28,14 +28,13 @@ import (
 	servicepointpostgres "carepath/apps/api/internal/servicepoint/postgres"
 	"carepath/apps/api/internal/session"
 	sessionpostgres "carepath/apps/api/internal/session/postgres"
-	"carepath/apps/api/internal/visit"
 )
 
 // @title			CarePath API
 // @version		1.0.0
 // @description	Patient journey and indoor navigation API above the HIS.
-// @description	Serves the normalized visit view with the next actionable
-// @description	step and its service point.
+// @description	Serves the CarePath-derived journey plan (ADR-0009) with
+// @description	every actionable step resolved to its service point.
 //
 // @BasePath	/
 func main() {
@@ -64,7 +63,6 @@ func run(ctx context.Context, log *slog.Logger) error {
 	hisClient := httpclient.New(envOrDefault("HIS_BASE_URL", "http://localhost:8090"), nil)
 	hospitalMap := hospitalmap.NewService(hospitalmappostgres.New(database))
 	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), hospitalMap)
-	visits := visit.NewService(hisClient, servicePoints, database)
 
 	// Inbound HIS boundary (#21): poll the canonical event feed and keep the
 	// journey projection in sync with the system of record.
@@ -119,7 +117,6 @@ func run(ctx context.Context, log *slog.Logger) error {
 		return c.Type("html").SendString(swaggerUIPage)
 	})
 
-	visit.NewHandler(visits).Register(app.Group("/api/v1"))
 	session.NewHandler(sessions).Register(app.Group("/api/v1"))
 	journey.NewHandler(journeys).Register(app.Group("/api/v1"))
 	servicepoint.NewHandler(servicePoints).Register(app.Group("/api/v1"))

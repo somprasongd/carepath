@@ -87,7 +87,7 @@ const docTemplate = `{
         },
         "/api/v1/journeys/{visitId}": {
             "get": {
-                "description": "Returns the CarePath-owned journey projection: steps ordered by sequence, each resolved to its service point, with the deterministic current (first STARTED) and next (first READY) step. A completed visit is reported with completed=true and no current/next.",
+                "description": "Returns the CarePath-derived journey plan (ADR-0009): steps in display order, each resolved to its service point, with every currently-actionable step and CarePath's recommendation among them. A completed visit is reported with completed=true and no actionable steps.",
                 "produces": [
                     "application/json"
                 ],
@@ -126,19 +126,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/journeys/{visitId}/steps/{sequence}/transition": {
+        "/api/v1/journeys/{visitId}/clinics/{clinicCode}/close-round": {
             "post": {
-                "description": "Forwards a step-status command to the HIS (the system of record, ADR-0008) and returns the refreshed journey with the recalculated next step. Illegal or out-of-order transitions are rejected by the HIS with 409. commandId is an optional idempotency key; source names the acting surface for the audit trail.",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Staff override (ADR-0009 §4): confirms the visit's latest round at this clinic is finished, dropping any not-yet-started inferred return, without waiting for the HIS's encounter.completed fact.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "journeys"
                 ],
-                "summary": "Transition one service step",
+                "summary": "Close a clinic round",
                 "parameters": [
                     {
                         "type": "string",
@@ -148,9 +145,60 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "Step sequence",
-                        "name": "sequence",
+                        "type": "string",
+                        "description": "Clinic code",
+                        "name": "clinicCode",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/journey.View"
+                        }
+                    },
+                    "404": {
+                        "description": "visit not found, journey not projected, or no open round at this clinic",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/journeys/{visitId}/steps/{stepKey}/transition": {
+            "post": {
+                "description": "Staff command that sets one step's status directly (ADR-0009 — CarePath owns step status; never forwarded to the HIS) and returns the refreshed journey with the plan recomputed. commandId is an optional idempotency key; source names the acting surface for the audit trail.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "journeys"
+                ],
+                "summary": "Transition one step",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit ID",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Step key",
+                        "name": "stepKey",
                         "in": "path",
                         "required": true
                     },
@@ -276,7 +324,7 @@ const docTemplate = `{
         },
         "/api/v1/staff/visits": {
             "get": {
-                "description": "Every projected journey, freshest sync first — the same per-visit shape as the single-journey read (ordered steps, resolved service points, deterministic current/next). Reads the CarePath projection only; a visit not yet ingested is absent until its first event lands.",
+                "description": "Every projected journey, freshest sync first — the same per-visit shape as the single-journey read. Reads the CarePath projection only; a visit not yet ingested is absent until its first fact lands.",
                 "produces": [
                     "application/json"
                 ],
@@ -296,112 +344,6 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/visits/{visitId}": {
-            "get": {
-                "description": "Returns the HIS visit enriched with the next actionable step and its service point.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "visits"
-                ],
-                "summary": "Get normalized visit view",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Visit ID",
-                        "name": "visitId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/visit.VisitView"
-                        }
-                    },
-                    "400": {
-                        "description": "invalid input",
-                        "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "visit not found",
-                        "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "upstream HIS error",
-                        "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/visits/{visitId}/next": {
-            "get": {
-                "description": "Returns the first READY step of the visit resolved to its service point.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "visits"
-                ],
-                "summary": "Get next actionable step",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Visit ID",
-                        "name": "visitId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/visit.NextStep"
-                        }
-                    },
-                    "400": {
-                        "description": "invalid input",
-                        "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "visit not found or no next actionable step",
-                        "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/httpx.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "upstream HIS error",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }
@@ -431,20 +373,6 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "his.VisitStep": {
-            "type": "object",
-            "properties": {
-                "sequence": {
-                    "type": "integer"
-                },
-                "serviceCode": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                }
-            }
-        },
         "hospitalmap.Floor": {
             "type": "object",
             "properties": {
@@ -506,11 +434,23 @@ const docTemplate = `{
         "journey.StepView": {
             "type": "object",
             "properties": {
-                "sequence": {
+                "clinicCode": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "orderRefs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "round": {
                     "type": "integer"
                 },
-                "serviceCode": {
-                    "type": "string"
+                "sequence": {
+                    "type": "integer"
                 },
                 "servicePoint": {
                     "$ref": "#/definitions/servicepoint.ServicePoint"
@@ -520,23 +460,32 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                },
+                "stepKey": {
+                    "type": "string"
                 }
             }
         },
         "journey.View": {
             "type": "object",
             "properties": {
+                "actionable": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/journey.StepView"
+                    }
+                },
                 "completed": {
                     "type": "boolean"
                 },
-                "current": {
-                    "$ref": "#/definitions/journey.StepView"
-                },
-                "next": {
-                    "$ref": "#/definitions/journey.StepView"
+                "patientName": {
+                    "type": "string"
                 },
                 "patientRef": {
                     "type": "string"
+                },
+                "recommended": {
+                    "$ref": "#/definitions/journey.StepView"
                 },
                 "status": {
                     "type": "string"
@@ -640,43 +589,6 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
-        },
-        "visit.NextStep": {
-            "type": "object",
-            "properties": {
-                "sequence": {
-                    "type": "integer"
-                },
-                "servicePoint": {
-                    "$ref": "#/definitions/servicepoint.ServicePoint"
-                },
-                "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "visit.VisitView": {
-            "type": "object",
-            "properties": {
-                "next": {
-                    "$ref": "#/definitions/visit.NextStep"
-                },
-                "patientRef": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "steps": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/his.VisitStep"
-                    }
-                },
-                "visitId": {
-                    "type": "string"
-                }
-            }
         }
     }
 }`
@@ -688,7 +600,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "CarePath API",
-	Description:      "Patient journey and indoor navigation API above the HIS.\nServes the normalized visit view with the next actionable\nstep and its service point.",
+	Description:      "Patient journey and indoor navigation API above the HIS.\nServes the CarePath-derived journey plan (ADR-0009) with\nevery actionable step resolved to its service point.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

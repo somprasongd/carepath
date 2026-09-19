@@ -37,6 +37,7 @@ func cleanupJourney(t *testing.T, database *db.DB, visitID string) {
 }
 
 func sp(id string) *string { return &id }
+func rnd(v int) *int       { return &v }
 
 func TestUpsertAndGetRoundtrip(t *testing.T) {
 	database := newDB(t)
@@ -45,12 +46,10 @@ func TestUpsertAndGetRoundtrip(t *testing.T) {
 	ctx := context.Background()
 
 	visit := journey.Visit{
-		VisitID:    "TEST-JOURNEY-1",
-		PatientRef: "PAT-1",
-		Status:     "ACTIVE",
+		VisitID: "TEST-JOURNEY-1", PatientRef: "PAT-1", PatientName: "ทดสอบ", Status: "ACTIVE",
 		Steps: []journey.Step{
-			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: sp("SP-REG")},
-			{Sequence: 2, ServiceCode: "MYSTERY", Status: "READY"}, // unmapped: nil binding
+			{StepKey: "REGISTRATION", Sequence: 1, Kind: journey.KindRegistration, Status: "COMPLETED", ServicePointID: sp("SP-REG")},
+			{StepKey: "CLINIC:MED:1", Sequence: 2, Kind: journey.KindClinic, ClinicCode: sp("MED"), Round: rnd(1), Status: "READY"}, // unmapped: nil binding
 		},
 	}
 	if err := repo.UpsertVisit(ctx, visit); err != nil {
@@ -61,8 +60,8 @@ func TestUpsertAndGetRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetVisit: %v", err)
 	}
-	if got.Status != "ACTIVE" || len(got.Steps) != 2 || got.SyncedAt.IsZero() {
-		t.Fatalf("roundtrip = %+v, want ACTIVE 2 steps with synced_at set", got)
+	if got.Status != "ACTIVE" || got.PatientName != "ทดสอบ" || len(got.Steps) != 2 || got.SyncedAt.IsZero() {
+		t.Fatalf("roundtrip = %+v, want ACTIVE 2 steps with patient name and synced_at set", got)
 	}
 	if got.Steps[0].ServicePointID == nil || *got.Steps[0].ServicePointID != "SP-REG" {
 		t.Fatalf("step 1 service point = %v, want SP-REG", got.Steps[0].ServicePointID)
@@ -70,9 +69,12 @@ func TestUpsertAndGetRoundtrip(t *testing.T) {
 	if got.Steps[1].ServicePointID != nil {
 		t.Fatalf("unmapped step service point = %v, want nil", got.Steps[1].ServicePointID)
 	}
+	if got.Steps[1].ClinicCode == nil || *got.Steps[1].ClinicCode != "MED" || got.Steps[1].Round == nil || *got.Steps[1].Round != 1 {
+		t.Fatalf("clinic step clinic/round = %v/%v, want MED/1", got.Steps[1].ClinicCode, got.Steps[1].Round)
+	}
 }
 
-// Replaying the same snapshot — and later a shorter one — must neither
+// Replaying the same plan — and later a shorter one — must neither
 // duplicate steps nor keep stale ones (delete+insert replace semantics).
 func TestUpsertIsIdempotentAndReplacesSteps(t *testing.T) {
 	database := newDB(t)
@@ -83,9 +85,9 @@ func TestUpsertIsIdempotentAndReplacesSteps(t *testing.T) {
 	full := journey.Visit{
 		VisitID: "TEST-JOURNEY-2", PatientRef: "PAT-2", Status: "ACTIVE",
 		Steps: []journey.Step{
-			{Sequence: 1, ServiceCode: "LAB", Status: "READY", ServicePointID: sp("SP-LAB")},
-			{Sequence: 2, ServiceCode: "PHARMACY", Status: "PENDING"},
-			{Sequence: 3, ServiceCode: "EXTRA", Status: "PENDING"},
+			{StepKey: "LAB:1", Sequence: 1, Kind: journey.KindLab, Status: "READY", ServicePointID: sp("SP-LAB"), OrderRefs: []string{"ORD-1"}},
+			{StepKey: "PHARMACY", Sequence: 2, Kind: journey.KindPharmacy, Status: "PENDING"},
+			{StepKey: "EXTRA", Sequence: 3, Kind: journey.KindCashier, Status: "PENDING"},
 		},
 	}
 	for i := 0; i < 2; i++ {
@@ -96,6 +98,9 @@ func TestUpsertIsIdempotentAndReplacesSteps(t *testing.T) {
 	got, _ := repo.GetVisit(ctx, "TEST-JOURNEY-2")
 	if len(got.Steps) != 3 {
 		t.Fatalf("steps after replay = %d, want 3 (no duplicates)", len(got.Steps))
+	}
+	if len(got.Steps[0].OrderRefs) != 1 || got.Steps[0].OrderRefs[0] != "ORD-1" {
+		t.Fatalf("order refs = %v, want [ORD-1]", got.Steps[0].OrderRefs)
 	}
 
 	shorter := full
@@ -153,14 +158,14 @@ func TestListVisitsGroupsStepsNewestFirst(t *testing.T) {
 	older := journey.Visit{
 		VisitID: "TEST-JOURNEY-L1", PatientRef: "PAT-L1", Status: "ACTIVE",
 		Steps: []journey.Step{
-			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: sp("SP-REG")},
-			{Sequence: 2, ServiceCode: "MYSTERY", Status: "READY"}, // unmapped: nil binding
+			{StepKey: "REGISTRATION", Sequence: 1, Kind: journey.KindRegistration, Status: "COMPLETED", ServicePointID: sp("SP-REG")},
+			{StepKey: "CLINIC:MED:1", Sequence: 2, Kind: journey.KindClinic, Status: "READY"}, // unmapped: nil binding
 		},
 	}
 	newer := journey.Visit{
 		VisitID: "TEST-JOURNEY-L2", PatientRef: "PAT-L2", Status: "COMPLETED",
 		Steps: []journey.Step{
-			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: sp("SP-REG")},
+			{StepKey: "REGISTRATION", Sequence: 1, Kind: journey.KindRegistration, Status: "COMPLETED", ServicePointID: sp("SP-REG")},
 		},
 	}
 	if err := repo.UpsertVisit(ctx, older); err != nil {
@@ -202,9 +207,8 @@ func TestListVisitsGroupsStepsNewestFirst(t *testing.T) {
 	}
 }
 
-// #19 AC4: commands land in the audit table with timestamp and source, and a
-// replayed commandId (retry after a failed local transaction) never
-// duplicates the row.
+// #19 AC4 (amended by ADR-0009): commands land in the audit table keyed by
+// stepKey, and a replayed commandId never duplicates the row.
 func TestInsertCommandAuditDedupesByCommandID(t *testing.T) {
 	database := newDB(t)
 	repo := New(database)
@@ -216,7 +220,7 @@ func TestInsertCommandAuditDedupesByCommandID(t *testing.T) {
 
 	audit := journey.CommandAudit{
 		CommandID: "TEST-CMD-1", VisitID: "TEST-JOURNEY-5",
-		Sequence: 2, ToStatus: "STARTED", Source: "staff-web",
+		StepKey: "CLINIC:MED:1", ToStatus: "STARTED", Source: "staff-web",
 	}
 	for i := 0; i < 2; i++ {
 		if err := repo.InsertCommandAudit(ctx, audit); err != nil {
@@ -239,6 +243,31 @@ func TestInsertCommandAuditDedupesByCommandID(t *testing.T) {
 	}
 }
 
+// The close-round table (ADR-0009 §4) is durable per visit/stepKey and
+// idempotent.
+func TestCloseRoundIsDurableAndIdempotent(t *testing.T) {
+	database := newDB(t)
+	cleanupJourney(t, database, "TEST-JOURNEY-6")
+	repo := New(database)
+	ctx := context.Background()
+
+	if err := repo.UpsertVisit(ctx, journey.Visit{VisitID: "TEST-JOURNEY-6", PatientRef: "PAT-6", Status: "ACTIVE"}); err != nil {
+		t.Fatalf("seed visit: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := repo.CloseRound(ctx, "TEST-JOURNEY-6", "CLINIC:MED:1"); err != nil {
+			t.Fatalf("CloseRound %d: %v", i, err)
+		}
+	}
+	closed, err := repo.ClosedRounds(ctx, "TEST-JOURNEY-6")
+	if err != nil {
+		t.Fatalf("ClosedRounds: %v", err)
+	}
+	if !closed["CLINIC:MED:1"] || len(closed) != 1 {
+		t.Fatalf("closed = %v, want exactly {CLINIC:MED:1: true}", closed)
+	}
+}
+
 // Projection writes and the applied-event marker must share one transaction:
 // a failure inside the transaction leaves neither behind.
 func TestProjectionRollsBackAtomically(t *testing.T) {
@@ -250,7 +279,7 @@ func TestProjectionRollsBackAtomically(t *testing.T) {
 	err := database.WithinTransaction(ctx, func(ctx context.Context) error {
 		if err := repo.UpsertVisit(ctx, journey.Visit{
 			VisitID: "TEST-JOURNEY-4", PatientRef: "PAT-4", Status: "ACTIVE",
-			Steps: []journey.Step{{Sequence: 1, ServiceCode: "LAB", Status: "READY"}},
+			Steps: []journey.Step{{StepKey: "LAB:1", Sequence: 1, Kind: journey.KindLab, Status: "READY"}},
 		}); err != nil {
 			return err
 		}
