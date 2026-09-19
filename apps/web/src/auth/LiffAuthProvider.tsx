@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import liff from '@line/liff'
-import { apiPost } from '@/api/client'
+import { apiPost, setApiAuthToken } from '@/api/client'
 import type { components } from '@/api/schema'
 import { AuthContext } from './AuthContext'
 import type { AuthContextValue, AuthIdentity, AuthStatus } from './types'
@@ -28,6 +28,9 @@ export function LiffAuthProvider({ children }: { children: ReactNode }) {
     setStatus('loading')
     setError(undefined)
     setIdentity(null)
+    // A token from a previous attempt must not ride along while we
+    // re-authenticate.
+    setApiAuthToken(undefined)
 
     if (!liffId) {
       setStatus('error')
@@ -63,6 +66,7 @@ export function LiffAuthProvider({ children }: { children: ReactNode }) {
         source: 'line',
         idToken,
       })
+      setApiAuthToken(session.sessionToken)
       setIdentity({
         sessionToken: session.sessionToken,
         source: 'line',
