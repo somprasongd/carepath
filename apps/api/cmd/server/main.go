@@ -1,53 +1,61 @@
+// Command server is the CarePath API composition root: it wires the postgres
+// pool, the HIS client, and each module's adapters/services/handlers together,
+// then serves HTTP. Business logic lives in internal/*, not here.
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
+	"context"
+	"log/slog"
 	"os"
-	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/swaggo/swag"
+
+	_ "carepath/apps/api/docs"
+	"carepath/apps/api/internal/his/httpclient"
+	"carepath/apps/api/internal/platform/db"
+	"carepath/apps/api/internal/platform/logger"
+	"carepath/apps/api/internal/servicepoint"
+	servicepointpostgres "carepath/apps/api/internal/servicepoint/postgres"
+	"carepath/apps/api/internal/visit"
 )
 
-type HISVisitStep struct {
-	Sequence    int    `json:"sequence"`
-	ServiceCode string `json:"serviceCode"`
-	Status      string `json:"status"`
-}
-
-type HISVisit struct {
-	VisitID    string         `json:"visitId"`
-	PatientRef string         `json:"patientRef"`
-	Status     string         `json:"status"`
-	Steps      []HISVisitStep `json:"steps"`
-}
-
-type ServicePoint struct {
-	ID      string `json:"id"`
-	Code    string `json:"code"`
-	Name    string `json:"name"`
-	PlaceID string `json:"placeId"`
-}
-
-type VisitView struct {
-	HISVisit
-	Next *struct {
-		Sequence     int           `json:"sequence"`
-		Status       string        `json:"status"`
-		ServicePoint *ServicePoint `json:"servicePoint,omitempty"`
-	} `json:"next,omitempty"`
-}
-
-var servicePoints = map[string]ServicePoint{
-	"REGISTRATION": {ID: "SP-REG", Code: "REGISTRATION", Name: "Registration", PlaceID: "REG-01"},
-	"LAB":          {ID: "SP-LAB", Code: "LAB", Name: "Laboratory", PlaceID: "LAB-01"},
-	"PHARMACY":     {ID: "SP-PHARMACY", Code: "PHARMACY", Name: "Pharmacy", PlaceID: "PHARMACY-01"},
-}
-
+// @title			CarePath API
+// @version		1.0.0
+// @description	Patient journey and indoor navigation API above the HIS.
+// @description	Serves the normalized visit view with the next actionable
+// @description	step and its service point.
+//
+// @BasePath	/
 func main() {
+	log := logger.New()
+	slog.SetDefault(log)
+	if err := run(context.Background(), log); err != nil {
+		log.Error("server exited", "error", err.Error())
+		os.Exit(1)
+	}
+}
+
+// HealthResponse reports service liveness.
+type HealthResponse struct {
+	Status  string `json:"status" example:"ok"`
+	Service string `json:"service" example:"carepath-api"`
+}
+
+func run(ctx context.Context, log *slog.Logger) error {
+	databaseURL := envOrDefault("DATABASE_URL", "postgres://carepath:carepath@localhost:5432/carepath?sslmode=disable")
+	database, err := db.New(ctx, databaseURL)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+
+	hisClient := httpclient.New(envOrDefault("HIS_BASE_URL", "http://localhost:8090"), nil)
+	servicePoints := servicepoint.NewService(servicepointpostgres.New(database))
+	visits := visit.NewService(hisClient, servicePoints, database)
+
 	app := fiber.New()
+	app.Use(logger.Middleware(log))
 	app.Use(func(c fiber.Ctx) error {
 		c.Set("Access-Control-Allow-Origin", "*")
 		c.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -57,81 +65,58 @@ func main() {
 		}
 		return c.Next()
 	})
-	client := &http.Client{Timeout: 5 * time.Second}
 
-	hisBaseURL := os.Getenv("HIS_BASE_URL")
-	if hisBaseURL == "" {
-		hisBaseURL = "http://localhost:8090"
-	}
+	app.Get("/health", health)
 
-	app.Get("/health", func(c fiber.Ctx) error {
-		return c.JSON(fiber.Map{"status": "ok", "service": "carepath-api"})
-	})
-
-	app.Get("/api/v1/visits/:visitId", func(c fiber.Ctx) error {
-		visit, status, err := getVisit(client, hisBaseURL, c.Params("visitId"))
+	// The generated docs package registers the spec with swaggo/swag; served
+	// raw so the Swagger UI below (and any tool) can consume it.
+	app.Get("/api/openapi.json", func(c fiber.Ctx) error {
+		doc, err := swag.ReadDoc()
 		if err != nil {
-			return c.Status(status).JSON(fiber.Map{"error": err.Error()})
+			return err
 		}
-		return c.JSON(buildVisitView(visit))
+		return c.Type("json").SendString(doc)
+	})
+	app.Get("/swagger", func(c fiber.Ctx) error {
+		return c.Type("html").SendString(swaggerUIPage)
 	})
 
-	app.Get("/api/v1/visits/:visitId/next", func(c fiber.Ctx) error {
-		visit, status, err := getVisit(client, hisBaseURL, c.Params("visitId"))
-		if err != nil {
-			return c.Status(status).JSON(fiber.Map{"error": err.Error()})
-		}
-		view := buildVisitView(visit)
-		if view.Next == nil {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "no next actionable step"})
-		}
-		return c.JSON(view.Next)
-	})
+	visit.NewHandler(visits).Register(app.Group("/api/v1"))
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	log.Fatal(app.Listen(":" + port))
+	return app.Listen(":" + envOrDefault("PORT", "8080"))
 }
 
-func getVisit(client *http.Client, baseURL, visitID string) (HISVisit, int, error) {
-	var visit HISVisit
-	resp, err := client.Get(fmt.Sprintf("%s/api/v1/visits/%s", baseURL, visitID))
-	if err != nil {
-		return visit, fiber.StatusBadGateway, fmt.Errorf("HIS unavailable: %w", err)
+func envOrDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return visit, fiber.StatusNotFound, fmt.Errorf("visit not found")
-	}
-	if resp.StatusCode != http.StatusOK {
-		return visit, fiber.StatusBadGateway, fmt.Errorf("HIS returned status %d", resp.StatusCode)
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&visit); err != nil {
-		return visit, fiber.StatusBadGateway, fmt.Errorf("invalid HIS response: %w", err)
-	}
-	return visit, fiber.StatusOK, nil
+	return fallback
 }
 
-func buildVisitView(visit HISVisit) VisitView {
-	view := VisitView{HISVisit: visit}
-	for _, step := range visit.Steps {
-		if step.Status != "READY" {
-			continue
-		}
-		sp, ok := servicePoints[step.ServiceCode]
-		view.Next = &struct {
-			Sequence     int           `json:"sequence"`
-			Status       string        `json:"status"`
-			ServicePoint *ServicePoint `json:"servicePoint,omitempty"`
-		}{Sequence: step.Sequence, Status: step.Status}
-		if ok {
-			view.Next.ServicePoint = &sp
-		}
-		break
-	}
-	return view
+// health godoc
+//
+//	@Summary		Health check
+//	@Description	Liveness probe for the API.
+//	@Tags			health
+//	@Produce		json
+//	@Success		200	{object}	HealthResponse
+//	@Router			/health [get]
+func health(c fiber.Ctx) error {
+	return c.JSON(HealthResponse{Status: "ok", Service: "carepath-api"})
 }
+
+const swaggerUIPage = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>CarePath API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = () => SwaggerUIBundle({ url: '/api/openapi.json', dom_id: '#swagger-ui' });
+  </script>
+</body>
+</html>`

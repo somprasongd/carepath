@@ -1,0 +1,156 @@
+basePath: /
+definitions:
+  his.VisitStep:
+    properties:
+      sequence:
+        type: integer
+      serviceCode:
+        type: string
+      status:
+        type: string
+    type: object
+  httpx.ErrorResponse:
+    properties:
+      error:
+        example: visit not found
+        type: string
+    type: object
+  main.HealthResponse:
+    properties:
+      service:
+        example: carepath-api
+        type: string
+      status:
+        example: ok
+        type: string
+    type: object
+  servicepoint.ServicePoint:
+    properties:
+      code:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      placeId:
+        type: string
+    type: object
+  visit.NextStep:
+    properties:
+      sequence:
+        type: integer
+      servicePoint:
+        $ref: '#/definitions/servicepoint.ServicePoint'
+      status:
+        type: string
+    type: object
+  visit.VisitView:
+    properties:
+      next:
+        $ref: '#/definitions/visit.NextStep'
+      patientRef:
+        type: string
+      status:
+        type: string
+      steps:
+        items:
+          $ref: '#/definitions/his.VisitStep'
+        type: array
+      visitId:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: |-
+    Patient journey and indoor navigation API above the HIS.
+    Serves the normalized visit view with the next actionable
+    step and its service point.
+  title: CarePath API
+  version: 1.0.0
+paths:
+  /api/v1/visits/{visitId}:
+    get:
+      description: Returns the HIS visit enriched with the next actionable step and
+        its service point.
+      parameters:
+      - description: Visit ID
+        in: path
+        name: visitId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/visit.VisitView'
+        "400":
+          description: invalid input
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: visit not found
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "502":
+          description: upstream HIS error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Get normalized visit view
+      tags:
+      - visits
+  /api/v1/visits/{visitId}/next:
+    get:
+      description: Returns the first READY step of the visit resolved to its service
+        point.
+      parameters:
+      - description: Visit ID
+        in: path
+        name: visitId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/visit.NextStep'
+        "400":
+          description: invalid input
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: visit not found or no next actionable step
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "502":
+          description: upstream HIS error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Get next actionable step
+      tags:
+      - visits
+  /health:
+    get:
+      description: Liveness probe for the API.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.HealthResponse'
+      summary: Health check
+      tags:
+      - health
+swagger: "2.0"

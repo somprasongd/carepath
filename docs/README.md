@@ -5,7 +5,8 @@ This directory is the working source of truth for architecture, requirements, de
 ## Architecture
 
 - [System Architecture](architecture/system-architecture.md)
-- [Technical Blueprint](architecture/technical-blueprint.md)
+- [Technical Blueprint](architecture/technical-blueprint.md) — canonical description of the `apps/api` internal module structure
+- [Web App Architecture](architecture/web-app.md) — canonical description of the `apps/web` structure, data flow, and conventions
 - [Domain Model](architecture/domain-model.md)
 - [Deployment](architecture/deployment.md)
 
@@ -25,6 +26,7 @@ This directory is the working source of truth for architecture, requirements, de
 - [ADR-0004 Location Provider Abstraction](adr/0004-location-provider-abstraction.md)
 - [ADR-0005 HIS Adapter and Mock HIS](adr/0005-his-adapter-and-mock-his.md)
 - [ADR-0006 REST + OpenAPI Contracts](adr/0006-rest-openapi.md)
+- [ADR-0007 Hexagonal Module Layout with Transaction-in-Context](adr/0007-hexagonal-modules-transaction-in-context.md)
 
 ## Integration
 
@@ -36,7 +38,8 @@ This directory is the working source of truth for architecture, requirements, de
 
 - [CarePath API](api/carepath-api.md)
 - [Mock HIS API](api/mock-his-api.md)
-- Shared OpenAPI contracts: [`packages/contracts/openapi/`](../packages/contracts/openapi/)
+- Shared OpenAPI contracts: [`packages/contracts/openapi/`](../packages/contracts/openapi/) — **the source of truth** for externally visible behavior (ADR-0006)
+- Live Swagger docs: `apps/api` generates a spec from handler comments with [swaggo/swag](https://github.com/swaggo/swag) (`make swag` to regenerate, output committed in `apps/api/docs/`), served at `GET /swagger` and `GET /api/openapi.json` when the API runs. Treat the generated spec as a developer-facing reference; if it disagrees with the contracts, the contracts win and the handlers should be fixed.
 
 ## Designs
 

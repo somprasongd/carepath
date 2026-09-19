@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: up down logs api mock-his web fmt
+.PHONY: up down logs api mock-his web fmt migrate-up swag
 
 up:
 	docker compose up --build
@@ -23,5 +23,11 @@ web:
 fmt:
 	cd apps/api && gofmt -w .
 	cd apps/mock-his && gofmt -w .
+
+migrate-up:
+	docker compose run --rm migrate
+
+swag:
+	cd apps/api && go run github.com/swaggo/swag/cmd/swag init -g cmd/server/main.go -o docs --parseInternal
 fetch:
 	git fetch

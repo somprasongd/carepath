@@ -9,7 +9,6 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - carepath_pg:/var/lib/postgresql/data
-      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-carepath} -d ${POSTGRES_DB:-carepath}"]
       interval: 5s
@@ -25,6 +24,18 @@ services:
     ports:
       - "${MOCK_HIS_PORT:-8090}:8090"
 
+  migrate:
+    image: migrate/migrate:v4.18.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./infra/postgres/migrations:/migrations:ro
+    command:
+      - -path=/migrations
+      - -database=postgres://${POSTGRES_USER:-carepath}:${POSTGRES_PASSWORD:-carepath}@postgres:5432/${POSTGRES_DB:-carepath}?sslmode=disable
+      - up
+
   api:
     build:
       context: .
@@ -36,6 +47,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       mock-his:
         condition: service_started
     ports:

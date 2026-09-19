@@ -2,6 +2,8 @@
 
 Base path: `/api/v1`
 
+Source of truth for externally visible behavior: [`packages/contracts/openapi/carepath.yaml`](../../packages/contracts/openapi/carepath.yaml) (ADR-0006). The running API also serves a swaggo-generated spec at `GET /api/openapi.json` and a Swagger UI at `GET /swagger` — regenerate the generated docs with `make swag`.
+
 ## Health
 
 `GET /health`
@@ -30,4 +32,4 @@ Returns route node IDs/coordinates for overlay on the floor plan.
 
 Normalizes provider input such as QR into a CarePath location result.
 
-The starter code implements health and visit passthrough first; the remaining routes are intentionally documented as the next build slices.
+Implemented today: health, visit view, and next destination (with service points resolved from Postgres). The route and location endpoints remain intentionally documented as the next build slices.
