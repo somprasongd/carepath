@@ -42,10 +42,13 @@ const REFERENCE_PLAN: DestinationPlan = {
 export function NavigateScreen({
   plan,
   route,
+  currentLocation,
   onBack,
 }: {
   plan?: NavigatePlan
   route?: { mapRoute: FloorPlanRoute; cues: string[] }
+  /** Plain-Thai line stating where the patient is (#35); absent when unknown. */
+  currentLocation?: string
   onBack?: () => void
 }) {
   const resolved = plan ?? { state: 'plan' as const, ...REFERENCE_PLAN }
@@ -76,7 +79,7 @@ export function NavigateScreen({
           </div>
 
           <ScreenDock>
-            <DestinationPanel plan={resolved} cues={route?.cues} />
+            <DestinationPanel plan={resolved} cues={route?.cues} currentLocation={currentLocation} />
           </ScreenDock>
         </>
       ) : (
@@ -116,7 +119,15 @@ function noticeFor(plan: NavigatePlan): string {
  * turn-by-turn cues derived from the route. Without a location it says so
  * instead of guessing a route (DESIGN.md's honesty rule).
  */
-function DestinationPanel({ plan, cues }: { plan: DestinationPlan; cues?: string[] }) {
+function DestinationPanel({
+  plan,
+  cues,
+  currentLocation,
+}: {
+  plan: DestinationPlan
+  cues?: string[]
+  currentLocation?: string
+}) {
   return (
     <div className="flex flex-col gap-3.5 rounded-t-xl bg-surface px-gutter pt-3 pb-6 shadow-sheet">
       <div className="mx-auto h-1 w-9 rounded-full bg-line" aria-hidden="true" />
@@ -130,6 +141,11 @@ function DestinationPanel({ plan, cues }: { plan: DestinationPlan; cues?: string
         </span>
       </div>
       <Divider />
+      {/* Where the patient stands (#35) — stated once, plainly; the fallback
+          below says so when it is not yet known. */}
+      {currentLocation && (
+        <p className="m-0 font-sans text-caption font-bold text-secondary">{currentLocation}</p>
+      )}
       {cues ? (
         <ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5">
           {cues.map((cue) => (

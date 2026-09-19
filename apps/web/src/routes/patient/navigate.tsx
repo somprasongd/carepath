@@ -2,6 +2,8 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { navigatePlanForJourney, floorLabelFor } from '@/features/floorplan'
 import type { FloorPlanRoute } from '@/design-system'
 import {
+  currentLocationLabel,
+  routeOriginOnFloor,
   routePolylinesByFloor,
   turnByTurnSteps,
   useCurrentLocation,
@@ -42,6 +44,9 @@ function PatientNavigateRoute() {
       ? {
           mapRoute: {
             lines: routePolylinesByFloor(route.nodes)[plan.floorId] ?? [],
+            // "You are here" only when the route really starts on the
+            // displayed floor — a cross-floor route starts upstairs (#35).
+            origin: routeOriginOnFloor(route.nodes, plan.floorId) ?? undefined,
           } as FloorPlanRoute,
           cues: turnByTurnSteps(route.nodes, route.segments, plan.name, floorLabelFor),
         }
@@ -52,6 +57,7 @@ function PatientNavigateRoute() {
       <NavigateScreen
         plan={plan}
         route={overlay}
+        currentLocation={location ? currentLocationLabel(location, floorLabelFor) : undefined}
         onBack={() => navigate({ to: '/patient/journey', search: { visit: visitId } })}
       />
     </div>

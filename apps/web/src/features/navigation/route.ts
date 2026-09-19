@@ -3,12 +3,48 @@
 // Distances in the API are authored SVG units, not metres — nothing here
 // converts or displays them, so no made-up walking times (DESIGN.md).
 import type { components } from '@/api/schema'
+import type { LocationObservation } from './queries'
 
 export type NavigationRoute = components['schemas']['NavigationRoute']
 export type NavNode = components['schemas']['NavNode']
 export type NavEdge = components['schemas']['NavEdge']
 
 export type Point = { x: number; y: number }
+
+/**
+ * Where the patient stands on `floorId`'s plan — the route's first node, but
+ * only when it actually sits on that floor: a cross-floor route starts on the
+ * patient's floor, and a "you are here" mark at the lift on the destination
+ * floor would lie (DESIGN.md's honesty rule, #35).
+ */
+export function routeOriginOnFloor(nodes: NavNode[], floorId: string): Point | null {
+  const first = nodes[0]
+  return first && first.floorId === floorId ? { x: first.x, y: first.y } : null
+}
+
+/** Thai, patient-facing label for how a location fix was obtained. */
+const SOURCE_LABELS: Record<string, string> = {
+  QR: 'สแกน QR',
+  ZIGBEE: 'Zigbee',
+  MANUAL: 'ระบุเอง',
+}
+
+/**
+ * One plain-Thai line stating where the patient currently is (#35): floor,
+ * positioning zone when the source carries one, and how it was known. Floor
+ * ids and unknown provider names never reach the patient; an unmapped source
+ * simply omits its part instead of showing raw vocabulary.
+ */
+export function currentLocationLabel(
+  observation: Pick<LocationObservation, 'floorId' | 'zone' | 'source'>,
+  floorLabel: (floorId: string) => string,
+): string {
+  const parts = [`ตำแหน่งปัจจุบัน · ${floorLabel(observation.floorId)}`]
+  if (observation.zone) parts.push(`โซน ${observation.zone}`)
+  const source = SOURCE_LABELS[observation.source]
+  if (source) parts.push(source)
+  return parts.join(' · ')
+}
 
 /**
  * One floor's walking lines in walk order — almost always a single line; a
