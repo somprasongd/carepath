@@ -43,6 +43,12 @@
   form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   input, select { border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; font: inherit; }
   input { flex: 1; min-width: 110px; }
+  .picker-row { display: flex; gap: 6px; width: 100%; }
+  .picker-row select { flex: 1; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--chip); border: 1px solid var(--line); border-radius: 999px; padding: 2px 6px 2px 10px; font-size: 12px; font-weight: 600; }
+  .chip button { border: none; background: none; padding: 0 4px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .chip button:hover { color: var(--bad); }
   .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
   .empty { color: var(--muted); padding: 12px 0; text-align: center; }
   #events { list-style: none; margin: 0; padding: 0; font-size: 12px; max-height: 70vh; overflow: auto; }
@@ -69,10 +75,14 @@
     <div id="visits"><div class="empty">loading&hellip;</div></div>
     <form id="create-form">
       <input id="new-patient" placeholder="patientRef (optional)">
-      <input id="new-codes" placeholder="REGISTRATION,SCREENING,DOCTOR,LAB,PHARMACY">
+      <div class="picker-row">
+        <select id="new-code-select" aria-label="Service to add"></select>
+        <button type="button" id="add-code">Add</button>
+      </div>
+      <div id="chosen-codes" class="chips"></div>
       <button class="primary" type="submit">New visit</button>
     </form>
-    <div class="hint">Leave codes empty for the standard 5-step flow.</div>
+    <div class="hint">No services picked = the standard 5-step flow.</div>
   </section>
 
   <section class="panel" id="detail-panel">
@@ -90,9 +100,15 @@
 
 <script>
 "use strict";
+// Pickable service codes — selection instead of free text so demo operators
+// cannot typo a code (REGISTRATION/SCREENING/DOCTOR/LAB/PHARMACY/XRAY map to
+// service points in CarePath; CT projects unmapped).
+const SERVICE_CATALOG = ["REGISTRATION", "SCREENING", "DOCTOR", "LAB", "PHARMACY", "XRAY", "CT"];
+
 let selectedVisit = null;
 let lastVisitsJSON = "";
 let lastDetailJSON = "";
+let chosenCodes = [];
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -196,30 +212,36 @@ function renderDetail(visit) {
 
   const form = document.createElement("form");
   form.id = "order-form";
-  const input = document.createElement("input");
-  input.id = "order-code";
-  input.placeholder = "serviceCode, e.g. XRAY";
+  const picker = document.createElement("div");
+  picker.className = "picker-row";
+  const select = document.createElement("select");
+  select.id = "order-code";
+  select.setAttribute("aria-label", "Service to order");
+  SERVICE_CATALOG.forEach((code) => {
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = code;
+    select.appendChild(opt);
+  });
   const btn = document.createElement("button");
   btn.className = "primary";
   btn.type = "submit";
   btn.textContent = "Add order";
-  form.append(input, btn);
+  picker.append(select, btn);
+  form.appendChild(picker);
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const code = input.value.trim();
-    if (!code) return;
     try {
-      const step = await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/orders", { serviceCode: code });
+      const step = await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/orders", { serviceCode: select.value });
       toast("Order added: " + step.serviceCode + " (step " + step.sequence + ")");
-      input.value = "";
       lastDetailJSON = "";
       refresh(true);
     } catch (err) { toast("Add order failed: " + err.message, true); }
   };
   box.appendChild(form);
 
-  input.value = prevValue;
-  if (hadFocus) input.focus();
+  select.value = prevValue || SERVICE_CATALOG[0];
+  if (hadFocus) select.focus();
 }
 
 async function transition(step, to) {
@@ -245,19 +267,49 @@ function renderEvents(events) {
   }));
 }
 
+function renderChips() {
+  const box = $("#chosen-codes");
+  box.replaceChildren(...chosenCodes.map((code) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = code;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.setAttribute("aria-label", "Remove " + code);
+    remove.textContent = "\u00d7";
+    remove.onclick = () => {
+      chosenCodes = chosenCodes.filter((c) => c !== code);
+      renderChips();
+    };
+    chip.appendChild(remove);
+    return chip;
+  }));
+}
+
+$("#add-code").onclick = () => {
+  const code = $("#new-code-select").value;
+  if (chosenCodes.includes(code)) {
+    toast(code + " is already in the list");
+    return;
+  }
+  chosenCodes.push(code);
+  renderChips();
+};
+
 $("#create-form").onsubmit = async (e) => {
   e.preventDefault();
   const body = {};
   const patient = $("#new-patient").value.trim();
   if (patient) body.patientRef = patient;
-  const codes = $("#new-codes").value.split(",").map((c) => c.trim()).filter(Boolean);
-  if (codes.length) body.serviceCodes = codes;
+  if (chosenCodes.length) body.serviceCodes = chosenCodes;
   try {
     const visit = await api("POST", "/api/v1/demo/visits", body);
     toast("Created " + visit.visitId + " (" + visit.steps.length + " steps)");
     $("#new-patient").value = "";
-    $("#new-codes").value = "";
+    chosenCodes = [];
+    renderChips();
     selectedVisit = visit.visitId;
+    lastVisitsJSON = "";
     refresh(true);
   } catch (err) { toast("Create failed: " + err.message, true); }
 };
@@ -287,6 +339,13 @@ async function refresh(force) {
 
 tick();
 setInterval(tick, 1000);
+$("#new-code-select").replaceChildren(...SERVICE_CATALOG.map((code) => {
+  const opt = document.createElement("option");
+  opt.value = code;
+  opt.textContent = code;
+  return opt;
+}));
+renderChips();
 refresh();
 setInterval(refresh, 2000);
 </script>
