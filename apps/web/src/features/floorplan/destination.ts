@@ -13,6 +13,8 @@ export type DestinationPlan = {
   floorLabel: string
   /** Stable SVG place id — the join key to data-place-id in the plan asset. */
   placeId: string
+  /** The destination's service point code — the `to` end of /navigation/route (#28). */
+  servicePointCode: string
   /** Floor-local SVG units of the place's entry node; the pin falls back to the room's centre when absent. */
   x?: number
   y?: number
@@ -64,6 +66,7 @@ export function navigatePlanForJourney(
     floorId: place.floorId,
     floorLabel: `ชั้น ${place.floor.code}`,
     placeId: place.id,
+    servicePointCode: servicePoint?.code ?? '',
     x: place.x,
     y: place.y,
   }

@@ -60,12 +60,59 @@ export type FloorPlanDestination = {
   y?: number
 }
 
+/**
+ * The walking line(s) to draw on this floor's plan (#29) — plain geometry
+ * in SVG units; how it is derived from a route lives in features/navigation.
+ * Each line is drawn with the asset's own route classes so the overlay and
+ * the plan read as one system, with a route-dot marking where the patient
+ * stands (the first point of the first line).
+ */
+export type FloorPlanRoute = {
+  lines: { x: number; y: number }[][]
+}
+
 export type FloorPlanMapProps = {
   /** Raw SVG markup of a packages/floorplans floor plan. */
   svg: string
   /** Thai floor label for the map caption, e.g. "ชั้น 1". */
   floorLabel: string
   destination?: FloorPlanDestination
+  route?: FloorPlanRoute
+}
+
+/**
+ * The window the map focuses on around the route (#29 AC4): wide enough to
+ * keep the whole walking line plus its origin dot on screen at phone width
+ * (never smaller than the destination focus's 640 units, so room labels stay
+ * readable), clamped inside the base viewBox so the focus never shows space
+ * outside the floor. `bounds` is the line's bbox as two corner points.
+ */
+export function routedViewBox(
+  base: ViewBox,
+  bounds: { from: { x: number; y: number }; to: { x: number; y: number } },
+  aspect?: number,
+): ViewBox {
+  const shape =
+    aspect && Number.isFinite(aspect) && aspect > 0 ? aspect : base.width / base.height
+  const pad = 90
+  const width = Math.min(base.width, Math.max(640, bounds.to.x - bounds.from.x + pad * 2))
+  // Fill the container's shape when the floor allows it, but never trade the
+  // width above for height: a tall phone map area would otherwise shrink the
+  // window below the readability floor and clip the line off-screen.
+  const height = Math.min(
+    base.height,
+    Math.max(width / shape, bounds.to.y - bounds.from.y + pad * 2),
+  )
+  const center = {
+    x: (bounds.from.x + bounds.to.x) / 2,
+    y: (bounds.from.y + bounds.to.y) / 2,
+  }
+  return {
+    x: clamp(center.x - width / 2, base.x, base.x + base.width - width),
+    y: clamp(center.y - height / 2, base.y, base.y + base.height - height),
+    width,
+    height,
+  }
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
@@ -78,7 +125,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg'
  * No route is drawn; turn-by-turn lines arrive with the navigation API
  * (#28/#29), never faked here.
  */
-export function FloorPlanMap({ svg, floorLabel, destination }: FloorPlanMapProps) {
+export function FloorPlanMap({ svg, floorLabel, destination, route }: FloorPlanMapProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [focused, setFocused] = useState(true)
 
@@ -104,25 +151,44 @@ export function FloorPlanMap({ svg, floorLabel, destination }: FloorPlanMapProps
       height: 900,
     }
 
-    // The asset ships a sample route hidden by default — keep it that way.
+    // The asset ships a sample route hidden by default — keep it that way;
+    // the live route is drawn fresh below, never by editing the asset.
     el.querySelector('#route-layer')?.setAttribute('opacity', '0')
 
     const floor = el.querySelector('g[data-floor]')
     const center =
       destination && floor ? drawDestination(floor as SVGGElement, el, destination) : null
 
+    let routeLinesBounds: { from: { x: number; y: number }; to: { x: number; y: number } } | null =
+      null
+    if (route && floor) {
+      const drawn = drawRoute(floor as SVGGElement, route)
+      routeLinesBounds = drawn ? absoluteBox(el, drawn) : null
+    }
+
     // Measured so the focused window fills the actual map area — on a phone
     // that area is taller than wide, and a plan-shaped window would letterbox.
     const hostRect = host.getBoundingClientRect()
     const containerAspect =
       hostRect.width > 0 && hostRect.height > 0 ? hostRect.width / hostRect.height : undefined
-    const view = center && focused ? focusedViewBox(base, center, containerAspect) : base
+    const view = focused
+      ? routeLinesBounds
+        ? routedViewBox(base, routeLinesBounds, containerAspect)
+        : center
+          ? focusedViewBox(base, center, containerAspect)
+          : base
+      : base
     el.setAttribute('viewBox', `${view.x} ${view.y} ${view.width} ${view.height}`)
 
     if (destination) {
-      el.setAttribute('aria-label', `ผัง${floorLabel} — จุดหมาย ${destination.name}`)
+      el.setAttribute(
+        'aria-label',
+        route
+          ? `ผัง${floorLabel} — เส้นทางจากตำแหน่งปัจจุบันไป${destination.name}`
+          : `ผัง${floorLabel} — จุดหมาย ${destination.name}`,
+      )
     }
-  }, [svg, destination, floorLabel, focused])
+  }, [svg, destination, floorLabel, focused, route])
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-lg border border-line bg-surface">
@@ -133,13 +199,13 @@ export function FloorPlanMap({ svg, floorLabel, destination }: FloorPlanMapProps
         className="flex h-full w-full items-center justify-center [&>svg]:m-auto"
         dangerouslySetInnerHTML={{ __html: svg }}
       />
-      {destination && (
+      {(destination || route) && (
         <button
           type="button"
           onClick={() => setFocused((value) => !value)}
           className="absolute top-2.5 right-2.5 cursor-pointer rounded-full border border-line bg-surface px-3 py-1.5 font-sans text-caption font-bold text-ink"
         >
-          {focused ? 'ดูทั้งชั้น' : 'ดูจุดหมาย'}
+          {focused ? 'ดูทั้งชั้น' : route ? 'ดูเส้นทาง' : 'ดูจุดหมาย'}
         </button>
       )}
       <span className="absolute bottom-2.5 left-2.5 rounded-full border border-line bg-surface px-2.5 py-1 font-sans text-caption font-bold text-ink-muted">
@@ -229,6 +295,61 @@ function appendPin(floor: SVGGElement, pin: { x: number; y: number }, name: stri
 
   floor.append(g)
   return g
+}
+
+/**
+ * The walking line(s) for this floor, appended into the floor group so
+ * floor-local coordinates land correctly. Strokes reuse the asset's own
+ * `.route`/`.route-dot` classes (rounded orange caps, dotted endpoints) and
+ * its `arrow` marker, so the overlay matches the plan's shape language
+ * instead of styling over it; the sample `#route-layer` stays hidden —
+ * this group is the live one. The first line's first point is where the
+ * patient stands, marked with a route-dot.
+ */
+function drawRoute(floor: SVGGElement, route: FloorPlanRoute): SVGGElement | null {
+  const lines = route.lines.filter((line) => line.length > 0)
+  if (lines.length === 0) return null
+
+  const g = document.createElementNS(SVG_NS, 'g')
+  for (const line of lines) {
+    const polyline = document.createElementNS(SVG_NS, 'polyline')
+    polyline.setAttribute('class', 'route')
+    polyline.setAttribute('points', line.map((p) => `${p.x},${p.y}`).join(' '))
+    g.append(polyline)
+  }
+
+  const origin = lines[0][0]
+  const dot = document.createElementNS(SVG_NS, 'circle')
+  dot.setAttribute('class', 'route-dot')
+  dot.setAttribute('cx', String(origin.x))
+  dot.setAttribute('cy', String(origin.y))
+  dot.setAttribute('r', '10')
+  g.append(dot)
+
+  floor.append(g)
+  return g
+}
+
+/** A floor group's translate would shift route coordinates; measuring the rendered group instead is transform-proof. */
+function absoluteBox(
+  svg: SVGSVGElement,
+  el: SVGGraphicsElement,
+): { from: { x: number; y: number }; to: { x: number; y: number } } | null {
+  const base = parseViewBox(svg.getAttribute('viewBox'))
+  const svgRect = svg.getBoundingClientRect()
+  if (!base || svgRect.width === 0) return null
+  const rect = el.getBoundingClientRect()
+  const scale = base.width / svgRect.width
+  return {
+    from: {
+      x: base.x + (rect.left - svgRect.left) * scale,
+      y: base.y + (rect.top - svgRect.top) * scale,
+    },
+    to: {
+      x: base.x + (rect.right - svgRect.left) * scale,
+      y: base.y + (rect.bottom - svgRect.top) * scale,
+    },
+  }
 }
 
 /** A floor group's translate would shift pin coordinates; measuring the rendered pin instead is transform-proof. */

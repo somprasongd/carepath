@@ -78,6 +78,7 @@ describe('navigatePlanForJourney', () => {
       floorId: 'I-1301',
       floorLabel: 'ชั้น 1',
       placeId: 'PHARMACY-01',
+      servicePointCode: 'PHARMACY',
       x: 885,
       y: 190,
     })

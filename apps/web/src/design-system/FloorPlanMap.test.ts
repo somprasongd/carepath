@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { focusedViewBox, parseViewBox } from './FloorPlanMap'
+import { focusedViewBox, parseViewBox, routedViewBox } from './FloorPlanMap'
 
 describe('parseViewBox', () => {
   it('parses a standard four-value viewBox', () => {
@@ -75,5 +75,51 @@ describe('focusedViewBox', () => {
     expect(focusedViewBox(base, { x: 800, y: 450 }, 0)).toEqual(
       focusedViewBox(base, { x: 800, y: 450 }),
     )
+  })
+})
+
+describe('routedViewBox', () => {
+  const base = { x: 0, y: 0, width: 1600, height: 900 }
+
+  it('centres a short walk like the destination focus does (never narrower than 640)', () => {
+    expect(
+      routedViewBox(base, { from: { x: 700, y: 200 }, to: { x: 900, y: 300 } }),
+    ).toEqual({ x: 480, y: 70, width: 640, height: 360 })
+  })
+
+  it('widens past 640 so a long line stays whole on screen', () => {
+    // A 1000-unit walk plus padding exceeds the 640 minimum; the window
+    // grows to 1180 and clamps to the floor's top edge.
+    expect(routedViewBox(base, { from: { x: 100, y: 200 }, to: { x: 1100, y: 300 } })).toEqual({
+      x: 10,
+      y: 0,
+      width: 1180,
+      height: 663.75,
+    })
+  })
+
+  it('never shows space outside the floor', () => {
+    const view = routedViewBox(base, { from: { x: 0, y: 0 }, to: { x: 1600, y: 900 } })
+    expect(view).toEqual(base)
+  })
+
+  it('matches the container aspect so a tall phone fills edge to edge', () => {
+    expect(routedViewBox(base, { from: { x: 700, y: 200 }, to: { x: 900, y: 300 } }, 1)).toEqual({
+      x: 480,
+      y: 0,
+      width: 640,
+      height: 640,
+    })
+  })
+
+  it('keeps the 640-unit readability width on a tall phone map area', () => {
+    // The navigate screen's map area is taller than wide (~348×756). Filling
+    // that shape would need a window 1391 units tall — past the floor — so
+    // the height clamps to the floor and the width must stay at the
+    // readability floor, not shrink to the container's narrow shape and clip
+    // the line off-screen (the svg letterboxes inside the area instead).
+    expect(
+      routedViewBox(base, { from: { x: 254, y: 307 }, to: { x: 531, y: 473 } }, 348 / 756),
+    ).toEqual({ x: 72.5, y: 0, width: 640, height: 900 })
   })
 })
