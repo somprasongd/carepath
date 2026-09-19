@@ -39,6 +39,8 @@
   button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button.primary:hover { opacity: .9; }
+  button.danger { border-color: #e5b8b8; color: var(--bad); }
+  button.danger:hover:not(:disabled) { background: #fdf0f0; border-color: var(--bad); }
   button:disabled { opacity: .4; cursor: default; }
   form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   input, select { border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; font: inherit; }
@@ -205,6 +207,22 @@ function renderDetail(visit) {
     "<div style=\"font-weight:600;font-size:16px\">" + visit.visitId +
     ' <span class="badge b-' + visit.status + '">' + visit.status + "</span></div>" +
     '<div class="hint">' + visit.patientRef + "</div>";
+  if (visit.status === "ACTIVE") {
+    const cancel = document.createElement("button");
+    cancel.className = "danger";
+    cancel.textContent = "Cancel visit";
+    cancel.style.marginTop = "8px";
+    cancel.onclick = async () => {
+      if (!window.confirm("Cancel " + visit.visitId + "? Every open step will be cancelled.")) return;
+      try {
+        await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/cancel", {});
+        toast(visit.visitId + " cancelled");
+        lastDetailJSON = "";
+        refresh(true);
+      } catch (err) { toast("Cancel failed: " + err.message, true); }
+    };
+    info.appendChild(cancel);
+  }
   const qr = document.createElement("div");
   qr.className = "qr";
   qr.innerHTML =

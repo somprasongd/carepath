@@ -118,6 +118,24 @@ func New() *fiber.App {
 		return c.Send(png)
 	})
 
+	// Visit cancellation — demo story: the patient cancels the appointment,
+	// so every open step and the visit itself are cancelled and announced as
+	// canonical events.
+	app.Post("/api/v1/demo/visits/:visitId/cancel", func(c fiber.Ctx) error {
+		visit, verr := store.CancelVisit(c.Params("visitId"))
+		if verr != nil {
+			switch verr.Kind {
+			case ErrNotFound:
+				return errResponse(c, http.StatusNotFound, verr.Msg)
+			case ErrConflict:
+				return errResponse(c, http.StatusConflict, verr.Msg)
+			default:
+				return errResponse(c, http.StatusBadRequest, verr.Msg)
+			}
+		}
+		return c.JSON(visit)
+	})
+
 	app.Post("/api/v1/demo/visits/:visitId/orders", func(c fiber.Ctx) error {
 		var body struct {
 			ServiceCode string `json:"serviceCode"`

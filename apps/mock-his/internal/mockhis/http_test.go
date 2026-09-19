@@ -404,6 +404,106 @@ func TestVisitQrcode(t *testing.T) {
 	}
 }
 
+// Visit cancellation from the console: open steps are cancelled, the visit
+// becomes CANCELLED, everything surfaces as canonical events.
+func TestCancelVisit(t *testing.T) {
+	app := New()
+
+	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/cancel", "")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %v)", status, body)
+	}
+	if body["status"] != "CANCELLED" {
+		t.Fatalf("visit status = %v, want CANCELLED", body["status"])
+	}
+	got := stepStatuses(body)
+	if got[1] != "COMPLETED" || got[4] != "CANCELLED" || got[5] != "CANCELLED" {
+		t.Fatalf("steps = %v, want completed kept and open steps cancelled", got)
+	}
+
+	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000009&limit=100", "")
+	var types []string
+	for _, raw := range feed["events"].([]any) {
+		types = append(types, raw.(map[string]any)["type"].(string))
+	}
+	want := []string{
+		"service.cancelled", // LAB
+		"service.cancelled", // PHARMACY
+		"visit.updated",     // visit CANCELLED
+	}
+	if len(types) != len(want) {
+		t.Fatalf("event types = %v, want %v", types, want)
+	}
+	for i := range want {
+		if types[i] != want[i] {
+			t.Fatalf("event[%d] = %q, want %q", i, types[i], want[i])
+		}
+	}
+
+	// Cancelling again is a no-op that adds no events.
+	if status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/cancel", ""); status != http.StatusOK || body["status"] != "CANCELLED" {
+		t.Fatalf("re-cancel = %d %v, want 200 no-op", status, body["status"])
+	}
+	_, feed = do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000012&limit=100", "")
+	if n := len(feed["events"].([]any)); n != 0 {
+		t.Fatalf("events after re-cancel = %d, want 0", n)
+	}
+
+	if status, _ := do(t, app, http.MethodPost, "/api/v1/demo/visits/NOPE/cancel", ""); status != http.StatusNotFound {
+		t.Fatalf("unknown visit cancel = %d, want 404", status)
+	}
+}
+
+func TestCancelCompletedVisitConflicts(t *testing.T) {
+	app := New()
+	do(t, app, http.MethodPost, "/api/v1/demo/visits", `{"serviceCodes":["REGISTRATION"]}`)
+	do(t, app, http.MethodPost, "/api/v1/visits/VISIT-002/steps/1/transition",
+		`{"commandId":"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee","to":"COMPLETED"}`)
+
+	if status, resp := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-002/cancel", ""); status != http.StatusConflict {
+		t.Fatalf("cancel COMPLETED visit = %d, want 409 (body %v)", status, resp)
+	}
+}
+
+// Closing the last open step by cancelling it cancels the visit (the
+// completion check used to run on completions only).
+func TestCancellingLastOpenStepCancelsVisit(t *testing.T) {
+	app := New()
+	cancel := func(path, id string) int {
+		s, _ := do(t, app, http.MethodPost, path, `{"commandId":"`+id+`","to":"CANCELLED"}`)
+		return s
+	}
+
+	if s := cancel("/api/v1/visits/VISIT-001/steps/4/transition", "ffffffff-ffff-ffff-ffff-ffffffffffff"); s != http.StatusOK {
+		t.Fatalf("cancel LAB = %d, want 200", s)
+	}
+	_, snap := do(t, app, http.MethodGet, "/api/v1/visits/VISIT-001", "")
+	if snap["status"] != "ACTIVE" {
+		t.Fatalf("visit = %v after one cancel, want still ACTIVE (PHARMACY open)", snap["status"])
+	}
+
+	if s := cancel("/api/v1/visits/VISIT-001/steps/5/transition", "abababab-abab-abab-abab-abababababab"); s != http.StatusOK {
+		t.Fatalf("cancel PHARMACY = %d, want 200", s)
+	}
+	_, snap = do(t, app, http.MethodGet, "/api/v1/visits/VISIT-001", "")
+	if snap["status"] != "CANCELLED" {
+		t.Fatalf("visit = %v after cancelling the last open step, want CANCELLED", snap["status"])
+	}
+	got := stepStatuses(snap)
+	if got[4] != "CANCELLED" || got[5] != "CANCELLED" || got[1] != "COMPLETED" {
+		t.Fatalf("steps = %v, want completed kept and cancelled stays cancelled", got)
+	}
+
+	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000009&limit=100", "")
+	var last string
+	for _, raw := range feed["events"].([]any) {
+		last = raw.(map[string]any)["type"].(string)
+	}
+	if last != "visit.updated" {
+		t.Fatalf("last event = %q, want visit.updated (visit cancelled)", last)
+	}
+}
+
 func TestConsoleServed(t *testing.T) {
 	app := New()
 
