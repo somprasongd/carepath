@@ -32,8 +32,9 @@ func (f *fakeRepo) Latest(_ context.Context, visitID string) (location.Observati
 	return location.Observation{}, location.ErrNoLocation
 }
 
-// fakeNavigation implements just GetNode: every id exists on I-1301 with the
-// zone from a lookup table, except NotFoundNode.
+// fakeNavigation implements the graph reads the location service uses —
+// GetNode: every id exists on I-1301 with the zone from a lookup table,
+// except NotFoundNode. Route is a stub: this module never asks for paths.
 type fakeNavigation struct {
 	gotNodeID string
 }
@@ -61,6 +62,10 @@ func (f *fakeNavigation) GetNode(_ context.Context, nodeID string) (navigation.N
 
 func (f *fakeNavigation) ListNodes(context.Context) ([]navigation.NavNode, error) { return nil, nil }
 func (f *fakeNavigation) ListEdges(context.Context) ([]navigation.NavEdge, error) { return nil, nil }
+
+func (f *fakeNavigation) Route(_ context.Context, _, _ string, _ navigation.RouteOptions) (navigation.Route, error) {
+	return navigation.Route{}, errors.New("fakeNavigation: Route not implemented")
+}
 
 func newService(t *testing.T, providers ...location.Provider) (location.Service, *fakeRepo, *fakeNavigation) {
 	t.Helper()
