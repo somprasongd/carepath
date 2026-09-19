@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { DEFAULT_VISIT_ID, thaiStepTitle, useJourney, type Journey } from '@/features/visit'
-import { NavigateScreen, type NavigateDestination } from './-NavigateScreen'
+import { navigatePlanForJourney } from '@/features/floorplan'
+import { DEFAULT_VISIT_ID, useJourney } from '@/features/visit'
+import { NavigateScreen } from './-NavigateScreen'
 
 /** `?visit=<id>` — same parameter as the journey screen, forwarded by its CTA. */
 export const Route = createFileRoute('/patient/navigate')({
@@ -16,30 +17,16 @@ function PatientNavigateRoute() {
   const visitId = visit ?? DEFAULT_VISIT_ID
 
   // Same query key as the journey screen, so this is a cache read, not a
-  // second round trip.
+  // second round trip. The plan resolves the destination's place and floor
+  // from the recommended step (ADR-0009) onto the floor-plan asset (#25).
   const { data, isPending } = useJourney(visitId)
 
   return (
     <div className="h-dvh">
       <NavigateScreen
-        destination={destinationFor(data, isPending)}
+        plan={navigatePlanForJourney(data, isPending)}
         onBack={() => navigate({ to: '/patient/journey', search: { visit: visitId } })}
       />
     </div>
   )
-}
-
-function destinationFor(journey: Journey | undefined, isPending: boolean): NavigateDestination {
-  if (isPending) return { title: 'กำลังโหลดจุดหมาย…', subtitle: '' }
-  const recommended = journey?.recommended
-  if (!recommended) return { title: 'จุดบริการของคุณ', subtitle: '', placeId: 'unknown' }
-
-  const title = thaiStepTitle(recommended)
-  const servicePoint = recommended.servicePoint
-
-  return {
-    title: `เส้นทางไป${title}`,
-    subtitle: servicePoint ? `${servicePoint.name} · ${servicePoint.placeId}` : recommended.kind,
-    placeId: servicePoint?.placeId,
-  }
 }

@@ -1,94 +1,132 @@
 import {
   AppBar,
-  BottomSheet,
+  Divider,
+  FloorPlanMap,
   InfoNote,
   LinkButton,
-  LocationBanner,
-  SchematicMap,
   Screen,
   ScreenDock,
 } from '@/design-system'
 import {
-  currentLocation,
-  floor1Corridor,
-  floor1Rooms,
-  pharmacyRoute,
-  pharmacyRouteEnd,
-  walkingSteps,
-} from '@/mocks/demo-data'
+  floorPlanFor,
+  type DestinationPlan,
+  type NavigatePlan,
+} from '@/features/floorplan'
 
-export type NavigateDestination = {
-  /** AppBar title, e.g. "เส้นทางไปเจาะเลือด". */
-  title: string
-  /** Place line under it, e.g. "Laboratory · LAB-01". */
-  subtitle: string
-  /** When set and not PHARMACY-01 there is no schematic plan yet — see below. */
-  placeId?: string
+/**
+ * Static reference for /design: the pharmacy on the real ground-floor plan —
+ * the same asset and highlight as the live screen, no fabricated route.
+ */
+const REFERENCE_PLAN: DestinationPlan = {
+  title: 'เส้นทางไปรับยา',
+  name: 'Pharmacy',
+  subtitle: 'ชั้น 1 · Pharmacy · PHARMACY-01',
+  floorId: 'I-1301',
+  floorLabel: 'ชั้น 1',
+  placeId: 'PHARMACY-01',
+  x: 885,
+  y: 190,
 }
 
 /**
- * ผู้ป่วย · นำทางไปจุดบริการ — schematic map plus turn-by-turn text, so the
- * route is readable without reading the map.
- *
- * The only schematic plan that exists so far is the pharmacy one inherited
- * from the reference screens; /api/v1/navigation/route is still reserved in
- * the contract. Until it lands, a destination with another placeId gets the
- * honest "ยังไม่รองรับเส้นทาง" state instead of a wrong map (DESIGN.md).
- * Omitting `destination` renders the static reference screens on /design.
+ * ผู้ป่วย · นำทางไปจุดบริการ — the real floor-plan asset with the
+ * destination room highlighted and named, focused so it reads at phone
+ * width. Turn-by-turn text and the route line wait for the navigation API
+ * (#28/#29); nothing about the route is invented here (DESIGN.md).
+ * Omitting `plan` renders the static reference screens on /design.
  */
 export function NavigateScreen({
-  destination,
+  plan,
   onBack,
 }: {
-  destination?: NavigateDestination
+  plan?: NavigatePlan
   onBack?: () => void
 }) {
-  const hasPlan = destination?.placeId === undefined || destination.placeId === 'PHARMACY-01'
-  const fallback = { title: 'เส้นทางไปห้องยา', subtitle: 'ชั้น 1 · Pharmacy · PHARMACY-01' }
+  const resolved = plan ?? { state: 'plan' as const, ...REFERENCE_PLAN }
 
   return (
     <Screen variant="patient">
       <AppBar
         onBack={onBack}
         backLabel="ย้อนกลับไปหน้าเส้นทาง"
-        title={destination?.title ?? fallback.title}
-        subtitle={destination?.subtitle ?? fallback.subtitle}
+        title={appBarTitle(resolved)}
+        subtitle={resolved.state === 'plan' ? resolved.subtitle : undefined}
       />
 
-      {hasPlan ? (
+      {resolved.state === 'plan' && floorPlanFor(resolved.floorId) ? (
         <>
-          <div className="mx-gutter mb-3.5 shrink-0">
-            <LocationBanner actionLabel="สแกนใหม่">
-              ตำแหน่งล่าสุดจากการสแกน QR ที่ทางลงชั้น 1 · 2 นาทีที่แล้ว
-            </LocationBanner>
-          </div>
-
-          <div className="flex-1 overflow-hidden px-gutter pt-1">
-            <SchematicMap
-              rooms={floor1Rooms}
-              corridor={floor1Corridor}
-              route={pharmacyRoute}
-              routeEnd={pharmacyRouteEnd}
-              you={currentLocation}
+          <div className="flex-1 overflow-hidden px-gutter pt-1 pb-2">
+            <FloorPlanMap
+              svg={floorPlanFor(resolved.floorId) ?? ''}
+              floorLabel={resolved.floorLabel}
+              destination={{
+                placeId: resolved.placeId,
+                name: resolved.name,
+                x: resolved.x,
+                y: resolved.y,
+              }}
             />
           </div>
 
           <ScreenDock>
-            <BottomSheet
-              primary="3 นาที"
-              secondary="· 65 เมตร"
-              steps={walkingSteps}
-              footer={<LinkButton>แจ้งเจ้าหน้าที่หากหลงทาง</LinkButton>}
-            />
+            <DestinationPanel plan={resolved} />
           </ScreenDock>
         </>
       ) : (
         <div className="px-gutter pt-5">
-          <InfoNote>
-            ระบบยังไม่รองรับเส้นทางในอาคารสำหรับจุดบริการนี้ — โปรดถามเจ้าหน้าที่ที่จุดรับลงทะเบียน
-          </InfoNote>
+          <InfoNote>{noticeFor(resolved)}</InfoNote>
         </div>
       )}
     </Screen>
+  )
+}
+
+function appBarTitle(plan: NavigatePlan): string {
+  switch (plan.state) {
+    case 'pending':
+      return 'กำลังโหลดจุดหมาย…'
+    case 'no-destination':
+      return 'จุดบริการของคุณ'
+    default:
+      return plan.title
+  }
+}
+
+function noticeFor(plan: NavigatePlan): string {
+  switch (plan.state) {
+    case 'pending':
+      return 'กำลังโหลดจุดหมายของคุณ…'
+    case 'no-destination':
+      return 'ยังไม่มีจุดบริการถัดไปในการมาโรงพยาบาลครั้งนี้'
+    default:
+      return 'ระบบยังไม่รองรับเส้นทางในอาคารสำหรับจุดบริการนี้ — โปรดถามเจ้าหน้าที่ที่จุดรับลงทะเบียน'
+  }
+}
+
+/**
+ * The sheet under the map carries the destination facts patients need —
+ * name, floor, place — instead of the demo's invented walking time. It
+ * keeps the BottomSheet's anatomy (handle, summary, divider) so the real
+ * turn-by-turn steps can drop straight in with #28/#29.
+ */
+function DestinationPanel({ plan }: { plan: DestinationPlan }) {
+  return (
+    <div className="flex flex-col gap-3.5 rounded-t-xl bg-surface px-gutter pt-3 pb-6 shadow-sheet">
+      <div className="mx-auto h-1 w-9 rounded-full bg-line" aria-hidden="true" />
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-sans text-body-md font-bold text-ink">{plan.name}</div>
+          <div className="font-sans text-body-sm text-ink-muted">{plan.subtitle}</div>
+        </div>
+        <span className="shrink-0 rounded-full border border-line bg-neutral px-2.5 py-1 font-sans text-caption font-bold text-ink-muted">
+          {plan.floorLabel}
+        </span>
+      </div>
+      <Divider />
+      <LinkButton>แจ้งเจ้าหน้าที่หากหลงทาง</LinkButton>
+      <p className="m-0 font-sans text-caption text-ink-muted">
+        เส้นทางเดินแบบทีละจุดจะแสดงที่นี่เมื่อระบบนำทางในอาคารพร้อมใช้งาน
+      </p>
+    </div>
   )
 }
