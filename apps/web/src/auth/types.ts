@@ -3,8 +3,9 @@ export type AuthStatus = 'loading' | 'unauthenticated' | 'authenticated' | 'erro
 export type AuthSource = 'line' | 'demo'
 
 export interface AuthIdentity {
-  idToken: string
+  sessionToken: string
   source: AuthSource
+  externalId: string
   displayName?: string
 }
 

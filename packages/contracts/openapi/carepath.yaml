@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.7.0
+  version: 0.7.1
 servers:
   - url: http://localhost:8080
 paths:
@@ -54,7 +54,10 @@ paths:
                 $ref: '#/components/schemas/Identity'
         '401':
           description: Session not found or expired
-
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/journeys/{visitId}:
     get:
       description: >

@@ -27,10 +27,30 @@ export async function apiPost<TReturn>(path: string, body: unknown): Promise<TRe
   })
 }
 
+let authToken: string | undefined
+
+/**
+ * Set (or clear) the session token attached as `Authorization: Bearer` to
+ * every request. The auth providers own this — LiffAuthProvider stores the
+ * server-issued token, DemoAuthProvider its placeholder.
+ */
+export function setApiAuthToken(token: string | undefined) {
+  authToken = token
+}
+
+function withAuthHeader(init: RequestInit): RequestInit {
+  if (!authToken) return init
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string> | undefined),
+    Authorization: `Bearer ${authToken}`,
+  }
+  return { ...init, headers }
+}
+
 async function request<TReturn>(path: string, init: RequestInit): Promise<TReturn> {
   let response: Response
   try {
-    response = await fetch(`${apiBase}${path}`, init)
+    response = await fetch(`${apiBase}${path}`, withAuthHeader(init))
   } catch (cause) {
     throw new ApiError(0, `เชื่อมต่อ API ไม่ได้ (${String(cause)})`)
   }
