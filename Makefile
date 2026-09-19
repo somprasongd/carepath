@@ -18,8 +18,10 @@ mock-his:
 	cd apps/mock-his && go run ./cmd/server
 
 web:
-	cd apps/web && npm run dev
+	cd apps/web && npm install && npm run dev
 
 fmt:
 	cd apps/api && gofmt -w .
 	cd apps/mock-his && gofmt -w .
+fetch:
+	git fetch
