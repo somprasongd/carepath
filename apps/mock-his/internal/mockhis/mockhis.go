@@ -7,6 +7,8 @@ package mockhis
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -94,9 +96,14 @@ type Store struct {
 	events   []HISEvent
 	applied  map[string]bool
 	eventSeq int
+	visitSeq int
 	seedBase time.Time
 	now      func() time.Time
 }
+
+// defaultServiceCodes is the standard demo flow used when a created visit
+// does not specify its own steps.
+var defaultServiceCodes = []string{"REGISTRATION", "SCREENING", "DOCTOR", "LAB", "PHARMACY"}
 
 // NewStore returns a seeded store. Seed events replay the visit history that
 // the seed snapshot already reflects (opened, requested per step, completed
@@ -105,6 +112,7 @@ func NewStore() *Store {
 	s := &Store{
 		visits:   map[string]*Visit{},
 		applied:  map[string]bool{},
+		visitSeq: 1, // VISIT-001 is the seed
 		seedBase: time.Date(2026, 9, 19, 9, 0, 0, 0, time.FixedZone("ICT", 7*60*60)),
 		now:      time.Now,
 	}
@@ -162,6 +170,103 @@ func (s *Store) GetVisit(visitID string) (Visit, bool) {
 		return Visit{}, false
 	}
 	return *copyVisit(v), true
+}
+
+// ListVisits returns every visit snapshot, ordered by visit id — the
+// demo-driver surface the console selects from.
+func (s *Store) ListVisits() []Visit {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ids := make([]string, 0, len(s.visits))
+	for id := range s.visits {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]Visit, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, *copyVisit(s.visits[id]))
+	}
+	return out
+}
+
+// CreateVisit opens a new ACTIVE visit: the first step is READY, the rest
+// PENDING. Codes fall back to the standard demo template when empty. Every
+// fact is announced as canonical events (visit.opened, service.requested per
+// step) so downstream consumers see the visit through the contract only.
+func (s *Store) CreateVisit(patientRef string, serviceCodes []string) (Visit, *Error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	codes := make([]string, 0, len(serviceCodes))
+	for _, code := range serviceCodes {
+		code = strings.TrimSpace(code)
+		if code == "" {
+			return Visit{}, &Error{Kind: ErrBadInput, Msg: "serviceCodes must be non-empty strings"}
+		}
+		codes = append(codes, code)
+	}
+	if len(codes) == 0 {
+		codes = defaultServiceCodes
+	}
+
+	s.visitSeq++
+	v := &Visit{
+		VisitID:    fmt.Sprintf("VISIT-%03d", s.visitSeq),
+		PatientRef: patientRef,
+		Status:     VisitActive,
+	}
+	if v.PatientRef == "" {
+		v.PatientRef = fmt.Sprintf("PATIENT-DEMO-%03d", s.visitSeq)
+	}
+	for i, code := range codes {
+		status := StepPending
+		if i == 0 {
+			status = StepReady
+		}
+		v.Steps = append(v.Steps, VisitStep{Sequence: i + 1, ServiceCode: code, Status: status})
+	}
+
+	s.visits[v.VisitID] = v
+	s.append(EventVisitOpened, v, map[string]any{"status": v.Status})
+	for _, step := range v.Steps {
+		s.append(EventServiceRequested, v, map[string]any{
+			"sequence": step.Sequence, "serviceCode": step.ServiceCode,
+		})
+	}
+	return *copyVisit(v), nil
+}
+
+// AddOrder appends one ordered service as a PENDING step after the current
+// last sequence; it becomes READY when the preceding open step completes,
+// like any other step. Announced as a canonical service.requested event.
+func (s *Store) AddOrder(visitID, serviceCode string) (VisitStep, *Error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	serviceCode = strings.TrimSpace(serviceCode)
+	if serviceCode == "" {
+		return VisitStep{}, &Error{Kind: ErrBadInput, Msg: "serviceCode is required"}
+	}
+	v, ok := s.visits[visitID]
+	if !ok {
+		return VisitStep{}, &Error{Kind: ErrNotFound, Msg: "visit not found"}
+	}
+	if v.Status != VisitActive {
+		return VisitStep{}, &Error{Kind: ErrConflict, Msg: fmt.Sprintf("visit is %s and cannot take new orders", v.Status)}
+	}
+
+	next := 1
+	for _, step := range v.Steps {
+		if step.Sequence >= next {
+			next = step.Sequence + 1
+		}
+	}
+	step := VisitStep{Sequence: next, ServiceCode: serviceCode, Status: StepPending}
+	v.Steps = append(v.Steps, step)
+	s.append(EventServiceRequested, v, map[string]any{
+		"sequence": step.Sequence, "serviceCode": step.ServiceCode,
+	})
+	return step, nil
 }
 
 func copyVisit(v *Visit) *Visit {

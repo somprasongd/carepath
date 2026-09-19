@@ -13,6 +13,27 @@ import (
 // do runs one request against the app and decodes the JSON response body.
 func do(t *testing.T, app *fiber.App, method, path, body string) (int, map[string]any) {
 	t.Helper()
+	status, raw := doRaw(t, app, method, path, body)
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("%s %s: decode response %q: %v", method, path, raw, err)
+	}
+	return status, out
+}
+
+// doList is do for endpoints whose response body is a JSON array.
+func doList(t *testing.T, app *fiber.App, method, path, body string) (int, []any) {
+	t.Helper()
+	status, raw := doRaw(t, app, method, path, body)
+	var out []any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("%s %s: decode response %q: %v", method, path, raw, err)
+	}
+	return status, out
+}
+
+func doRaw(t *testing.T, app *fiber.App, method, path, body string) (int, []byte) {
+	t.Helper()
 	var req *http.Request
 	if body == "" {
 		req, _ = http.NewRequest(method, path, nil)
@@ -28,11 +49,7 @@ func do(t *testing.T, app *fiber.App, method, path, body string) (int, map[strin
 	if err != nil {
 		t.Fatalf("%s %s: read response: %v", method, path, err)
 	}
-	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err != nil {
-		t.Fatalf("%s %s: decode response %q: %v", method, path, raw, err)
-	}
-	return resp.StatusCode, out
+	return resp.StatusCode, raw
 }
 
 func stepStatuses(body map[string]any) map[int]string {
@@ -228,5 +245,168 @@ func TestEventFeedCursorAndEnvelope(t *testing.T) {
 	}
 	if tail["nextAfter"] != "" {
 		t.Fatalf("nextAfter on empty page = %v, want empty", tail["nextAfter"])
+	}
+}
+
+// #22 AC1: the console can create a demo visit (or pick the seeded one).
+func TestCreateDemoVisit(t *testing.T) {
+	app := New()
+
+	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits",
+		`{"patientRef":"PATIENT-X","serviceCodes":["REGISTRATION","XRAY"]}`)
+	if status != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body %v)", status, body)
+	}
+	if body["visitId"] != "VISIT-002" || body["patientRef"] != "PATIENT-X" || body["status"] != "ACTIVE" {
+		t.Fatalf("created visit = %v, want VISIT-002 / PATIENT-X / ACTIVE", body)
+	}
+	got := stepStatuses(body)
+	if len(got) != 2 || got[1] != "READY" || got[2] != "PENDING" {
+		t.Fatalf("created steps = %v, want first READY rest PENDING", got)
+	}
+
+	// Defaults: no patientRef and no codes -> standard template, ids assigned.
+	status, body = do(t, app, http.MethodPost, "/api/v1/demo/visits", `{}`)
+	if status != http.StatusCreated {
+		t.Fatalf("default create status = %d, want 201", status)
+	}
+	if body["visitId"] != "VISIT-003" || body["patientRef"] != "PATIENT-DEMO-003" {
+		t.Fatalf("defaults = %v, want VISIT-003 / PATIENT-DEMO-003", body)
+	}
+	if len(body["steps"].([]any)) != len(defaultServiceCodes) {
+		t.Fatalf("default steps = %d, want the standard template", len(body["steps"].([]any)))
+	}
+
+	if status, _ := do(t, app, http.MethodPost, "/api/v1/demo/visits", `not json`); status != http.StatusBadRequest {
+		t.Fatalf("invalid body status = %d, want 400", status)
+	}
+	if status, _ := do(t, app, http.MethodPost, "/api/v1/demo/visits", `{"serviceCodes":["  "]}`); status != http.StatusBadRequest {
+		t.Fatalf("blank service code status = %d, want 400", status)
+	}
+}
+
+func TestListDemoVisits(t *testing.T) {
+	app := New()
+	do(t, app, http.MethodPost, "/api/v1/demo/visits", `{}`)
+
+	status, visits := doList(t, app, http.MethodGet, "/api/v1/demo/visits", "")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if len(visits) != 2 {
+		t.Fatalf("visits = %d, want seed + created", len(visits))
+	}
+	first := visits[0].(map[string]any)
+	if first["visitId"] != "VISIT-001" || len(first["steps"].([]any)) != 5 {
+		t.Fatalf("first visit = %v, want seeded VISIT-001 with 5 steps", first["visitId"])
+	}
+}
+
+// #22 AC2: an order (e.g. X-Ray) can be sent to a visit.
+func TestAddOrder(t *testing.T) {
+	app := New()
+
+	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/orders",
+		`{"serviceCode":"XRAY"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body %v)", status, body)
+	}
+	if body["sequence"].(float64) != 6 || body["serviceCode"] != "XRAY" || body["status"] != "PENDING" {
+		t.Fatalf("order step = %v, want sequence 6 XRAY PENDING", body)
+	}
+
+	// The appended order behaves like any step: completing LAB readies the
+	// next PENDING (PHARMACY, not XRAY).
+	post := func(path, commandID, to string) int {
+		s, _ := do(t, app, http.MethodPost, path, `{"commandId":"`+commandID+`","to":"`+to+`"}`)
+		return s
+	}
+	post("/api/v1/visits/VISIT-001/steps/4/transition", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "STARTED")
+	post("/api/v1/visits/VISIT-001/steps/4/transition", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "COMPLETED")
+	_, snap := do(t, app, http.MethodGet, "/api/v1/visits/VISIT-001", "")
+	got := stepStatuses(snap)
+	if got[5] != "READY" || got[6] != "PENDING" {
+		t.Fatalf("after LAB completed = %v, want PHARMACY(5) READY and XRAY(6) PENDING", got)
+	}
+
+	if status, _ := do(t, app, http.MethodPost, "/api/v1/demo/visits/NOPE/orders", `{"serviceCode":"XRAY"}`); status != http.StatusNotFound {
+		t.Fatalf("unknown visit status = %d, want 404", status)
+	}
+	if status, _ := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/orders", `{"serviceCode":"  "}`); status != http.StatusBadRequest {
+		t.Fatalf("blank code status = %d, want 400", status)
+	}
+}
+
+func TestAddOrderConflictOnFinishedVisit(t *testing.T) {
+	app := New()
+	do(t, app, http.MethodPost, "/api/v1/demo/visits", `{"serviceCodes":["REGISTRATION"]}`)
+	do(t, app, http.MethodPost, "/api/v1/visits/VISIT-002/steps/1/transition",
+		`{"commandId":"cccccccc-cccc-cccc-cccc-cccccccccccc","to":"STARTED"}`)
+	do(t, app, http.MethodPost, "/api/v1/visits/VISIT-002/steps/1/transition",
+		`{"commandId":"dddddddd-dddd-dddd-dddd-dddddddddddd","to":"COMPLETED"}`)
+
+	if status, resp := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-002/orders", `{"serviceCode":"XRAY"}`); status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (body %v)", status, resp)
+	}
+}
+
+// #22 AC4 at the HIS boundary: demo actions are announced as canonical
+// events only — nothing here knows about CarePath or its database.
+func TestDemoActionsSurfaceAsCanonicalEvents(t *testing.T) {
+	app := New()
+	do(t, app, http.MethodPost, "/api/v1/demo/visits", `{"serviceCodes":["REGISTRATION","LAB"]}`)
+	do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-002/orders", `{"serviceCode":"XRAY"}`)
+	do(t, app, http.MethodPost, "/api/v1/visits/VISIT-002/steps/1/transition",
+		`{"commandId":"dddddddd-dddd-dddd-dddd-dddddddddddd","to":"COMPLETED"}`)
+
+	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000009&limit=100", "")
+	var types []string
+	for _, raw := range feed["events"].([]any) {
+		types = append(types, raw.(map[string]any)["type"].(string))
+	}
+	want := []string{
+		"visit.opened",      // demo create
+		"service.requested", // REGISTRATION
+		"service.requested", // LAB
+		"service.requested", // XRAY order
+		"service.completed", // REGISTRATION completed via console
+		"visit.updated",     // LAB became READY
+	}
+	if len(types) != len(want) {
+		t.Fatalf("event types = %v, want %v", types, want)
+	}
+	for i := range want {
+		if types[i] != want[i] {
+			t.Fatalf("event[%d] = %q, want %q", i, types[i], want[i])
+		}
+	}
+}
+
+func TestConsoleServed(t *testing.T) {
+	app := New()
+
+	req, _ := http.NewRequest(http.MethodGet, "/console", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("GET /console: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("/console status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/html; charset=utf-8" {
+		t.Fatalf("/console content-type = %q, want text/html", ct)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(raw), "Mock HIS Console") {
+		t.Fatalf("/console body does not look like the console page")
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, "/", nil)
+	resp, err = app.Test(req)
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	if resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != "/console" {
+		t.Fatalf("GET / = %d %q, want 302 to /console", resp.StatusCode, resp.Header.Get("Location"))
 	}
 }

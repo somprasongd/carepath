@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock HIS Console</title>
+<style>
+  :root {
+    --bg: #f4f6f8; --panel: #ffffff; --line: #dde3e9; --ink: #1c2733;
+    --muted: #64748b; --accent: #0f6fde; --ok: #15803d; --warn: #b45309;
+    --bad: #b91c1c; --chip: #eef2f7;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
+  header { display: flex; align-items: baseline; gap: 12px; padding: 14px 20px; background: #10233c; color: #fff; }
+  header h1 { font-size: 16px; margin: 0; }
+  header span { color: #9fb3cc; font-size: 12px; }
+  header .live { margin-left: auto; font-size: 12px; color: #7ee2a8; }
+  main { display: grid; grid-template-columns: 300px 1fr 340px; gap: 14px; padding: 14px 20px; align-items: start; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  .visit { padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; cursor: pointer; }
+  .visit:hover { background: var(--chip); }
+  .visit.sel { border-color: var(--accent); background: #eaf2fd; }
+  .visit .id { font-weight: 600; }
+  .visit .sub { color: var(--muted); font-size: 12px; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .b-ACTIVE { background: #dcfce7; color: var(--ok); }
+  .b-COMPLETED { background: #e2e8f0; color: var(--muted); }
+  .b-CANCELLED { background: #fee2e2; color: var(--bad); }
+  .b-READY { background: #dbeafe; color: var(--accent); }
+  .b-PENDING { background: var(--chip); color: var(--muted); }
+  .b-STARTED { background: #fef3c7; color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 12px; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  td { padding: 7px 6px; border-bottom: 1px solid var(--line); }
+  td .code { font-weight: 600; }
+  button { border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { opacity: .9; }
+  button:disabled { opacity: .4; cursor: default; }
+  form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  input, select { border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; font: inherit; }
+  input { flex: 1; min-width: 110px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .empty { color: var(--muted); padding: 12px 0; text-align: center; }
+  #events { list-style: none; margin: 0; padding: 0; font-size: 12px; max-height: 70vh; overflow: auto; }
+  #events li { display: flex; gap: 8px; padding: 5px 2px; border-bottom: 1px dashed var(--line); }
+  #events .eid { color: var(--muted); min-width: 84px; }
+  #events .typ { font-weight: 600; min-width: 140px; }
+  #events .typ.visit { color: var(--accent); }
+  #events .typ.service { color: var(--ok); }
+  #toast { position: fixed; bottom: 16px; right: 16px; background: #10233c; color: #fff; border-radius: 8px; padding: 9px 14px; font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 420px; }
+  #toast.show { opacity: .96; }
+  .actions { display: flex; gap: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mock HIS Console</h1>
+  <span>drives the fake HIS for demos &mdash; every action surfaces as canonical events on the feed</span>
+  <span class="live" id="clock"></span>
+</header>
+
+<main>
+  <section class="panel" id="visits-panel">
+    <h2>Visits</h2>
+    <div id="visits"><div class="empty">loading&hellip;</div></div>
+    <form id="create-form">
+      <input id="new-patient" placeholder="patientRef (optional)">
+      <input id="new-codes" placeholder="REGISTRATION,SCREENING,DOCTOR,LAB,PHARMACY">
+      <button class="primary" type="submit">New visit</button>
+    </form>
+    <div class="hint">Leave codes empty for the standard 5-step flow.</div>
+  </section>
+
+  <section class="panel" id="detail-panel">
+    <h2>Visit detail</h2>
+    <div id="detail"><div class="empty">select a visit on the left</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Event feed (canonical)</h2>
+    <ul id="events"><li class="empty">loading&hellip;</li></ul>
+  </section>
+</main>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+let selectedVisit = null;
+let lastVisitsJSON = "";
+let lastDetailJSON = "";
+
+const $ = (sel) => document.querySelector(sel);
+
+function toast(msg, isError) {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.style.background = isError ? "#7f1d1d" : "#10233c";
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2600);
+}
+
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function tick() {
+  $("#clock").textContent = new Date().toLocaleTimeString();
+}
+
+function renderVisits(visits) {
+  // Rebuild only when the data changed: a stable DOM keeps pending clicks
+  // and in-progress typing from racing the auto-refresh.
+  const json = JSON.stringify(visits);
+  if (json === lastVisitsJSON) return;
+  lastVisitsJSON = json;
+  const box = $("#visits");
+  if (!visits.length) { box.innerHTML = '<div class="empty">no visits</div>'; return; }
+  box.replaceChildren(...visits.map((v) => {
+    const row = document.createElement("div");
+    row.className = "visit" + (v.visitId === selectedVisit ? " sel" : "");
+    row.innerHTML =
+      '<div class="id">' + v.visitId + ' <span class="badge b-' + v.status + '">' + v.status + "</span></div>" +
+      '<div class="sub">' + v.patientRef + " &middot; " + v.steps.length + " steps</div>";
+    row.onclick = () => { selectedVisit = v.visitId; lastVisitsJSON = ""; refresh(true); };
+    return row;
+  }));
+}
+
+function stepRow(step) {
+  const tr = document.createElement("tr");
+  const open = step.status !== "COMPLETED" && step.status !== "CANCELLED";
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  if (open) {
+    const start = document.createElement("button");
+    start.textContent = "Start";
+    start.disabled = step.status !== "READY" && step.status !== "PENDING";
+    start.onclick = () => transition(step, "STARTED");
+    const done = document.createElement("button");
+    done.className = "primary";
+    done.textContent = "Complete";
+    done.onclick = () => transition(step, "COMPLETED");
+    actions.append(start, done);
+  }
+  tr.innerHTML =
+    "<td>" + step.sequence + "</td>" +
+    '<td><span class="code">' + step.serviceCode + "</span></td>" +
+    '<td><span class="badge b-' + step.status + '">' + step.status + "</span></td>";
+  const td = document.createElement("td");
+  td.appendChild(actions);
+  tr.appendChild(td);
+  return tr;
+}
+
+function renderDetail(visit) {
+  const json = visit ? JSON.stringify(visit) : "";
+  if (json === lastDetailJSON) return;
+  lastDetailJSON = json;
+
+  const box = $("#detail");
+  // Preserve what the operator is typing across a data-driven rebuild.
+  const prev = document.querySelector("#order-code");
+  const prevValue = prev ? prev.value : "";
+  const hadFocus = prev && document.activeElement === prev;
+
+  if (!visit) { box.innerHTML = '<div class="empty">visit not found</div>'; return; }
+  box.replaceChildren();
+
+  const head = document.createElement("div");
+  head.innerHTML =
+    "<div style=\"font-weight:600;font-size:16px\">" + visit.visitId +
+    ' <span class="badge b-' + visit.status + '">' + visit.status + "</span></div>" +
+    '<div class="hint">' + visit.patientRef + "</div>";
+  box.appendChild(head);
+
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  thead.innerHTML = "<tr><th>#</th><th>Service</th><th>Status</th><th></th></tr>";
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  visit.steps.forEach((s) => tbody.appendChild(stepRow(s)));
+  table.appendChild(tbody);
+  box.appendChild(table);
+
+  const form = document.createElement("form");
+  form.id = "order-form";
+  const input = document.createElement("input");
+  input.id = "order-code";
+  input.placeholder = "serviceCode, e.g. XRAY";
+  const btn = document.createElement("button");
+  btn.className = "primary";
+  btn.type = "submit";
+  btn.textContent = "Add order";
+  form.append(input, btn);
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const code = input.value.trim();
+    if (!code) return;
+    try {
+      const step = await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/orders", { serviceCode: code });
+      toast("Order added: " + step.serviceCode + " (step " + step.sequence + ")");
+      input.value = "";
+      lastDetailJSON = "";
+      refresh(true);
+    } catch (err) { toast("Add order failed: " + err.message, true); }
+  };
+  box.appendChild(form);
+
+  input.value = prevValue;
+  if (hadFocus) input.focus();
+}
+
+async function transition(step, to) {
+  try {
+    await api("POST", "/api/v1/visits/" + selectedVisit + "/steps/" + step.sequence + "/transition",
+      { commandId: crypto.randomUUID(), to });
+    toast(step.serviceCode + " \u2192 " + to);
+    refresh(true);
+  } catch (err) { toast("Transition failed: " + err.message, true); }
+}
+
+function renderEvents(events) {
+  const list = $("#events");
+  if (!events.length) { list.innerHTML = '<li class="empty">no events</li>'; return; }
+  list.replaceChildren(...events.map((e) => {
+    const li = document.createElement("li");
+    const kind = e.type.split(".")[0];
+    li.innerHTML =
+      '<span class="eid">' + e.eventId + "</span>" +
+      '<span class="typ ' + kind + '">' + e.type + "</span>" +
+      "<span>" + e.visitId + (e.payload && e.payload.serviceCode ? " &middot; " + e.payload.serviceCode : "") + "</span>";
+    return li;
+  }));
+}
+
+$("#create-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const body = {};
+  const patient = $("#new-patient").value.trim();
+  if (patient) body.patientRef = patient;
+  const codes = $("#new-codes").value.split(",").map((c) => c.trim()).filter(Boolean);
+  if (codes.length) body.serviceCodes = codes;
+  try {
+    const visit = await api("POST", "/api/v1/demo/visits", body);
+    toast("Created " + visit.visitId + " (" + visit.steps.length + " steps)");
+    $("#new-patient").value = "";
+    $("#new-codes").value = "";
+    selectedVisit = visit.visitId;
+    refresh(true);
+  } catch (err) { toast("Create failed: " + err.message, true); }
+};
+
+let refreshing = false;
+async function refresh(force) {
+  if (refreshing && !force) return;
+  refreshing = true;
+  try {
+    const [visits, feed] = await Promise.all([
+      api("GET", "/api/v1/demo/visits"),
+      api("GET", "/api/v1/events?limit=15"),
+    ]);
+    renderVisits(visits);
+    renderEvents([...feed.events].reverse());
+    if (selectedVisit) {
+      const visit = visits.find((v) => v.visitId === selectedVisit);
+      renderDetail(visit || null);
+      if (!visit) selectedVisit = null;
+    }
+  } catch (err) {
+    toast("Refresh failed: " + err.message, true);
+  } finally {
+    refreshing = false;
+  }
+}
+
+tick();
+setInterval(tick, 1000);
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

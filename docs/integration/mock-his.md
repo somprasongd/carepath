@@ -53,6 +53,19 @@ Mock-only demo behavior: completing a step readies the next `PENDING` step, and 
 
 `apps/api` consumes the feed with a poller (`internal/his/ingest`; interval via `HIS_INGEST_INTERVAL`, default 5s). Each canonical event drives `journey.Service.ApplyHISEvent`, which re-reads the visit snapshot and upserts the CarePath-owned journey projection (`carepath.journey_visit` / `carepath.journey_step`) — the HIS stays the system of record; the projection never guesses state the event payload does not carry. `eventId` is the consumer dedupe key (`carepath.his_applied_event`), so duplicate delivery never duplicates a step, and the feed cursor is kept durably in `carepath.his_ingest_state` so a restart resumes where it left off. Steps whose `serviceCode` has no configured service point are projected with a null `service_point_id` plus a warning log — mapping stays CarePath configuration in the `servicepoint` module.
 
+## Demo-driver API and console (#22)
+
+The console is the demo operator's steering wheel, served by Mock HIS at **`/console`** (one embedded static page — visit list with auto-refresh, Start/Complete buttons per step, create-visit and add-order forms, and a live canonical event tail). It is deliberately **not** part of the canonical contract above: a real HIS has its own operator tooling, so these endpoints exist on the mock only and must never be consumed by CarePath.
+
+- `GET /api/v1/demo/visits` — list all visits (seed + created), for console selection.
+- `POST /api/v1/demo/visits` — `{patientRef?, serviceCodes?[]}`. Ids are assigned (`VISIT-NNN`, `PATIENT-DEMO-NNN`); empty codes fall back to the standard 5-step template; the visit opens `ACTIVE` with the first step `READY` and the rest `PENDING`. Emits canonical `visit.opened` + `service.requested` per step.
+- `POST /api/v1/demo/visits/{visitId}/orders` — `{serviceCode}` (e.g. `XRAY`): appends a `PENDING` step after the current last sequence; it becomes `READY` when the preceding open step completes. Emits canonical `service.requested`. `409` when the visit is `COMPLETED`/`CANCELLED`.
+- Service completion uses the **canonical transition command** above — the same surface CarePath will use, so step status changes have exactly one path.
+
+Every console action mutates only Mock HIS state and surfaces as canonical events; CarePath learns through the #21 feed poller exclusively — nothing writes the CarePath database directly.
+
+One demo-operational caveat: the event log lives in memory, so restarting Mock HIS resets event ids from `EVT-000001` while CarePath's stored feed cursor keeps its old (higher) value — the poller would then see nothing new. Start a demo from a fresh stack (`docker compose down -v && docker compose up --build`) rather than restarting Mock HIS alone against a warm CarePath database.
+
 ## Production replacement
 
 ```text
