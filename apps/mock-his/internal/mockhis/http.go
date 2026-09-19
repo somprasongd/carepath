@@ -2,11 +2,14 @@ package mockhis
 
 import (
 	_ "embed"
+	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/skip2/go-qrcode"
+
+	"carepath/apps/mock-his/internal/platform/logger"
 )
 
 //go:embed console.html
@@ -15,10 +18,13 @@ var consoleHTML []byte
 // New builds the Mock HIS HTTP app implementing the contract in
 // packages/contracts/openapi/mock-his.yaml, plus the demo-driver surface
 // (/api/v1/demo/* and /console) that exists only on the mock — a real HIS
-// has its own operator tooling (see docs/integration/mock-his.md).
-func New() *fiber.App {
+// has its own operator tooling (see docs/integration/mock-his.md). The base
+// logger feeds the request-logging middleware; state changes log through the
+// request-scoped logger it stores in ctx.
+func New(log *slog.Logger) *fiber.App {
 	store := NewStore()
 	app := fiber.New()
+	app.Use(logger.Middleware(log))
 
 	app.Get("/health", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok", "service": "mock-his"})
@@ -88,7 +94,7 @@ func New() *fiber.App {
 		for i, o := range body.Orders {
 			orders[i] = OpenVisitOrder{OrderType: o.OrderType, OrderName: o.OrderName, OrderedByClinic: o.OrderedByClinic}
 		}
-		visit, verr := store.OpenVisit(body.PatientRef, body.PatientName, body.VisitType, clinics, orders)
+		visit, verr := store.OpenVisit(c.Context(), body.PatientRef, body.PatientName, body.VisitType, clinics, orders)
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -103,7 +109,7 @@ func New() *fiber.App {
 		if err := c.Bind().Body(&body); err != nil {
 			return errResponse(c, http.StatusBadRequest, "invalid request body")
 		}
-		visit, verr := store.AddClinic(c.Params("visitId"), body.ClinicCode, body.ClinicName)
+		visit, verr := store.AddClinic(c.Context(), c.Params("visitId"), body.ClinicCode, body.ClinicName)
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -119,7 +125,7 @@ func New() *fiber.App {
 		if err := c.Bind().Body(&body); err != nil {
 			return errResponse(c, http.StatusBadRequest, "invalid request body")
 		}
-		order, verr := store.PlaceOrder(c.Params("visitId"), body.OrderType, body.OrderName, body.OrderedByClinic)
+		order, verr := store.PlaceOrder(c.Context(), c.Params("visitId"), body.OrderType, body.OrderName, body.OrderedByClinic)
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -127,7 +133,7 @@ func New() *fiber.App {
 	})
 
 	app.Post("/api/v1/demo/orders/:orderRef/performed", func(c fiber.Ctx) error {
-		order, verr := store.MarkPerformed(c.Params("orderRef"))
+		order, verr := store.MarkPerformed(c.Context(), c.Params("orderRef"))
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -135,7 +141,7 @@ func New() *fiber.App {
 	})
 
 	app.Post("/api/v1/demo/orders/:orderRef/resulted", func(c fiber.Ctx) error {
-		order, verr := store.MarkResulted(c.Params("orderRef"))
+		order, verr := store.MarkResulted(c.Context(), c.Params("orderRef"))
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -143,7 +149,7 @@ func New() *fiber.App {
 	})
 
 	app.Post("/api/v1/demo/orders/:orderRef/cancel", func(c fiber.Ctx) error {
-		order, verr := store.CancelOrder(c.Params("orderRef"))
+		order, verr := store.CancelOrder(c.Context(), c.Params("orderRef"))
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -151,7 +157,7 @@ func New() *fiber.App {
 	})
 
 	app.Post("/api/v1/demo/visits/:visitId/clinics/:clinicCode/complete-encounter", func(c fiber.Ctx) error {
-		visit, verr := store.CompleteEncounter(c.Params("visitId"), c.Params("clinicCode"))
+		visit, verr := store.CompleteEncounter(c.Context(), c.Params("visitId"), c.Params("clinicCode"))
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -159,7 +165,7 @@ func New() *fiber.App {
 	})
 
 	app.Post("/api/v1/demo/visits/:visitId/complete", func(c fiber.Ctx) error {
-		visit, verr := store.CompleteVisit(c.Params("visitId"))
+		visit, verr := store.CompleteVisit(c.Context(), c.Params("visitId"))
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -170,7 +176,7 @@ func New() *fiber.App {
 	// so every open order and the visit itself are cancelled and announced
 	// as canonical events.
 	app.Post("/api/v1/demo/visits/:visitId/cancel", func(c fiber.Ctx) error {
-		visit, verr := store.CancelVisit(c.Params("visitId"))
+		visit, verr := store.CancelVisit(c.Context(), c.Params("visitId"))
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}

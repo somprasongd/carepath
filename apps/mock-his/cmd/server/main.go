@@ -3,16 +3,24 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"os"
 
 	"carepath/apps/mock-his/internal/mockhis"
+	"carepath/apps/mock-his/internal/platform/logger"
 )
 
 func main() {
+	log := logger.New()
+	slog.SetDefault(log)
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8090"
 	}
-	log.Fatal(mockhis.New().Listen(":" + port))
+	log.Info("starting mock-his", "addr", ":"+port)
+	if err := mockhis.New(log).Listen(":" + port); err != nil {
+		log.Error("server exited", "error", err.Error())
+		os.Exit(1)
+	}
 }
