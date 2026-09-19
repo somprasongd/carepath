@@ -60,6 +60,7 @@ The console is the demo operator's steering wheel, served by Mock HIS at **`/con
 - `GET /api/v1/demo/visits` — list all visits (seed + created), for console selection.
 - `POST /api/v1/demo/visits` — `{patientRef?, serviceCodes?[]}`. Ids are assigned (`VISIT-NNN`, `PATIENT-DEMO-NNN`); empty codes fall back to the standard 5-step template; the visit opens `ACTIVE` with the first step `READY` and the rest `PENDING`. Emits canonical `visit.opened` + `service.requested` per step.
 - `POST /api/v1/demo/visits/{visitId}/orders` — `{serviceCode}` (e.g. `XRAY`): appends a `PENDING` step after the current last sequence; it becomes `READY` when the preceding open step completes. Emits canonical `service.requested`. `409` when the visit is `COMPLETED`/`CANCELLED`.
+- `GET /api/v1/demo/visits/{visitId}/qrcode.png` — PNG QR encoding the visit id, shown in the console's visit detail panel (demo prop for getting the id into the patient view by scanning).
 - Service completion uses the **canonical transition command** above — the same surface CarePath will use, so step status changes have exactly one path.
 
 Every console action mutates only Mock HIS state and surfaces as canonical events; CarePath learns through the #21 feed poller exclusively — nothing writes the CarePath database directly.
