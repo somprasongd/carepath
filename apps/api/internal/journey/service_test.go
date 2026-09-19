@@ -24,10 +24,12 @@ func (f *fakeTransactor) WithinTransaction(ctx context.Context, fn func(ctx cont
 }
 
 type fakeHIS struct {
-	visit     his.Visit
-	err       error
-	getCalls  int
-	getVisits map[string]his.Visit
+	visit          his.Visit
+	err            error
+	getCalls       int
+	getVisits      map[string]his.Visit
+	transitionErr  error
+	transitionCmds []his.TransitionCommand
 }
 
 func (f *fakeHIS) GetVisit(_ context.Context, visitID string) (his.Visit, error) {
@@ -42,6 +44,47 @@ func (f *fakeHIS) GetVisit(_ context.Context, visitID string) (his.Visit, error)
 
 func (f *fakeHIS) Events(_ context.Context, _ string, _ int) (his.EventPage, error) {
 	return his.EventPage{}, nil
+}
+
+// TransitionStep applies the canonical cascades on the stored snapshot so the
+// service under test sees realistic post-command state: completing a step
+// readies the next PENDING one, and closing the last open step completes the
+// visit. Legality itself is the HIS's job and faked via transitionErr.
+func (f *fakeHIS) TransitionStep(_ context.Context, visitID string, sequence int, cmd his.TransitionCommand) (his.VisitStep, error) {
+	f.transitionCmds = append(f.transitionCmds, cmd)
+	if f.transitionErr != nil {
+		return his.VisitStep{}, f.transitionErr
+	}
+	v, ok := f.getVisits[visitID]
+	if !ok {
+		return his.VisitStep{}, his.ErrVisitNotFound
+	}
+	for i := range v.Steps {
+		if v.Steps[i].Sequence != sequence {
+			continue
+		}
+		v.Steps[i].Status = cmd.To
+		if cmd.To == his.CommandToCompleted {
+			for j := range v.Steps {
+				if v.Steps[j].Status == "PENDING" {
+					v.Steps[j].Status = "READY"
+					break
+				}
+			}
+			open := 0
+			for _, st := range v.Steps {
+				if st.Status != "COMPLETED" && st.Status != "CANCELLED" {
+					open++
+				}
+			}
+			if open == 0 {
+				v.Status = "COMPLETED"
+			}
+		}
+		f.getVisits[visitID] = v
+		return v.Steps[i], nil
+	}
+	return his.VisitStep{}, apperr.New(apperr.KindNotFound, "step not found")
 }
 
 type fakeServicepoint struct {
@@ -70,6 +113,7 @@ type fakeRepo struct {
 	applied    map[string]string
 	upserts    int
 	marks      int
+	audits     []CommandAudit
 	inTxMarker bool
 }
 
@@ -101,6 +145,12 @@ func (f *fakeRepo) MarkEventApplied(ctx context.Context, eventID, visitID string
 func (f *fakeRepo) EventApplied(_ context.Context, eventID string) (bool, error) {
 	_, ok := f.applied[eventID]
 	return ok, nil
+}
+
+func (f *fakeRepo) InsertCommandAudit(ctx context.Context, audit CommandAudit) error {
+	_, f.inTxMarker = ctx.Value(txMarker{}).(bool)
+	f.audits = append(f.audits, audit)
+	return nil
 }
 
 func snapshot() his.Visit {
@@ -343,5 +393,123 @@ func TestGetJourneyNotFoundWhenNotProjected(t *testing.T) {
 	svc := newTestService(&fakeHIS{}, newFakeRepo())
 	if _, err := svc.GetJourney(context.Background(), "NOPE"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("error = %v, want ErrNotFound", err)
+	}
+}
+
+// #19 AC1/AC3: an allowed transition is forwarded, the projection is
+// refreshed synchronously, and completing a step recomputes next — the
+// following PENDING step becomes the next READY one in the same response.
+func TestTransitionStepAllowedAndRecomputesNext(t *testing.T) {
+	repo := newFakeRepo()
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed projection: %v", err)
+	}
+	repo.audits = nil
+
+	view, err := svc.TransitionStep(context.Background(), "VISIT-001", 2,
+		his.TransitionCommand{CommandID: "CMD-1", To: his.CommandToStarted}, "staff-web")
+	if err != nil {
+		t.Fatalf("start LAB: %v", err)
+	}
+	if view.Current == nil || view.Current.Sequence != 2 || view.Current.Status != "STARTED" {
+		t.Fatalf("current after start = %+v, want LAB STARTED", view.Current)
+	}
+	if view.Next != nil {
+		t.Fatalf("next after start = %+v, want nil (nothing READY yet)", view.Next)
+	}
+
+	view, err = svc.TransitionStep(context.Background(), "VISIT-001", 2,
+		his.TransitionCommand{CommandID: "CMD-2", To: his.CommandToCompleted}, "staff-web")
+	if err != nil {
+		t.Fatalf("complete LAB: %v", err)
+	}
+	if view.Current != nil {
+		t.Fatalf("current after complete = %+v, want nil", view.Current)
+	}
+	if view.Next == nil || view.Next.Sequence != 3 || view.Next.Status != "READY" {
+		t.Fatalf("next after complete = %+v, want MYSTERY READY at sequence 3", view.Next)
+	}
+	if view.Completed {
+		t.Fatal("completed = true, want false while steps remain open")
+	}
+}
+
+// #19 AC2: a transition the HIS rejects (illegal/out-of-order) surfaces as a
+// Conflict and leaves neither audit nor projection writes behind.
+func TestTransitionStepRejectsIllegalFromHIS(t *testing.T) {
+	repo := newFakeRepo()
+	hisClient := &fakeHIS{
+		getVisits:     map[string]his.Visit{"VISIT-001": snapshot()},
+		transitionErr: apperr.New(apperr.KindConflict, "step 1 is COMPLETED and cannot transition to STARTED"),
+	}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed projection: %v", err)
+	}
+	repo.audits = nil
+	upserts := repo.upserts
+
+	_, err := svc.TransitionStep(context.Background(), "VISIT-001", 1,
+		his.TransitionCommand{CommandID: "CMD-X", To: his.CommandToStarted}, "staff-web")
+	if apperr.KindOf(err) != apperr.KindConflict {
+		t.Fatalf("error = %v, want KindConflict", err)
+	}
+	if len(repo.audits) != 0 || repo.upserts != upserts {
+		t.Fatalf("audits = %d, upserts = %d (want 0 additional) after a rejected command", len(repo.audits), repo.upserts-upserts)
+	}
+}
+
+// An unknown target status never reaches the HIS.
+func TestTransitionStepUnknownTargetRejectedLocally(t *testing.T) {
+	repo := newFakeRepo()
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
+	svc := newTestService(hisClient, repo)
+
+	_, err := svc.TransitionStep(context.Background(), "VISIT-001", 2,
+		his.TransitionCommand{To: "PAUSED"}, "staff-web")
+	if apperr.KindOf(err) != apperr.KindInvalid {
+		t.Fatalf("error = %v, want KindInvalid", err)
+	}
+	if len(hisClient.transitionCmds) != 0 {
+		t.Fatalf("HIS calls = %d, want 0", len(hisClient.transitionCmds))
+	}
+}
+
+func TestTransitionStepUnknownVisitIsNotFound(t *testing.T) {
+	svc := newTestService(&fakeHIS{getVisits: map[string]his.Visit{}}, newFakeRepo())
+	_, err := svc.TransitionStep(context.Background(), "NOPE", 1,
+		his.TransitionCommand{CommandID: "CMD-V", To: his.CommandToStarted}, "staff-web")
+	if apperr.KindOf(err) != apperr.KindNotFound {
+		t.Fatalf("error = %v, want KindNotFound", err)
+	}
+}
+
+// #19 AC4: every forwarded command lands in the audit trail with its
+// idempotency key and source; the key is generated when the client omits it.
+func TestTransitionStepAuditsCommand(t *testing.T) {
+	repo := newFakeRepo()
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed projection: %v", err)
+	}
+	repo.audits = nil
+
+	if _, err := svc.TransitionStep(context.Background(), "VISIT-001", 2,
+		his.TransitionCommand{To: his.CommandToStarted}, "patient-web"); err != nil {
+		t.Fatalf("transition without commandId: %v", err)
+	}
+	if len(repo.audits) != 1 {
+		t.Fatalf("audits = %d, want 1", len(repo.audits))
+	}
+	audit := repo.audits[0]
+	if audit.CommandID == "" || audit.VisitID != "VISIT-001" || audit.Sequence != 2 ||
+		audit.ToStatus != his.CommandToStarted || audit.Source != "patient-web" {
+		t.Fatalf("audit = %+v, want generated key, VISIT-001 seq 2 STARTED from patient-web", audit)
+	}
+	if len(hisClient.transitionCmds) != 1 || hisClient.transitionCmds[0].CommandID != audit.CommandID {
+		t.Fatalf("HIS command = %+v, want it keyed by the generated id", hisClient.transitionCmds)
 	}
 }

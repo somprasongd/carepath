@@ -119,6 +119,84 @@
                 }
             }
         },
+        "/api/v1/journeys/{visitId}/steps/{sequence}/transition": {
+            "post": {
+                "description": "Forwards a step-status command to the HIS (the system of record, ADR-0008) and returns the refreshed journey with the recalculated next step. Illegal or out-of-order transitions are rejected by the HIS with 409. commandId is an optional idempotency key; source names the acting surface for the audit trail.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "journeys"
+                ],
+                "summary": "Transition one service step",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit ID",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Step sequence",
+                        "name": "sequence",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Transition command",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/journey.transitionRequestBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/journey.View"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid body or unknown target status",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "visit or step not found, or journey not projected",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "illegal transition",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "upstream HIS error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/visits/{visitId}": {
             "get": {
                 "description": "Returns the HIS visit enriched with the next actionable step and its service point.",
@@ -318,6 +396,20 @@
                     "type": "string"
                 },
                 "visitId": {
+                    "type": "string"
+                }
+            }
+        },
+        "journey.transitionRequestBody": {
+            "type": "object",
+            "properties": {
+                "commandId": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "to": {
                     "type": "string"
                 }
             }

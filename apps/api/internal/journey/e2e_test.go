@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -54,6 +56,41 @@ func (f *fakeHIS) handler(t *testing.T) http.Handler {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/visits/VISIT-E2E":
 			_ = json.NewEncoder(w).Encode(f.visit)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/v1/visits/VISIT-E2E/steps/") && strings.HasSuffix(r.URL.Path, "/transition"):
+			var cmd his.TransitionCommand
+			if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil || cmd.CommandID == "" || cmd.To == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid command"})
+				return
+			}
+			sequence, _ := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/visits/VISIT-E2E/steps/"), "/transition"))
+			for i := range f.visit.Steps {
+				if f.visit.Steps[i].Sequence != sequence {
+					continue
+				}
+				switch {
+				case f.visit.Steps[i].Status == cmd.To:
+					// transition to current status: no-op success (contract)
+				case f.visit.Steps[i].Status == "COMPLETED" || f.visit.Steps[i].Status == "CANCELLED":
+					w.WriteHeader(http.StatusConflict)
+					_ = json.NewEncoder(w).Encode(map[string]string{"error": "step is terminal"})
+					return
+				default:
+					f.visit.Steps[i].Status = cmd.To
+					if cmd.To == "COMPLETED" {
+						for j := range f.visit.Steps {
+							if f.visit.Steps[j].Status == "PENDING" {
+								f.visit.Steps[j].Status = "READY"
+								break
+							}
+						}
+					}
+				}
+				_ = json.NewEncoder(w).Encode(f.visit.Steps[i])
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "step not found"})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/events":
 			after := r.URL.Query().Get("after")
 			page := his.EventPage{}
@@ -191,6 +228,39 @@ func TestIngestToProjectionEndToEnd(t *testing.T) {
 		t.Fatalf("after duplicate delivery = %d steps, status %s; want 4 steps, no change",
 			len(got.Steps), got.Steps[1].Status)
 	}
+
+	// #19: a transition command goes through the real HTTP adapter to the
+	// HIS, the projection refreshes synchronously, next is recomputed, and
+	// the command lands in the audit table.
+	view, err = journeys.TransitionStep(ctx, "VISIT-E2E", 3,
+		his.TransitionCommand{CommandID: "E2E-CMD-1", To: "STARTED"}, "e2e-test")
+	if err != nil {
+		t.Fatalf("TransitionStep STARTED: %v", err)
+	}
+	if view.Current == nil || view.Current.Sequence != 3 || view.Current.Status != "STARTED" {
+		t.Fatalf("current after STARTED = %+v, want PHARMACY STARTED", view.Current)
+	}
+	view, err = journeys.TransitionStep(ctx, "VISIT-E2E", 3,
+		his.TransitionCommand{CommandID: "E2E-CMD-2", To: "COMPLETED"}, "e2e-test")
+	if err != nil {
+		t.Fatalf("TransitionStep COMPLETED: %v", err)
+	}
+	if view.Completed || view.Current != nil {
+		t.Fatalf("completed/current after COMPLETED = %v/%+v, want false/nil mid-journey", view.Completed, view.Current)
+	}
+	if view.Next == nil || view.Next.Sequence != 4 || view.Next.Status != "READY" {
+		t.Fatalf("next after COMPLETED = %+v, want MYSTERY READY at sequence 4", view.Next)
+	}
+	var audited int
+	if err := database.Querier(ctx).QueryRow(ctx,
+		`SELECT count(*) FROM carepath.journey_command_audit WHERE visit_id = 'VISIT-E2E' AND source = 'e2e-test'`,
+	).Scan(&audited); err != nil {
+		t.Fatalf("query audit: %v", err)
+	}
+	if audited != 2 {
+		t.Fatalf("audited commands = %d, want 2", audited)
+	}
+	exec(`DELETE FROM carepath.journey_command_audit WHERE visit_id = 'VISIT-E2E'`)
 }
 
 type discard struct{}
