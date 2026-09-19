@@ -34,7 +34,13 @@ func TestErrorStatusPerKind(t *testing.T) {
 		{"forbidden → 403", apperr.New(apperr.KindForbidden, "staff role required"), 403, "staff role required", ""},
 		{"not found → 404", apperr.New(apperr.KindNotFound, "visit not found"), 404, "visit not found", ""},
 		{"conflict → 409", apperr.New(apperr.KindConflict, "service point code already exists"), 409, "service point code already exists", ""},
-		{"upstream → 502", apperr.Wrapf(apperr.KindUpstream, errors.New("refused"), "HIS unavailable"), 502, "HIS unavailable", ""},
+		{
+			"upstream → 502 masked",
+			apperr.Wrapf(apperr.KindUpstream, errors.New("dial tcp [::1]:8090: connect: connection refused"), "HIS unavailable"),
+			502,
+			"upstream service unavailable",
+			"connection refused",
+		},
 		{
 			"internal → 500 masked",
 			apperr.Wrapf(apperr.KindInternal, errors.New("pq: connection reset"), "servicepoint: get by code"),

@@ -16,23 +16,27 @@ type ErrorResponse struct {
 }
 
 // Error maps err to a status via apperr.KindOf, logs it with the
-// request-scoped logger, and writes the error envelope. Internal failures
-// are masked: the client receives a generic message while the cause stays in
-// the logs.
+// request-scoped logger, and writes the error envelope. Every 5xx kind is
+// masked: both KindInternal and KindUpstream wrap a raw underlying cause
+// (a driver error, a dial failure) that is unsafe to expose, so the client
+// gets a generic, kind-specific message while the cause stays in the logs.
 func Error(c fiber.Ctx, err error) error {
 	kind := apperr.KindOf(err)
 	status := kind.HTTPStatus()
 	log := logger.FromContext(c.Context())
 
-	if kind == apperr.KindInternal {
-		log.Error("request error", "kind", kind.String(), "error", err.Error(), "status", status)
-		return c.Status(status).JSON(ErrorResponse{Error: "internal server error"})
-	}
-
 	if status >= 500 {
 		log.Error("request error", "kind", kind.String(), "error", err.Error(), "status", status)
-	} else {
-		log.Warn("request error", "kind", kind.String(), "error", err.Error(), "status", status)
+		return c.Status(status).JSON(ErrorResponse{Error: genericMessage(kind)})
 	}
+
+	log.Warn("request error", "kind", kind.String(), "error", err.Error(), "status", status)
 	return c.Status(status).JSON(ErrorResponse{Error: err.Error()})
+}
+
+func genericMessage(kind apperr.Kind) string {
+	if kind == apperr.KindUpstream {
+		return "upstream service unavailable"
+	}
+	return "internal server error"
 }
