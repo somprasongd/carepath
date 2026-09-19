@@ -180,9 +180,7 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "application/json": components["schemas"]["Error"];
-                    };
+                    content?: never;
                 };
             };
         };
@@ -230,6 +228,62 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/journeys/{visitId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The patient journey: the CarePath-owned projection of the HIS visit (ADR-0008), with steps ordered by sequence and the deterministic current/next step resolution. A visit not yet projected (ingest lag) returns 404. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    visitId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The projected journey */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Journey"];
+                    };
+                };
+                /** @description No journey projected for this visit id */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -307,6 +361,38 @@ export interface components {
             sequence: number;
             status: string;
             servicePoint?: components["schemas"]["ServicePoint"];
+        };
+        /** @description One care step of the journey projection, resolved to its configured service point when one exists. */
+        JourneyStep: {
+            sequence: number;
+            /** @description External service code in HIS vocabulary (e.g. LAB). */
+            serviceCode: string;
+            /** @description Canonical step status (PENDING, READY, STARTED, COMPLETED, CANCELLED). */
+            status: string;
+            /** @description Bound service point id; null when no service point is configured for the code (explicit unmapped state). */
+            servicePointId: string | null;
+            /** @description The bound service point, when configured and still active. */
+            servicePoint?: components["schemas"]["ServicePoint"] | null;
+        };
+        /** @description The projected journey of one HIS visit with deterministic current/next step resolution. */
+        Journey: {
+            visitId: string;
+            patientRef: string;
+            /**
+             * @description Canonical visit status.
+             * @enum {string}
+             */
+            status: "ACTIVE" | "COMPLETED" | "CANCELLED";
+            /** @description True iff the visit status is COMPLETED — the unambiguous finished signal; current and next are null in that case. */
+            completed: boolean;
+            /** @description All steps of the visit ordered by sequence. */
+            steps: components["schemas"]["JourneyStep"][];
+            /** @description The first STARTED step by sequence, if any. */
+            current?: components["schemas"]["JourneyStep"] | null;
+            /** @description The first READY step by sequence — the next actionable step, if any. */
+            next?: components["schemas"]["JourneyStep"] | null;
+            /** Format: date-time */
+            syncedAt: string;
         };
         /** @description The Visit fields plus the resolved next step. */
         VisitView: {

@@ -56,7 +56,13 @@ func (f *fakeServicepoint) GetByCode(_ context.Context, code string) (servicepoi
 }
 
 func (f *fakeServicepoint) List(context.Context) ([]servicepoint.ServicePoint, error) {
-	return nil, nil
+	out := make([]servicepoint.ServicePoint, 0, len(f.known))
+	for code := range f.known {
+		out = append(out, servicepoint.ServicePoint{
+			ID: "SP-" + code, Code: code, Name: code, PlaceID: "PLACE-1", Active: true,
+		})
+	}
+	return out, nil
 }
 
 type fakeRepo struct {
@@ -263,6 +269,79 @@ func TestUpstreamErrorPropagates(t *testing.T) {
 func TestGetVisitNotFound(t *testing.T) {
 	svc := newTestService(&fakeHIS{}, newFakeRepo())
 	if _, err := svc.GetVisit(context.Background(), "NOPE"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("error = %v, want ErrNotFound", err)
+	}
+}
+
+// #18 AC2/AC3: the view orders steps by sequence and resolves current (first
+// STARTED) and next (first READY) deterministically, with the bound service
+// point resolved for display and unmapped steps kept explicitly unbound.
+func TestGetJourneyOrdersStepsAndResolvesCurrentNext(t *testing.T) {
+	repo := newFakeRepo()
+	lab := "SP-LAB"
+	// Stored out of order: the view must sort by sequence, not trust insertion.
+	repo.visits["VISIT-001"] = Visit{
+		VisitID: "VISIT-001", PatientRef: "PAT-001", Status: "ACTIVE",
+		Steps: []Step{
+			{Sequence: 3, ServiceCode: "MYSTERY", Status: "READY"},
+			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: &lab},
+			{Sequence: 2, ServiceCode: "LAB", Status: "STARTED", ServicePointID: &lab},
+		},
+	}
+	svc := newTestService(&fakeHIS{}, repo)
+
+	got, err := svc.GetJourney(context.Background(), "VISIT-001")
+	if err != nil {
+		t.Fatalf("GetJourney: %v", err)
+	}
+	if got.Steps[0].Sequence != 1 || got.Steps[1].Sequence != 2 || got.Steps[2].Sequence != 3 {
+		t.Fatalf("step order = %d,%d,%d, want 1,2,3",
+			got.Steps[0].Sequence, got.Steps[1].Sequence, got.Steps[2].Sequence)
+	}
+	if got.Completed {
+		t.Fatal("completed = true, want false for an ACTIVE visit")
+	}
+	if got.Current == nil || got.Current.Sequence != 2 || got.Current.ServicePoint == nil || got.Current.ServicePoint.ID != "SP-LAB" {
+		t.Fatalf("current = %+v, want LAB (seq 2) resolved to SP-LAB", got.Current)
+	}
+	if got.Next == nil || got.Next.Sequence != 3 || got.Next.ServiceCode != "MYSTERY" {
+		t.Fatalf("next = %+v, want the unmapped READY step at seq 3", got.Next)
+	}
+	if got.Next.ServicePointID != nil || got.Next.ServicePoint != nil {
+		t.Fatalf("unmapped next = %+v, want explicit nil binding", got.Next)
+	}
+}
+
+// #18 AC4: a finished visit reports completed=true with no actionable step.
+func TestGetJourneyCompletedVisitIsExplicit(t *testing.T) {
+	repo := newFakeRepo()
+	lab := "SP-LAB"
+	repo.visits["VISIT-001"] = Visit{
+		VisitID: "VISIT-001", PatientRef: "PAT-001", Status: "COMPLETED",
+		Steps: []Step{
+			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED", ServicePointID: &lab},
+			{Sequence: 2, ServiceCode: "LAB", Status: "COMPLETED", ServicePointID: &lab},
+		},
+	}
+	svc := newTestService(&fakeHIS{}, repo)
+
+	got, err := svc.GetJourney(context.Background(), "VISIT-001")
+	if err != nil {
+		t.Fatalf("GetJourney: %v", err)
+	}
+	if got.Status != "COMPLETED" || !got.Completed {
+		t.Fatalf("status/completed = %s/%v, want COMPLETED/true", got.Status, got.Completed)
+	}
+	if got.Current != nil || got.Next != nil {
+		t.Fatalf("current/next = %+v/%+v, want nil/nil on a completed visit", got.Current, got.Next)
+	}
+}
+
+// A visit the poller has not projected yet has no journey to serve (#18
+// design: no read-through fallback — 404 until the projection exists).
+func TestGetJourneyNotFoundWhenNotProjected(t *testing.T) {
+	svc := newTestService(&fakeHIS{}, newFakeRepo())
+	if _, err := svc.GetJourney(context.Background(), "NOPE"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("error = %v, want ErrNotFound", err)
 	}
 }

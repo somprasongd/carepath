@@ -15,6 +15,40 @@ definitions:
         example: visit not found
         type: string
     type: object
+  journey.StepView:
+    properties:
+      sequence:
+        type: integer
+      serviceCode:
+        type: string
+      servicePoint:
+        $ref: '#/definitions/servicepoint.ServicePoint'
+      servicePointId:
+        type: string
+      status:
+        type: string
+    type: object
+  journey.View:
+    properties:
+      completed:
+        type: boolean
+      current:
+        $ref: '#/definitions/journey.StepView'
+      next:
+        $ref: '#/definitions/journey.StepView'
+      patientRef:
+        type: string
+      status:
+        type: string
+      steps:
+        items:
+          $ref: '#/definitions/journey.StepView'
+        type: array
+      syncedAt:
+        type: string
+      visitId:
+        type: string
+    type: object
   main.HealthResponse:
     properties:
       service:
@@ -141,6 +175,36 @@ paths:
       summary: Create a patient session
       tags:
       - auth
+  /api/v1/journeys/{visitId}:
+    get:
+      description: 'Returns the CarePath-owned journey projection: steps ordered by
+        sequence, each resolved to its service point, with the deterministic current
+        (first STARTED) and next (first READY) step. A completed visit is reported
+        with completed=true and no current/next.'
+      parameters:
+      - description: Visit ID
+        in: path
+        name: visitId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/journey.View'
+        "404":
+          description: no journey projected for this visit
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Get the patient journey
+      tags:
+      - journeys
   /api/v1/visits/{visitId}:
     get:
       description: Returns the HIS visit enriched with the next actionable step and
