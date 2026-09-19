@@ -22,7 +22,7 @@ carepath-monorepo/
 │   └── web/              # Patient/Admin web - React + TypeScript + Vite
 ├── packages/
 │   ├── contracts/        # Shared OpenAPI/schema/contracts
-│   └── floorplans/       # SVG floor plan assets + navigation graph samples
+│   └── floorplans/       # SVG floor plans (I-1301, I-1302) + navigation graphs
 ├── infra/
 │   ├── docker/           # Dockerfiles
 │   └── postgres/         # Local DB bootstrap

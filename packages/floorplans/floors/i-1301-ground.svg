@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">CarePath – Ground Floor Navigation Plan (I-1301)</title>
+  <desc id="desc">Schematic hospital navigation floor plan for CarePath with rooms, corridors, POI nodes, and route overlay layers.</desc>
+
+  <defs>
+    <style>
+      :root{
+        --wall:#25313c;
+        --corridor:#f3f5f7;
+        --opd:#dcecff;
+        --er:#ffe3e3;
+        --imaging:#e7e0ff;
+        --pharmacy:#e4f7df;
+        --rehab:#fff1c9;
+        --ipd:#dff5f4;
+        --support:#eceff2;
+        --public:#fff7df;
+        --garden:#e8f5e9;
+        --node:#0b6e99;
+        --node-stroke:#ffffff;
+        --route:#ff7a00;
+        --text:#263238;
+        --muted:#66727d;
+      }
+      .building{fill:#fff;stroke:var(--wall);stroke-width:10;stroke-linejoin:round}
+      .room{stroke:var(--wall);stroke-width:3;vector-effect:non-scaling-stroke}
+      .opd{fill:var(--opd)} .er{fill:var(--er)} .imaging{fill:var(--imaging)}
+      .pharmacy{fill:var(--pharmacy)} .rehab{fill:var(--rehab)} .ipd{fill:var(--ipd)}
+      .support{fill:var(--support)} .public{fill:var(--public)} .garden{fill:var(--garden)}
+      .corridor{fill:var(--corridor);stroke:var(--wall);stroke-width:2}
+      .label{font-family:"Noto Sans Thai","Tahoma",sans-serif;fill:var(--text);font-size:26px;font-weight:700;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+      .sub{font-family:"Noto Sans Thai","Tahoma",sans-serif;fill:var(--muted);font-size:18px;font-weight:500;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+      .tiny{font-family:"Noto Sans Thai","Tahoma",sans-serif;fill:var(--muted);font-size:15px}
+      .node{fill:var(--node);stroke:var(--node-stroke);stroke-width:5;cursor:pointer}
+      .node-label{font-family:"Noto Sans Thai","Tahoma",sans-serif;font-size:15px;font-weight:700;fill:#084d6b}
+      .route{fill:none;stroke:var(--route);stroke-width:12;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+      .route-dot{fill:var(--route);stroke:#fff;stroke-width:4}
+      .door{stroke:#fff;stroke-width:10}
+      .connector{fill:#fff;stroke:var(--wall);stroke-width:3}
+      .legend-swatch{stroke:#aeb7bf;stroke-width:1}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#ff7a00"/>
+    </marker>
+  </defs>
+
+  <g id="metadata">
+    <text x="70" y="60" style="font:700 34px 'Noto Sans Thai',Tahoma,sans-serif;fill:#1f2d36">CarePath · Ground Floor</text>
+    <text x="70" y="95" style="font:500 19px 'Noto Sans Thai',Tahoma,sans-serif;fill:#66727d">Floor ID: I-1301 · Clinical +0.50m · Reception +1.20m · schematic navigation plan</text>
+  </g>
+
+  <g id="floor-i-1301" data-floor="I-1301" transform="translate(70 130)">
+    <path class="building" d="M0 0 H1290 V610 H0 Z"/>
+
+    <!-- Public / reception strip -->
+    <g id="zone-public" data-zone="PUBLIC">
+      <rect id="room-reception" data-place-id="REG-01" class="room public" x="0" y="0" width="300" height="150" rx="4"/>
+      <rect id="room-cashier" data-place-id="CASHIER-01" class="room public" x="300" y="0" width="180" height="150" rx="4"/>
+      <rect id="room-waiting" data-place-id="WAITING-01" class="room public" x="480" y="0" width="280" height="150" rx="4"/>
+      <rect id="room-pharmacy" data-place-id="PHARMACY-01" class="room pharmacy" x="760" y="0" width="250" height="150" rx="4"/>
+      <rect id="room-support-north" data-place-id="SUPPORT-01" class="room support" x="1010" y="0" width="280" height="150" rx="4"/>
+      <text class="label" x="150" y="65">Reception</text><text class="sub" x="150" y="105">จุดต้อนรับ / ลงทะเบียน</text>
+      <text class="label" x="390" y="65">Cashier</text><text class="sub" x="390" y="105">การเงิน</text>
+      <text class="label" x="620" y="65">Waiting</text><text class="sub" x="620" y="105">พื้นที่รอรับบริการ</text>
+      <text class="label" x="885" y="65">Pharmacy</text><text class="sub" x="885" y="105">ห้องยา</text>
+      <text class="label" x="1150" y="65">Support</text><text class="sub" x="1150" y="105">Tenant / Service</text>
+    </g>
+
+    <!-- Main corridor -->
+    <g id="circulation">
+      <rect id="corridor-main" class="corridor" x="0" y="150" width="1290" height="110"/>
+      <rect id="corridor-opd" class="corridor" x="390" y="260" width="110" height="350"/>
+      <rect id="corridor-er" class="corridor" x="910" y="260" width="110" height="350"/>
+      <text class="sub" x="645" y="205">MAIN CORRIDOR</text>
+    </g>
+
+    <!-- OPD -->
+    <g id="zone-opd" data-zone="OPD">
+      <rect id="room-opd-ns" data-place-id="OPD-NS-01" class="room opd" x="0" y="260" width="220" height="170"/>
+      <rect id="room-opd-exam" data-place-id="OPD-EXAM-01" class="room opd" x="220" y="260" width="170" height="170"/>
+      <rect id="room-opd-support" data-place-id="OPD-SUPPORT-01" class="room opd" x="0" y="430" width="390" height="180"/>
+      <text class="label" x="110" y="330">OPD N/S</text><text class="sub" x="110" y="370">Nurse Station</text>
+      <text class="label" x="305" y="330">Exam</text><text class="sub" x="305" y="370">ห้องตรวจ</text>
+      <text class="label" x="195" y="500">OPD</text><text class="sub" x="195" y="540">Treatment / Support</text>
+    </g>
+
+    <!-- Rehab / IPD -->
+    <g id="zone-rehab" data-zone="REHAB">
+      <rect id="room-rehab" data-place-id="REHAB-01" class="room rehab" x="500" y="260" width="210" height="170"/>
+      <text class="label" x="605" y="330">Rehab</text><text class="sub" x="605" y="370">เวชศาสตร์ฟื้นฟู</text>
+    </g>
+    <g id="zone-ipd" data-zone="IPD">
+      <rect id="room-ipd" data-place-id="IPD-01" class="room ipd" x="710" y="260" width="200" height="170"/>
+      <text class="label" x="810" y="330">IPD</text><text class="sub" x="810" y="370">Inpatient</text>
+    </g>
+
+    <!-- Imaging -->
+    <g id="zone-imaging" data-zone="IMAGING">
+      <rect id="room-xray" data-place-id="XRAY-01" class="room imaging" x="500" y="430" width="205" height="180"/>
+      <rect id="room-ct" data-place-id="CT-01" class="room imaging" x="705" y="430" width="205" height="180"/>
+      <text class="label" x="603" y="500">General X-ray</text><text class="sub" x="603" y="540">Imaging</text>
+      <text class="label" x="808" y="500">CT</text><text class="sub" x="808" y="540">Imaging</text>
+    </g>
+
+    <!-- ER -->
+    <g id="zone-er" data-zone="ER">
+      <rect id="room-triage" data-place-id="TRIAGE-01" class="room er" x="1020" y="260" width="270" height="125"/>
+      <rect id="room-er-exam4" data-place-id="ER-EXAM-04" class="room er" x="1020" y="385" width="135" height="225"/>
+      <rect id="room-wound-care" data-place-id="WOUND-01" class="room er" x="1155" y="385" width="135" height="225"/>
+      <text class="label" x="1155" y="315">Triage</text><text class="sub" x="1155" y="350">ER คัดกรอง</text>
+      <text class="label" x="1088" y="480">Exam 4</text><text class="sub" x="1088" y="525">ER Exam</text>
+      <text class="label" x="1223" y="480">Wound</text><text class="sub" x="1223" y="525">Wound Care</text>
+    </g>
+
+    <!-- Doors / entrances -->
+    <g id="doors">
+      <line class="door" x1="105" y1="0" x2="195" y2="0"/>
+      <line class="door" x1="1040" y1="610" x2="1130" y2="610"/>
+      <line class="door" x1="0" y1="195" x2="0" y2="230"/>
+      <line class="door" x1="1290" y1="195" x2="1290" y2="230"/>
+    </g>
+
+    <!-- External connectors -->
+    <g id="connectors">
+      <rect id="entrance-main" class="connector" x="90" y="-55" width="120" height="45" rx="12"/>
+      <text class="sub" x="150" y="-31">Main Entrance</text>
+      <rect id="entrance-opd" class="connector" x="-70" y="180" width="70" height="65" rx="12"/>
+      <text class="sub" x="-35" y="212" transform="rotate(-90 -35 212)">OPD</text>
+      <rect id="entrance-er" class="connector" x="1290" y="180" width="70" height="65" rx="12"/>
+      <text class="sub" x="1325" y="212" transform="rotate(90 1325 212)">ER</text>
+      <rect id="connector-ramp" class="connector" x="260" y="-55" width="115" height="45" rx="12"/>
+      <text class="sub" x="318" y="-31">Ramp</text>
+      <rect id="connector-lift" class="connector" x="415" y="160" width="70" height="90" rx="8"/>
+      <text class="sub" x="450" y="205">Lift</text>
+      <rect id="connector-stairs" class="connector" x="925" y="160" width="75" height="90" rx="8"/>
+      <text class="sub" x="962" y="205">Stairs</text>
+    </g>
+
+    <!-- Navigation nodes -->
+    <g id="nav-nodes" aria-label="Navigation nodes">
+      <circle id="node-main-entrance" class="node" cx="150" cy="-10" r="12" data-node-type="entrance" data-zone="PUBLIC"/>
+      <circle id="node-reception" class="node" cx="150" cy="190" r="12" data-node-type="service" data-zone="PUBLIC" data-place-id="REG-01"/>
+      <circle id="node-ramp" class="node" cx="318" cy="190" r="12" data-node-type="ramp" data-zone="PUBLIC"/>
+      <circle id="node-opd-ns" class="node" cx="445" cy="330" r="12" data-node-type="service" data-zone="OPD" data-place-id="OPD-NS-01"/>
+      <circle id="node-cashier" class="node" cx="390" cy="190" r="12" data-node-type="service" data-zone="PUBLIC" data-place-id="CASHIER-01"/>
+      <circle id="node-waiting" class="node" cx="620" cy="190" r="12" data-node-type="waiting" data-zone="PUBLIC" data-place-id="WAITING-01"/>
+      <circle id="node-pharmacy" class="node" cx="885" cy="190" r="12" data-node-type="service" data-zone="PHARMACY" data-place-id="PHARMACY-01"/>
+      <circle id="node-lift" class="node" cx="450" cy="205" r="12" data-node-type="elevator"/>
+      <circle id="node-stairs" class="node" cx="962" cy="205" r="12" data-node-type="stairs"/>
+      <circle id="node-triage" class="node" cx="965" cy="330" r="12" data-node-type="service" data-zone="ER" data-place-id="TRIAGE-01"/>
+      <circle id="node-er-exam4" class="node" cx="965" cy="480" r="12" data-node-type="room" data-zone="ER" data-place-id="ER-EXAM-04"/>
+      <circle id="node-wound-care" class="node" cx="965" cy="555" r="12" data-node-type="room" data-zone="ER" data-place-id="WOUND-01"/>
+      <circle id="node-xray" class="node" cx="650" cy="485" r="12" data-node-type="room" data-zone="IMAGING" data-place-id="XRAY-01"/>
+      <circle id="node-ct" class="node" cx="760" cy="555" r="12" data-node-type="room" data-zone="IMAGING" data-place-id="CT-01"/>
+      <circle id="node-er-entrance" class="node" cx="1290" cy="212" r="12" data-node-type="entrance" data-zone="ER"/>
+      <circle id="node-opd-entrance" class="node" cx="0" cy="212" r="12" data-node-type="entrance" data-zone="OPD"/>
+    </g>
+
+    <!-- Sample route: Reception → Ramp → OPD N/S → Cashier → Waiting → Pharmacy
+         Hide this group by default in production and draw route dynamically. -->
+    <g id="route-layer" opacity="0">
+      <polyline class="route" marker-end="url(#arrow)"
+        points="150,190 318,190 445,190 445,330 445,190 390,190 620,190 885,190"/>
+      <circle class="route-dot" cx="150" cy="190" r="10"/>
+      <circle class="route-dot" cx="885" cy="190" r="10"/>
+    </g>
+  </g>
+
+  <g id="legend" transform="translate(1395 150)">
+    <text x="0" y="0" style="font:700 20px 'Noto Sans Thai',Tahoma,sans-serif;fill:#263238">Legend</text>
+    <rect class="legend-swatch opd" x="0" y="22" width="30" height="22"/><text class="tiny" x="42" y="39">OPD</text>
+    <rect class="legend-swatch er" x="0" y="56" width="30" height="22"/><text class="tiny" x="42" y="73">ER</text>
+    <rect class="legend-swatch imaging" x="0" y="90" width="30" height="22"/><text class="tiny" x="42" y="107">Imaging</text>
+    <rect class="legend-swatch pharmacy" x="0" y="124" width="30" height="22"/><text class="tiny" x="42" y="141">Pharmacy</text>
+    <rect class="legend-swatch rehab" x="0" y="158" width="30" height="22"/><text class="tiny" x="42" y="175">Rehab</text>
+    <circle class="node" cx="15" cy="211" r="9"/><text class="tiny" x="42" y="216">Nav node</text>
+  </g>
+
+  <text x="70" y="840" class="tiny">Note: Schematic for digital navigation / service flow. Not for construction or dimensional surveying.</text>
+</svg>

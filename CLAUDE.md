@@ -24,7 +24,7 @@ apps/
   web/            React + TypeScript + Vite — patient/admin web app
 packages/
   contracts/      Shared OpenAPI contracts (source of truth for API shape)
-  floorplans/     SVG floor plan assets + sample navigation graphs
+  floorplans/     SVG floor plans (I-1301 ground, I-1302 upper) + navigation graphs
 infra/
   docker/         Dockerfiles per service
   postgres/       Local DB bootstrap (init.sql)

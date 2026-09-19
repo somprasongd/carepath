@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">CarePath – Upper Floor Navigation Plan (I-1302)</title>
+  <desc id="desc">Schematic upper-floor hospital navigation plan for Wellness and Longevity services with POI nodes and route overlay layers.</desc>
+
+  <defs>
+    <style>
+      :root{
+        --wall:#25313c; --corridor:#f3f5f7; --wellness:#e8f2ff; --clinical:#e4f7df;
+        --consult:#fff1c9; --future:#eceff2; --staff:#f5e4ff; --text:#263238; --muted:#66727d;
+        --node:#0b6e99; --route:#ff7a00;
+      }
+      .building{fill:#fff;stroke:var(--wall);stroke-width:10;stroke-linejoin:round}
+      .room{stroke:var(--wall);stroke-width:3;vector-effect:non-scaling-stroke}
+      .wellness{fill:var(--wellness)} .clinical{fill:var(--clinical)} .consult{fill:var(--consult)}
+      .future{fill:var(--future)} .staff{fill:var(--staff)}
+      .corridor{fill:var(--corridor);stroke:var(--wall);stroke-width:2}
+      .label{font-family:"Noto Sans Thai","Tahoma",sans-serif;fill:var(--text);font-size:26px;font-weight:700;text-anchor:middle;dominant-baseline:middle}
+      .sub{font-family:"Noto Sans Thai","Tahoma",sans-serif;fill:var(--muted);font-size:18px;font-weight:500;text-anchor:middle;dominant-baseline:middle}
+      .tiny{font-family:"Noto Sans Thai","Tahoma",sans-serif;fill:var(--muted);font-size:15px}
+      .node{fill:var(--node);stroke:#fff;stroke-width:5;cursor:pointer}
+      .route{fill:none;stroke:var(--route);stroke-width:12;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+      .route-dot{fill:var(--route);stroke:#fff;stroke-width:4}
+      .connector{fill:#fff;stroke:var(--wall);stroke-width:3}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#ff7a00"/>
+    </marker>
+  </defs>
+
+  <g id="metadata">
+    <text x="70" y="60" style="font:700 34px 'Noto Sans Thai',Tahoma,sans-serif;fill:#1f2d36">CarePath · Upper Floor</text>
+    <text x="70" y="95" style="font:500 19px 'Noto Sans Thai',Tahoma,sans-serif;fill:#66727d">Floor ID: I-1302 · Upper +3.00m · schematic navigation plan</text>
+  </g>
+
+  <g id="floor-i-1302" data-floor="I-1302" transform="translate(70 145)">
+    <path class="building" d="M0 0 H1290 V600 H0 Z"/>
+
+    <g id="circulation">
+      <rect class="corridor" x="0" y="240" width="1290" height="110"/>
+      <rect class="corridor" x="425" y="0" width="110" height="600"/>
+      <rect class="corridor" x="900" y="0" width="110" height="600"/>
+      <text class="sub" x="670" y="295">UPPER FLOOR MAIN CORRIDOR</text>
+    </g>
+
+    <g id="zone-wellness" data-zone="WELLNESS">
+      <rect id="room-wellness-ns" data-place-id="WELLNESS-NS-01" class="room wellness" x="0" y="0" width="220" height="240"/>
+      <rect id="room-pre-counselling" data-place-id="PRECOUNSEL-01" class="room consult" x="220" y="0" width="205" height="240"/>
+      <rect id="room-blood-collection" data-place-id="LAB-01" class="room clinical" x="0" y="350" width="220" height="250"/>
+      <rect id="room-bof-report" data-place-id="BOF-01" class="room clinical" x="220" y="350" width="205" height="250"/>
+      <text class="label" x="110" y="95">Wellness N/S</text><text class="sub" x="110" y="140">Nurse Station</text>
+      <text class="label" x="322" y="95">Pre-counselling</text><text class="sub" x="322" y="140">ให้คำปรึกษาก่อนตรวจ</text>
+      <text class="label" x="110" y="465">Blood Collection</text><text class="sub" x="110" y="510">เจาะเลือด</text>
+      <text class="label" x="322" y="465">BOF Report</text><text class="sub" x="322" y="510">Report Room</text>
+    </g>
+
+    <g id="zone-longevity" data-zone="LONGEVITY">
+      <rect id="room-longevity-1" data-place-id="LONGEVITY-01" class="room wellness" x="535" y="0" width="365" height="240"/>
+      <rect id="room-longevity-2" data-place-id="LONGEVITY-02" class="room wellness" x="535" y="350" width="365" height="250"/>
+      <text class="label" x="718" y="100">Wellness / Longevity</text><text class="sub" x="718" y="145">Consult / Assessment</text>
+      <text class="label" x="718" y="465">Treatment / Recovery</text><text class="sub" x="718" y="510">Wellness Service</text>
+    </g>
+
+    <g id="zone-future" data-zone="FUTURE">
+      <rect id="room-future-expansion" data-place-id="FUTURE-01" class="room future" x="1010" y="0" width="280" height="350"/>
+      <text class="label" x="1150" y="145">Future Expansion</text><text class="sub" x="1150" y="190">พื้นที่สำรอง</text>
+    </g>
+
+    <g id="zone-staff" data-zone="STAFF">
+      <rect id="room-staff" data-place-id="STAFF-01" class="room staff" x="1010" y="350" width="280" height="250"/>
+      <text class="label" x="1150" y="465">Staff / Support</text><text class="sub" x="1150" y="510">Back Office</text>
+    </g>
+
+    <g id="connectors">
+      <rect id="connector-lift" class="connector" x="442" y="250" width="75" height="90" rx="8"/>
+      <text class="sub" x="480" y="295">Lift</text>
+      <rect id="connector-stairs" class="connector" x="918" y="250" width="75" height="90" rx="8"/>
+      <text class="sub" x="955" y="295">Stairs</text>
+    </g>
+
+    <g id="nav-nodes">
+      <circle id="node-lift" class="node" cx="480" cy="295" r="12" data-node-type="elevator"/>
+      <circle id="node-stairs" class="node" cx="955" cy="295" r="12" data-node-type="stairs"/>
+      <circle id="node-wellness-ns" class="node" cx="375" cy="295" r="12" data-node-type="service" data-zone="WELLNESS" data-place-id="WELLNESS-NS-01"/>
+      <circle id="node-pre-counselling" class="node" cx="322" cy="205" r="12" data-node-type="room" data-zone="WELLNESS" data-place-id="PRECOUNSEL-01"/>
+      <circle id="node-blood-collection" class="node" cx="165" cy="405" r="12" data-node-type="room" data-zone="WELLNESS" data-place-id="LAB-01"/>
+      <circle id="node-bof-report" class="node" cx="322" cy="405" r="12" data-node-type="room" data-zone="WELLNESS" data-place-id="BOF-01"/>
+      <circle id="node-longevity" class="node" cx="718" cy="295" r="12" data-node-type="service" data-zone="LONGEVITY" data-place-id="LONGEVITY-01"/>
+    </g>
+
+    <!-- Sample route: Wellness N/S → Pre-counselling → Blood Collection → BOF Report Room -->
+    <g id="route-layer" opacity="0">
+      <polyline class="route" marker-end="url(#arrow)"
+        points="375,295 322,295 322,205 322,295 165,295 165,405 322,405"/>
+      <circle class="route-dot" cx="375" cy="295" r="10"/>
+      <circle class="route-dot" cx="322" cy="405" r="10"/>
+    </g>
+  </g>
+
+  <g id="notes" transform="translate(1390 160)">
+    <text x="0" y="0" style="font:700 20px 'Noto Sans Thai',Tahoma,sans-serif;fill:#263238">Integration</text>
+    <text class="tiny" x="0" y="32">• room-* = clickable room</text>
+    <text class="tiny" x="0" y="58">• node-* = route graph node</text>
+    <text class="tiny" x="0" y="84">• route-layer = dynamic path</text>
+    <text class="tiny" x="0" y="110">• data-zone = positioning zone</text>
+  </g>
+
+  <text x="70" y="840" class="tiny">Note: Schematic for digital navigation / service flow. Not for construction or dimensional surveying.</text>
+</svg>

@@ -1,0 +1,27 @@
+{
+  "floorId": "I-1302",
+  "svg": "floors/i-1302-upper.svg",
+  "svgRootId": "floor-i-1302",
+  "coordinateSpace": "local to #floor-i-1302 (SVG group transform translate(70 145))",
+  "nodes": [
+    {"id":"node-lift","x":480,"y":295,"type":"ELEVATOR"},
+    {"id":"node-stairs","x":955,"y":295,"type":"STAIRS"},
+    {"id":"node-wellness-ns","x":375,"y":295,"type":"PLACE_ENTRY","zone":"WELLNESS","placeId":"WELLNESS-NS-01"},
+    {"id":"node-pre-counselling","x":322,"y":205,"type":"PLACE_ENTRY","zone":"WELLNESS","placeId":"PRECOUNSEL-01"},
+    {"id":"node-blood-collection","x":165,"y":405,"type":"PLACE_ENTRY","zone":"WELLNESS","placeId":"LAB-01"},
+    {"id":"node-bof-report","x":322,"y":405,"type":"PLACE_ENTRY","zone":"WELLNESS","placeId":"BOF-01"},
+    {"id":"node-longevity","x":718,"y":295,"type":"PLACE_ENTRY","zone":"LONGEVITY","placeId":"LONGEVITY-01"}
+  ],
+  "edges": [
+    {"from":"node-lift","to":"node-wellness-ns","distance":105,"accessible":true},
+    {"from":"node-wellness-ns","to":"node-pre-counselling","distance":143,"accessible":true},
+    {"from":"node-wellness-ns","to":"node-bof-report","distance":163,"accessible":true},
+    {"from":"node-bof-report","to":"node-blood-collection","distance":157,"accessible":true},
+    {"from":"node-lift","to":"node-longevity","distance":238,"accessible":true},
+    {"from":"node-longevity","to":"node-stairs","distance":237,"accessible":true}
+  ],
+  "transitions": [
+    {"from":"node-lift","toFloorId":"I-1301","to":"node-lift","type":"ELEVATOR","distance":60,"accessible":true},
+    {"from":"node-stairs","toFloorId":"I-1301","to":"node-stairs","type":"STAIRS","distance":60,"accessible":false}
+  ]
+}

@@ -90,8 +90,8 @@ The rest of the domain consumes the normalized result rather than vendor-specifi
 ```json
 {
   "buildingId": "BLDG-A",
-  "floorId": "F1",
-  "zoneId": "OPD-A",
+  "floorId": "I-1302",
+  "zoneId": "WELLNESS",
   "placeId": "LAB-01",
   "confidence": 1.0,
   "source": "QR"
@@ -111,8 +111,12 @@ SVG is presentation; routing uses a graph.
 Floor-plan SVG elements should carry stable IDs/data attributes, for example:
 
 ```xml
-<rect id="service-lab" data-place-id="LAB-01" />
-<rect id="service-pharmacy" data-place-id="PHARMACY-01" />
+<rect id="room-blood-collection" data-place-id="LAB-01" />
+<rect id="room-pharmacy" data-place-id="PHARMACY-01" />
 ```
+
+The plans live in `packages/floorplans/` — `floors/*.svg` for the visual layer and `graphs/*.json`
+for the matching `NavNode`/`NavEdge` data. See that package's README for the full element/attribute
+convention (`room-*`, `node-*`, `data-place-id`, `data-zone`, `route-layer`).
 
 The frontend overlays current position, destination, and the computed route without embedding business flow into the SVG itself.

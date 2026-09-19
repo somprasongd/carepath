@@ -1,0 +1,46 @@
+{
+  "floorId": "I-1301",
+  "svg": "floors/i-1301-ground.svg",
+  "svgRootId": "floor-i-1301",
+  "coordinateSpace": "local to #floor-i-1301 (SVG group transform translate(70 130))",
+  "nodes": [
+    {"id":"node-main-entrance","x":150,"y":-10,"type":"ENTRANCE","zone":"PUBLIC"},
+    {"id":"node-opd-entrance","x":0,"y":212,"type":"ENTRANCE","zone":"OPD"},
+    {"id":"node-er-entrance","x":1290,"y":212,"type":"ENTRANCE","zone":"ER"},
+    {"id":"node-reception","x":150,"y":190,"type":"PLACE_ENTRY","zone":"PUBLIC","placeId":"REG-01"},
+    {"id":"node-ramp","x":318,"y":190,"type":"CORRIDOR","zone":"PUBLIC"},
+    {"id":"node-cashier","x":390,"y":190,"type":"PLACE_ENTRY","zone":"PUBLIC","placeId":"CASHIER-01"},
+    {"id":"node-lift","x":450,"y":205,"type":"ELEVATOR"},
+    {"id":"node-waiting","x":620,"y":190,"type":"PLACE_ENTRY","zone":"PUBLIC","placeId":"WAITING-01"},
+    {"id":"node-pharmacy","x":885,"y":190,"type":"PLACE_ENTRY","zone":"PHARMACY","placeId":"PHARMACY-01"},
+    {"id":"node-stairs","x":962,"y":205,"type":"STAIRS"},
+    {"id":"node-opd-ns","x":445,"y":330,"type":"PLACE_ENTRY","zone":"OPD","placeId":"OPD-NS-01"},
+    {"id":"node-xray","x":650,"y":485,"type":"PLACE_ENTRY","zone":"IMAGING","placeId":"XRAY-01"},
+    {"id":"node-ct","x":760,"y":555,"type":"PLACE_ENTRY","zone":"IMAGING","placeId":"CT-01"},
+    {"id":"node-triage","x":965,"y":330,"type":"PLACE_ENTRY","zone":"ER","placeId":"TRIAGE-01"},
+    {"id":"node-er-exam4","x":965,"y":480,"type":"PLACE_ENTRY","zone":"ER","placeId":"ER-EXAM-04"},
+    {"id":"node-wound-care","x":965,"y":555,"type":"PLACE_ENTRY","zone":"ER","placeId":"WOUND-01"}
+  ],
+  "edges": [
+    {"from":"node-main-entrance","to":"node-reception","distance":200,"accessible":true},
+    {"from":"node-opd-entrance","to":"node-reception","distance":172,"accessible":true},
+    {"from":"node-reception","to":"node-ramp","distance":168,"accessible":true},
+    {"from":"node-ramp","to":"node-cashier","distance":72,"accessible":true},
+    {"from":"node-cashier","to":"node-lift","distance":75,"accessible":true},
+    {"from":"node-lift","to":"node-waiting","distance":185,"accessible":true},
+    {"from":"node-waiting","to":"node-pharmacy","distance":265,"accessible":true},
+    {"from":"node-pharmacy","to":"node-stairs","distance":92,"accessible":true},
+    {"from":"node-stairs","to":"node-er-entrance","distance":335,"accessible":true},
+    {"from":"node-lift","to":"node-opd-ns","distance":125,"accessible":true},
+    {"from":"node-opd-ns","to":"node-xray","distance":360,"accessible":true},
+    {"from":"node-xray","to":"node-ct","distance":180,"accessible":true},
+    {"from":"node-ct","to":"node-wound-care","distance":205,"accessible":true},
+    {"from":"node-stairs","to":"node-triage","distance":125,"accessible":true},
+    {"from":"node-triage","to":"node-er-exam4","distance":150,"accessible":true},
+    {"from":"node-er-exam4","to":"node-wound-care","distance":75,"accessible":true}
+  ],
+  "transitions": [
+    {"from":"node-lift","toFloorId":"I-1302","to":"node-lift","type":"ELEVATOR","distance":60,"accessible":true},
+    {"from":"node-stairs","toFloorId":"I-1302","to":"node-stairs","type":"STAIRS","distance":60,"accessible":false}
+  ]
+}
