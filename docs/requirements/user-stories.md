@@ -32,16 +32,16 @@ As a patient's relative, I want to follow which step the patient is currently on
 
 ## Registration / screening staff
 
-### US-13 Look up service codes for a pathway template — *Must (M3)*
-As registration/screening staff, I want to pick a Care Pathway Template and see the exact, ordered list of service codes it implies so that I enter the correct codes into the HIS when I open the patient's visit there.
+### US-13 Look up a patient's derived visit plan — *Must (M3)* — revised by ADR-0009
+As registration/screening staff, I want to look up a visit by VN after opening it in the HIS and see the plan CarePath derived for it (which clinics, in what order, what happens before/after) so that I can hand the patient a clear starting point and catch an obviously wrong plan before the patient walks off with it.
 
 ## Service-point staff
 
 ### US-14 Call the queue and record step completion — *Must (M7)*
 As staff at a service point (exam room, lab, X-ray, pharmacy), I want to call the next queue ticket and mark a step as arrived or completed so that the patient automatically advances to their next step.
 
-### US-15 Insert an unplanned step — *Must (M7)*
-As staff at a service point, I want to send a patient to an additional step that was not part of the original plan (e.g. an extra test) so that the patient's visit plan matches what actually happens, without breaking the existing before/after ordering.
+### US-15 Confirm whether a patient returns after an extra test — *Must (M7)* — revised by ADR-0009
+As staff at a clinic, when I order an additional test mid-visit CarePath already adds it (and a tentative return step) to the patient's plan on its own; I want to confirm or correct whether the patient needs to come back to me afterward so that the plan matches what I actually intend, even when the HIS itself never tells CarePath the encounter is finished.
 
 ## Hospital admin
 
@@ -51,8 +51,8 @@ As hospital staff, I want a logical service such as LAB or PHARMACY mapped to a 
 ### US-06 Update floor/navigation data — *Must (M1, M6)*
 As hospital staff or an administrator, I want floor and route data maintained independently from clinical workflow so that facility changes (e.g. a room moved to another building) do not require rewriting care pathways or produce incorrect routes.
 
-### US-16 Create and edit care pathway templates — *Must (M2)*
-As a system administrator, I want to create and edit Care Pathway Templates (e.g. "returning diabetic patient") — their steps, order, and prerequisite conditions — so that registration staff can assign a consistent, reusable plan to each patient.
+### US-16 Review the journey planning rules — *Must (M2)* — revised by ADR-0009
+As a system administrator, I want to see and understand the ordering rules CarePath's journey planner applies (registration first, diagnostics before/after a clinic, one cashier step, pharmacy after cashier) so that I can tell when a patient's derived plan reflects hospital policy correctly. Per ADR-0009 these rules are hospital policy encoded in the planner rather than a per-patient template an administrator assembles — the HIS reports no ordered step list to template against.
 
 ### US-17 Manage user roles and access — *Must (M8)*
 As a system administrator, I want to manage user accounts and role-based permissions so that each user (patient, staff, admin, executive) sees and can do only what their role allows.

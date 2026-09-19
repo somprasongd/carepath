@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.4.2
+  version: 0.5.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -12,9 +12,12 @@ paths:
           description: Healthy
   /api/v1/visits/{visitId}:
     get:
+      deprecated: true
       description: >
-        Normalized visit view: the HIS visit enriched with the first READY
-        step and its configured service point, if any.
+        Deprecated: predates the journey planner (ADR-0009) and assumed the
+        HIS reports an ordered step list, which it does not. Superseded by
+        `GET /api/v1/journeys/{visitId}`. Kept only until patient/staff
+        clients finish migrating; scheduled for removal.
       parameters:
         - in: path
           name: visitId
@@ -41,7 +44,11 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/v1/visits/{visitId}/next:
     get:
-      description: The next actionable (READY) step, resolved to its service point.
+      deprecated: true
+      description: >
+        Deprecated for the same reason as `GET /api/v1/visits/{visitId}`
+        (ADR-0009) — superseded by the `actionable`/`recommended` steps on
+        `GET /api/v1/journeys/{visitId}`.
       parameters:
         - in: path
           name: visitId
@@ -114,9 +121,11 @@ paths:
   /api/v1/journeys/{visitId}:
     get:
       description: >
-        The patient journey: the CarePath-owned projection of the HIS visit
-        (ADR-0008), with steps ordered by sequence and the deterministic
-        current/next step resolution. A visit not yet projected (ingest lag)
+        The patient journey: the CarePath-owned plan derived from HIS facts
+        (ADR-0009) — CarePath, not the HIS, decides which steps exist and
+        their order. Steps are exposed by `sequence` (display order; not a
+        stable identity — replanning may renumber) and `stepKey` (the stable
+        identity to address a step by). A visit not yet projected (ingest lag)
         returns 404.
       parameters:
         - in: path
@@ -142,24 +151,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/v1/journeys/{visitId}/steps/{sequence}/transition:
+  /api/v1/journeys/{visitId}/steps/{stepKey}/transition:
     post:
       description: >
-        Command: transition one service step's status. Forwards the command
-        to the HIS — the system of record (ADR-0008) — and returns the
-        refreshed journey with the recalculated current/next step. Illegal or
-        out-of-order transitions are rejected by the HIS. commandId is an
-        optional caller-assigned idempotency key (a fresh UUID is generated
-        when absent); source names the acting surface for the audit trail.
+        Staff command: transition one step's status (ADR-0009 — CarePath owns
+        step status; this no longer forwards to the HIS). Used by the
+        service-point console to mark a step arrived/in-progress/completed
+        (FR-15) or cancelled. Returns the refreshed journey with the plan
+        recomputed against the new fact — completing a diagnostic step, for
+        instance, may not yet make its follow-up clinic step actionable if the
+        order hasn't resulted (ADR-0009 §5). commandId is an optional
+        caller-assigned idempotency key (a fresh UUID is generated when
+        absent); source names the acting surface for the audit trail.
       parameters:
         - in: path
           name: visitId
           required: true
           schema: { type: string }
         - in: path
-          name: sequence
+          name: stepKey
           required: true
-          schema: { type: integer, minimum: 1 }
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -186,7 +198,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Illegal transition (e.g. from a terminal status)
+          description: Illegal transition (e.g. from a terminal status, or the step is not yet READY)
           content:
             application/json:
               schema:
@@ -197,8 +209,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '502':
-          description: Upstream HIS error
+  /api/v1/journeys/{visitId}/clinics/{clinicCode}/close-round:
+    post:
+      description: >
+        Staff override (ADR-0009 §4): the clinic confirms this round of
+        seeing the patient is finished, even though the HIS has not (yet, or
+        ever) reported `encounter.completed`. Equivalent in effect to that
+        fact arriving — any not-yet-started "return to this clinic" step the
+        planner inferred is dropped. Use when a doctor orders a test for a
+        future visit rather than this one, or when the connected HIS cannot
+        emit `encounter.completed` at all.
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: clinicCode
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The refreshed journey after closing the round
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Journey'
+        '404':
+          description: Visit not found, journey not projected, or the visit has no open round at this clinic
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -227,9 +271,10 @@ paths:
   /api/v1/service-points/{code}:
     get:
       description: >
-        One active service point by its service code (e.g. LAB), with the
-        resolved place and floor — the destination lookup for a care step's
-        service code (#24).
+        One active service point by its binding code — a clinic code
+        (`CLINIC:MED`), an order type (`ORDERTYPE:LAB`), or a fixed code
+        (`REGISTRATION`, `CASHIER`, `PHARMACY`) — with the resolved place and
+        floor (#24, extended by ADR-0009 for the new step vocabulary).
       parameters:
         - in: path
           name: code
@@ -259,11 +304,10 @@ paths:
       description: >
         Staff visit monitor (#37): the projected journey of every visit
         CarePath knows, freshest sync first — the same per-visit shape as the
-        single-journey read (ordered steps, resolved service points,
-        deterministic current/next). Reads the CarePath projection only; a
-        visit opened in the HIS but not yet ingested is absent until its
-        first event lands. Mounted under /api/v1/staff so the NFR-08 auth
-        guard (#43) can cover the group.
+        single-journey read. Reads the CarePath projection only; a visit
+        opened in the HIS but not yet ingested is absent until its first fact
+        lands. Mounted under /api/v1/staff so the NFR-08 auth guard (#43) can
+        cover the group.
       responses:
         '200':
           description: All projected journeys, newest sync first
@@ -308,7 +352,8 @@ components:
         error: { type: string }
     VisitStep:
       type: object
-      description: A care step as reported by the HIS.
+      deprecated: true
+      description: Deprecated with the endpoints that return it (ADR-0009); a care step as the pre-planner HIS shape reported it.
       required: [sequence, serviceCode, status]
       properties:
         sequence: { type: integer }
@@ -318,7 +363,8 @@ components:
           description: HIS step status, e.g. COMPLETED, READY, PENDING.
     Visit:
       type: object
-      description: A visit as reported by the HIS.
+      deprecated: true
+      description: Deprecated with the endpoints that return it (ADR-0009); a visit as the pre-planner HIS shape reported it.
       required: [visitId, patientRef, status, steps]
       properties:
         visitId: { type: string }
@@ -378,29 +424,59 @@ components:
         levelOrder: { type: integer }
     NextStep:
       type: object
-      description: The first READY step of a visit, resolved to its service point
-        when one is configured for the step's service code.
+      deprecated: true
+      description: Deprecated with the endpoint that returns it (ADR-0009); the first READY step under the pre-planner single-next model.
       required: [sequence, status]
       properties:
         sequence: { type: integer }
         status: { type: string }
         servicePoint: { $ref: '#/components/schemas/ServicePoint' }
+    StepKind:
+      type: string
+      description: >
+        What kind of step this is, for display and for resolving its service
+        point binding (ADR-0009). `CLINIC` steps carry `clinicCode`; `LAB`,
+        `XRAY`, `EKG`, `ULTRASOUND` steps carry `orderRefs`; `REGISTRATION`,
+        `CASHIER`, `PHARMACY` are fixed, unique-per-visit steps.
+      enum: [REGISTRATION, CLINIC, LAB, XRAY, EKG, ULTRASOUND, CASHIER, PHARMACY]
     JourneyStep:
       type: object
-      description: One care step of the journey projection, resolved to its
-        configured service point when one exists.
-      required: [sequence, serviceCode, status, servicePointId]
+      description: One step of the journey plan CarePath derived from HIS facts (ADR-0009).
+      required: [stepKey, sequence, kind, status, servicePointId]
       properties:
-        sequence: { type: integer }
-        serviceCode:
+        stepKey:
           type: string
-          description: External service code in HIS vocabulary (e.g. LAB).
+          description: >
+            Stable identity for this step across replans (e.g. "CLINIC:MED:2",
+            "LAB:ORD-118", "CASHIER"). Use this, not `sequence`, to address a
+            step (transitions, tracking which step a screen is showing).
+        sequence:
+          type: integer
+          description: Display order as of the current plan. Not stable across
+            a replan — a step's sequence can change when facts change; its
+            stepKey never does.
+        kind: { $ref: '#/components/schemas/StepKind' }
+        clinicCode:
+          type: [string, "null"]
+          description: Set when kind is CLINIC.
+        round:
+          type: [integer, "null"]
+          description: 1-based visit count to this clinic within the visit; set when kind is CLINIC. A value above 1 means the patient is returning to a doctor they already saw this visit.
+        orderRefs:
+          type: array
+          description: HIS order ids this step represents. Orders of the same
+            type placed in the same round collapse into one step.
+          items: { type: string }
         status:
           type: string
-          description: Canonical step status (PENDING, READY, STARTED, COMPLETED, CANCELLED).
+          description: >
+            Canonical step status. WAITING means every action the patient can
+            take is done (e.g. blood drawn) but the step is not yet actionable
+            for what comes after it — waiting on `order.resulted` (ADR-0009 §5).
+          enum: [PENDING, WAITING, READY, STARTED, COMPLETED, CANCELLED]
         servicePointId:
           type: [string, "null"]
-          description: Bound service point id; null when no service point is configured for the code (explicit unmapped state).
+          description: Bound service point id; null when no service point is configured for this step's binding key (explicit unmapped state).
         servicePoint:
           allOf:
             - $ref: '#/components/schemas/ServicePoint'
@@ -408,12 +484,18 @@ components:
           description: The bound service point, when configured and still active.
     Journey:
       type: object
-      description: The projected journey of one HIS visit with deterministic
-        current/next step resolution.
-      required: [visitId, patientRef, status, completed, steps, syncedAt]
+      description: >
+        The journey plan CarePath derived from one HIS visit's facts
+        (ADR-0009). Steps in the same phase are not ordered against each
+        other — a patient with both a lab and an X-ray before their clinic may
+        do either first — so more than one step can be `actionable` at once.
+      required: [visitId, patientRef, status, completed, steps, actionable, syncedAt]
       properties:
         visitId: { type: string }
         patientRef: { type: string }
+        patientName:
+          type: string
+          description: Patient display name for staff screens (ADR-0009 §8); absent on patient-facing reads.
         status:
           type: string
           description: Canonical visit status.
@@ -421,27 +503,28 @@ components:
         completed:
           type: boolean
           description: True iff the visit status is COMPLETED — the unambiguous
-            finished signal; current and next are null in that case.
+            finished signal; actionable is empty and recommended is null in
+            that case.
         steps:
           type: array
-          description: All steps of the visit ordered by sequence.
+          description: All steps of the plan ordered by sequence.
           items: { $ref: '#/components/schemas/JourneyStep' }
-        current:
+        actionable:
+          type: array
+          description: Every step currently READY — what the patient could do
+            right now, in any order.
+          items: { $ref: '#/components/schemas/JourneyStep' }
+        recommended:
           allOf:
             - $ref: '#/components/schemas/JourneyStep'
           nullable: true
-          description: The first STARTED step by sequence, if any.
-        next:
-          allOf:
-            - $ref: '#/components/schemas/JourneyStep'
-          nullable: true
-          description: The first READY step by sequence — the next actionable
-            step, if any.
+          description: CarePath's pick among `actionable` (nearest, or
+            shortest queue) for the patient-facing single primary action; null
+            when actionable is empty.
         syncedAt: { type: string, format: date-time }
     TransitionRequest:
       type: object
-      description: The client-facing transition command (#19). Mirrors the
-        canonical TransitionCommand CarePath forwards to the HIS.
+      description: The client-facing transition command (#19, amended by ADR-0009 — no longer forwarded to the HIS).
       required: [to]
       properties:
         to:
@@ -457,7 +540,8 @@ components:
           description: Acting surface for the audit trail, e.g. staff-web or patient-web. Defaults to unknown.
     VisitView:
       type: object
-      description: The Visit fields plus the resolved next step.
+      deprecated: true
+      description: Deprecated with the endpoint that returns it (ADR-0009); the Visit fields plus the resolved next step, under the pre-planner model.
       required: [visitId, patientRef, status, steps]
       properties:
         visitId: { type: string }

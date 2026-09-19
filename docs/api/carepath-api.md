@@ -8,17 +8,25 @@ Source of truth for externally visible behavior: [`packages/contracts/openapi/ca
 
 `GET /health`
 
-## Visit
+## Journey
 
-`GET /api/v1/visits/{visitId}`
+`GET /api/v1/journeys/{visitId}`
 
-Returns a normalized CarePath view of the visit and its steps.
+The journey plan CarePath derived from HIS facts ([ADR-0009](../adr/0009-carepath-owns-journey-plan.md)) — the HIS has no concept of an ordered journey, so CarePath decides which steps exist and their order. Each step carries a stable `stepKey` (its identity across replans) alongside a `sequence` (display order only). `actionable` lists every step currently `READY`; `recommended` is CarePath's pick among them for the patient's single primary action. 404 while the visit has not been ingested yet.
 
-## Next destination
+`POST /api/v1/journeys/{visitId}/steps/{stepKey}/transition`
 
-`GET /api/v1/visits/{visitId}/next`
+Staff command to move a step to `STARTED`, `COMPLETED`, or `CANCELLED`. CarePath owns step status directly (ADR-0009) — this no longer forwards anything to the HIS. Returns the refreshed journey with the plan recomputed against the new fact.
 
-Returns the next actionable visit step and its service point/place mapping.
+`POST /api/v1/journeys/{visitId}/clinics/{clinicCode}/close-round`
+
+Staff override: confirms a clinic is done with the patient for this round even without an `encounter.completed` fact from the HIS, dropping any not-yet-started "return to this clinic" step the planner had inferred.
+
+## Staff visit monitor
+
+`GET /api/v1/staff/visits`
+
+The projected journey of every visit CarePath knows, freshest sync first — same per-visit shape as the single-journey read (#37).
 
 ## Service points
 
@@ -26,9 +34,11 @@ Returns the next actionable visit step and its service point/place mapping.
 
 `GET /api/v1/service-points/{code}`
 
-Returns the active service points (or one by service code, e.g. `LAB`) with
-the resolved `place` and nested `floor` — the service → destination mapping
-(#24). Read-only; mapping changes go through seed migrations for the MVP.
+Returns the active service points (or one by binding code — a clinic code
+`CLINIC:MED`, an order type `ORDERTYPE:LAB`, or a fixed code like `CASHIER`)
+with the resolved `place` and nested `floor` — the step → destination mapping
+(#24, extended by ADR-0009). Read-only; mapping changes go through seed
+migrations for the MVP.
 
 ## Route
 
@@ -42,7 +52,15 @@ Returns route node IDs/coordinates for overlay on the floor plan.
 
 Normalizes provider input such as QR into a CarePath location result.
 
-Implemented today: health, visit view, next destination, auth session, the
-journey projection with step transitions, and the service point reads (with
-places/floors resolved from Postgres). The route and location endpoints
-remain intentionally documented as the next build slices.
+## Deprecated
+
+`GET /api/v1/visits/{visitId}` and `GET /api/v1/visits/{visitId}/next` predate
+the journey planner and assumed the HIS reports an ordered step list, which it
+does not (ADR-0009). Superseded by `GET /api/v1/journeys/{visitId}`; kept only
+until patient/staff clients finish migrating.
+
+Implemented today: health, auth session, the journey projection with step
+transitions and the clinic round override, the staff visit monitor, and the
+service point reads (with places/floors resolved from Postgres). The route
+and location endpoints remain intentionally documented as the next build
+slices.
