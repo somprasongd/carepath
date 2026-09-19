@@ -4,11 +4,13 @@
 # Go
 bin/
 coverage.out
+apps/*/server
 
 # Node
 node_modules/
 dist/
 .vite/
+*.tsbuildinfo
 
 # IDE / OS
 .DS_Store

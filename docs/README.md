@@ -38,6 +38,10 @@ This directory is the working source of truth for architecture, requirements, de
 - [Mock HIS API](api/mock-his-api.md)
 - Shared OpenAPI contracts: [`packages/contracts/openapi/`](../packages/contracts/openapi/)
 
+## Process
+
+- [AI-Native SDLC Workflow](process/ai-native-sdlc-workflow.md) — how intent → design → plan → build → test → deploy is meant to flow in this repo, and what's still missing (CI, tests, hooks/skills).
+
 ## Documentation rules
 
 1. Requirements describe **what** the system must do.
