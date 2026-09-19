@@ -17,6 +17,18 @@ const colorRoles: Record<string, string> = {
   'warning-tint': 'พื้นหลังของป้าย not-routable',
 }
 
+const codeFace: Partial<Record<keyof typeof typography, true>> = {
+  'display-stat': true,
+  'label-code': true,
+  button: true,
+}
+
+/** The three pieces Tailwind emits for a text token, composed as a `font` shorthand. */
+function textFont(token: keyof typeof typography) {
+  const face = codeFace[token] ? '--font-code' : '--font-sans'
+  return `var(--text-${token}--font-weight) var(--text-${token}) / var(--text-${token}--line-height) var(${face})`
+}
+
 const typeSamples: Record<keyof typeof typography, string> = {
   'display-stat': '24',
   h1: 'การมาโรงพยาบาลของคุณวันนี้',
@@ -62,7 +74,7 @@ export function FoundationsSection() {
       </div>
 
       <SubHead>ตัวอักษร</SubHead>
-      <div className="ds-specimen" style={{ padding: '0 var(--cp-space-xl)' }}>
+      <div className="ds-specimen px-5">
         {(Object.keys(typography) as (keyof typeof typography)[]).map((token) => {
           const spec = typography[token]
           return (
@@ -71,12 +83,12 @@ export function FoundationsSection() {
                 <code className="ds-type__token">{token}</code>
                 {spec.family} · {spec.size} · {spec.weight} · line-height {spec.lineHeight}
               </div>
-              <div style={{ font: `var(--cp-text-${token})` }}>{typeSamples[token]}</div>
+              <div style={{ font: textFont(token) }}>{typeSamples[token]}</div>
             </div>
           )
         })}
       </div>
-      <p className="ds-section__desc" style={{ marginTop: 'var(--cp-space-md)' }}>
+      <p className="ds-section__desc mt-3">
         Noto Sans Thai รับงานข้อความทั้งหมด (เป็นฟอนต์เดียวกับป้ายในผังอาคาร) ส่วน Space Grotesk
         สงวนไว้สำหรับตัวเลขและรหัสสั้น ๆ เช่น <code>REG-01</code>, <code>V-2384</code>, 11 นาที
         ไม่ผสมสองฟอนต์ในข้อความชิ้นเดียวกัน
@@ -120,17 +132,7 @@ export function FoundationsSection() {
           note="การ์ดและแถวแยกกันด้วยเส้น 1px — ให้บอร์ดของเจ้าหน้าที่อ่านเหมือนป้ายรวมแผนก"
           paper
         >
-          <div
-            style={{
-              background: 'var(--cp-surface)',
-              border: '1px solid var(--cp-line)',
-              borderRadius: 'var(--cp-radius-lg)',
-              padding: 'var(--cp-space-lg)',
-              width: '100%',
-              font: 'var(--cp-text-body-sm)',
-              color: 'var(--cp-ink-muted)',
-            }}
-          >
+          <div className="w-full rounded-lg border border-line bg-surface p-4 font-sans text-body-sm text-ink-muted">
             การ์ดปกติ
           </div>
         </Specimen>
@@ -140,18 +142,7 @@ export function FoundationsSection() {
           note="สงวนเงาไว้ให้เฉพาะสิ่งที่ลอยอยู่เหนือเนื้อหาที่เลื่อนได้จริง: แถบปุ่มติดขอบล่าง และ bottom sheet"
           paper
         >
-          <div
-            style={{
-              background: 'var(--cp-surface)',
-              borderTop: '1px solid var(--cp-line)',
-              boxShadow: 'var(--cp-shadow-bar)',
-              borderRadius: 'var(--cp-radius-md)',
-              padding: 'var(--cp-space-lg)',
-              width: '100%',
-              font: 'var(--cp-text-body-sm)',
-              color: 'var(--cp-ink-muted)',
-            }}
-          >
+          <div className="w-full rounded-md border-t border-line bg-surface p-4 font-sans text-body-sm text-ink-muted shadow-bar">
             แถบที่ลอยอยู่
           </div>
         </Specimen>

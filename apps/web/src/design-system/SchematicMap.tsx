@@ -41,7 +41,7 @@ export function SchematicMap({
 }: SchematicMapProps) {
   return (
     <svg
-      className="cp-map"
+      className="block h-auto w-full"
       viewBox={viewBox}
       role="img"
       aria-label={`ผังเส้นทางจาก${you.label}ไปยังจุดหมาย`}
@@ -67,7 +67,7 @@ export function SchematicMap({
               fontFamily="Noto Sans Thai"
               fontSize={10}
               fontWeight={700}
-              fill="var(--cp-ink)"
+              fill="var(--ink)"
             >
               {room.label}
             </text>
@@ -78,7 +78,7 @@ export function SchematicMap({
                 textAnchor="middle"
                 fontFamily="Space Grotesk"
                 fontSize={8}
-                fill="var(--cp-ink-muted)"
+                fill="var(--ink-muted)"
               >
                 {room.code}
               </text>
@@ -92,8 +92,8 @@ export function SchematicMap({
         y={corridor.y}
         width={corridor.width}
         height={corridor.height}
-        fill="var(--cp-neutral)"
-        stroke="var(--cp-zone-support-edge)"
+        fill="var(--neutral)"
+        stroke="var(--zone-support-edge)"
         strokeWidth={1}
       />
       <text
@@ -103,7 +103,7 @@ export function SchematicMap({
         fontFamily="Noto Sans Thai"
         fontSize={9}
         fontWeight={600}
-        fill="var(--cp-ink-muted)"
+        fill="var(--ink-muted)"
       >
         {corridor.label}
       </text>
@@ -111,7 +111,7 @@ export function SchematicMap({
       <path
         d={route}
         fill="none"
-        stroke="var(--cp-primary)"
+        stroke="var(--primary)"
         strokeWidth={6}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -121,18 +121,18 @@ export function SchematicMap({
         cx={routeEnd.x}
         cy={routeEnd.y}
         r={5}
-        fill="var(--cp-primary)"
-        stroke="var(--cp-surface)"
+        fill="var(--primary)"
+        stroke="var(--surface)"
         strokeWidth={2}
       />
 
-      <circle cx={you.x} cy={you.y} r={15} fill="var(--cp-secondary)" opacity={0.15} />
+      <circle cx={you.x} cy={you.y} r={15} fill="var(--secondary)" opacity={0.15} />
       <circle
         cx={you.x}
         cy={you.y}
         r={7}
-        fill="var(--cp-secondary)"
-        stroke="var(--cp-surface)"
+        fill="var(--secondary)"
+        stroke="var(--surface)"
         strokeWidth={3}
       />
       <text
@@ -142,7 +142,7 @@ export function SchematicMap({
         fontFamily="Noto Sans Thai"
         fontSize={9}
         fontWeight={700}
-        fill="var(--cp-secondary)"
+        fill="var(--secondary)"
       >
         {you.label}
       </text>

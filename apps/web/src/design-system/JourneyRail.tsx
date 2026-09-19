@@ -15,22 +15,28 @@ export type JourneyStep = {
   queue?: { number: string; wait: string }
 }
 
+const nodeClass: Record<JourneyStepState, string> = {
+  done: 'size-6 bg-ink text-surface',
+  /* The one glowing marker on the screen — it is where the patient is now. */
+  current: 'size-7 -ml-0.5 bg-primary shadow-[0_0_0_6px_var(--primary-tint)]',
+  next: 'size-6 border-2 border-primary bg-surface',
+  pending: 'size-6 border-2 border-line bg-surface',
+}
+
 /**
  * The patient's visit as a vertical rail. The connector turns orange one step
  * ahead of "current", echoing the route line painted on the floor plan.
  */
 export function JourneyRail({ steps }: { steps: JourneyStep[] }) {
   return (
-    <ol className="cp-rail" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+    <ol className="m-0 flex list-none flex-col p-0">
       {steps.map((step, i) => (
-        <li className="cp-rail__step" key={step.id}>
-          <div className="cp-rail__gutter">
+        <li className="flex gap-[14px]" key={step.id}>
+          <div className="flex w-6 shrink-0 flex-col items-center">
             <StepNode state={step.state} />
-            {i < steps.length - 1 && (
-              <span className={`cp-rail__line ${connectorClass(step, steps[i + 1])}`} />
-            )}
+            {i < steps.length - 1 && <Connector step={step} nextStep={steps[i + 1]} />}
           </div>
-          <div className="cp-rail__body">
+          <div className="min-w-0 flex-1 pb-5">
             <StepBody step={step} />
           </div>
         </li>
@@ -39,14 +45,23 @@ export function JourneyRail({ steps }: { steps: JourneyStep[] }) {
   )
 }
 
-function connectorClass(step: JourneyStep, nextStep: JourneyStep) {
-  if (step.state !== 'done') return 'cp-rail__line--pending'
-  return nextStep.state === 'done' ? '' : 'cp-rail__line--route'
+function Connector({ step, nextStep }: { step: JourneyStep; nextStep: JourneyStep }) {
+  if (step.state !== 'done') {
+    return <span className="mt-1.5 min-h-[22px] flex-1 border-l-2 border-dashed border-line" />
+  }
+
+  return nextStep.state === 'done' ? (
+    <span className="min-h-[22px] w-0.5 flex-1 bg-ink" />
+  ) : (
+    <span className="mt-1 min-h-[18px] w-[3px] flex-1 bg-primary" />
+  )
 }
 
 function StepNode({ state }: { state: JourneyStepState }) {
   return (
-    <span className={`cp-rail__node cp-rail__node--${state}`}>
+    <span
+      className={`flex shrink-0 items-center justify-center rounded-full ${nodeClass[state]}`}
+    >
       {state === 'done' && <CheckIcon />}
     </span>
   )
@@ -56,13 +71,13 @@ function StepBody({ step }: { step: JourneyStep }) {
   if (step.state === 'current') {
     return (
       <Card radius="ticket" padding="md">
-        <div className="cp-rail__eyebrow">ขั้นตอนปัจจุบัน</div>
-        <div className="cp-ticket__name">{step.title}</div>
-        <div className="cp-ticket__place">{step.meta}</div>
+        <div className="mb-1 font-sans text-caption text-ink-muted">ขั้นตอนปัจจุบัน</div>
+        <div className="mb-1 text-[18px] font-bold text-ink">{step.title}</div>
+        <div className="mb-3 font-sans text-body-sm text-ink-muted">{step.meta}</div>
         {step.queue && (
-          <div className="cp-ticket__queue">
+          <div className="flex items-center gap-2.5">
             <QueuePill>คิวที่ {step.queue.number}</QueuePill>
-            <span className="cp-ticket__wait">{step.queue.wait}</span>
+            <span className="font-sans text-body-sm text-ink-muted">{step.queue.wait}</span>
           </div>
         )}
       </Card>
@@ -72,19 +87,27 @@ function StepBody({ step }: { step: JourneyStep }) {
   if (step.state === 'next') {
     return (
       <>
-        <div className="cp-rail__eyebrow cp-rail__eyebrow--next">ขั้นตอนถัดไป</div>
-        <div className="cp-rail__next-name">{step.title}</div>
-        <div className="cp-rail__meta">{step.meta}</div>
+        <div className="mb-0.5 font-sans text-caption font-bold text-primary">ขั้นตอนถัดไป</div>
+        <div className="font-sans text-h2 text-ink">{step.title}</div>
+        <StepMeta>{step.meta}</StepMeta>
       </>
     )
   }
 
   return (
     <>
-      <div className={`cp-rail__title ${step.state === 'pending' ? 'cp-rail__title--muted' : ''}`}>
+      <div
+        className={`font-sans text-[15px]/[1.6] font-semibold ${
+          step.state === 'pending' ? 'text-ink-muted' : 'text-ink'
+        }`}
+      >
         {step.title}
       </div>
-      <div className="cp-rail__meta">{step.meta}</div>
+      <StepMeta>{step.meta}</StepMeta>
     </>
   )
+}
+
+function StepMeta({ children }: { children: string }) {
+  return <div className="mt-0.5 font-sans text-body-sm text-ink-muted">{children}</div>
 }

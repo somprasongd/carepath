@@ -1,10 +1,17 @@
-import type { CSSProperties, ReactNode } from 'react'
+import { cn } from 'cn'
+import type { ReactNode } from 'react'
 
-export type ScreenVariant = 'patient' | 'staff-mobile' | 'desktop'
+export type ScreenVariant = 'patient' | 'staff'
 
-/**
- * The frame every reference screen sits in. Patient and staff mobile are a
- * 390×844 LIFF viewport; desktop is the 1440×900 front-desk console.
+/*
+ * A screen fills whatever box it is given — the viewport at a real route, the
+ * fixed mockup size inside the /design catalogue's ScreenFrame. The container
+ * owns the dimensions; the screen never states its own.
+ *
+ * The mobile → desktop switch is a CONTAINER query (`@7xl`, 1280px, the
+ * breakpoint DESIGN.md names), not a viewport one. A viewport query would make
+ * the catalogue's 390px phone frame render the desktop console, because the
+ * browser window behind it is wide. Container queries measure the frame.
  */
 export function Screen({
   variant,
@@ -13,30 +20,66 @@ export function Screen({
   variant: ScreenVariant
   children: ReactNode
 }) {
-  return <div className={`cp-screen cp-screen--${variant}`}>{children}</div>
-}
-
-/** Scrolling body of a mobile screen; leaves room for the dock underneath. */
-export function ScreenScroll({
-  children,
-  style,
-}: {
-  children: ReactNode
-  style?: CSSProperties
-}) {
   return (
-    <div className="cp-screen__scroll" style={style}>
-      {children}
+    <div className="@container h-full w-full">
+      <div
+        className={cn(
+          'relative mx-auto flex h-full w-full flex-col overflow-hidden bg-neutral',
+          variant === 'patient'
+            ? /* LIFF is always a phone — never widen, even on a desktop browser. */
+              'max-w-[430px]'
+            : 'max-w-[430px] @7xl:max-w-none @7xl:flex-row'
+        )}
+      >
+        {children}
+      </div>
     </div>
   )
 }
 
-/** Scrolling body of the desktop console, beside the side rail. */
-export function ScreenMain({ children }: { children: ReactNode }) {
-  return <main className="cp-screen__main">{children}</main>
+/**
+ * The scrolling body. On a phone it leaves room for the dock underneath; at
+ * the console breakpoint it takes the desktop gutter and drops the dock space.
+ */
+export function ScreenBody({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <main
+      className={cn(
+        'flex-1 overflow-y-auto px-gutter pt-2 pb-24 @7xl:px-gutter-desktop @7xl:py-8',
+        className
+      )}
+    >
+      {children}
+    </main>
+  )
 }
 
 /** Pinned to the bottom edge: the sticky action bar, sheet or tab bar. */
-export function ScreenDock({ children }: { children: ReactNode }) {
-  return <div className="cp-screen__dock">{children}</div>
+export function ScreenDock({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return <div className={cn('absolute right-0 bottom-0 left-0', className)}>{children}</div>
+}
+
+/** Vertical rhythm for a list of cards — 12px, or 20px when `lg`. */
+export function Stack({
+  children,
+  lg = false,
+  className,
+}: {
+  children: ReactNode
+  lg?: boolean
+  className?: string
+}) {
+  return <div className={cn('flex flex-col', lg ? 'gap-5' : 'gap-3', className)}>{children}</div>
 }

@@ -1,4 +1,4 @@
-import { Card } from '@/design-system'
+import { Card, SectionTitle, Lead } from '@/design-system'
 import './design-page.css'
 import { ComponentsSection } from './ComponentsSection'
 import { FoundationsSection } from './FoundationsSection'
@@ -19,7 +19,7 @@ const sections = [
  */
 export function DesignSystemPage() {
   return (
-    <div className="ds-page cp-root">
+    <div className="ds-page font-sans text-ink antialiased">
       <div className="ds-shell">
         <header className="ds-hero">
           <div className="ds-hero__eyebrow">CAREPATH DESIGN SYSTEM · ALPHA</div>
@@ -33,19 +33,19 @@ export function DesignSystemPage() {
 
           <div className="ds-registers">
             <Card>
-              <div className="cp-h2">ผู้ป่วย</div>
-              <p className="cp-lead" style={{ marginTop: 'var(--cp-space-sm)' }}>
+              <SectionTitle className="mb-0">ผู้ป่วย</SectionTitle>
+              <Lead className="mt-2">
                 มือถืออย่างเดียว เปิดจาก LINE LIFF มักเป็นคนที่กังวล สูงอายุ
                 หรือไม่เคยเห็นอาคารนี้มาก่อน — หนึ่งการกระทำหลักต่อหนึ่งหน้าจอ ตัวอักษรใหญ่
                 ไม่มีศัพท์ทางคลินิก
-              </p>
+              </Lead>
             </Card>
             <Card>
-              <div className="cp-h2">เจ้าหน้าที่</div>
-              <p className="cp-lead" style={{ marginTop: 'var(--cp-space-sm)' }}>
+              <SectionTitle className="mb-0">เจ้าหน้าที่</SectionTitle>
+              <Lead className="mt-2">
                 เริ่มที่มือถือ แต่ต้องขยายไปเป็นคอนโซลบนเดสก์ท็อปของเคาน์เตอร์หรือเคาน์เตอร์พยาบาลได้ —
                 ออกแบบให้กวาดสายตาหลายแถวได้เร็ว และจับคู่แถวกับพื้นที่สีบนผังได้ด้วยสี
-              </p>
+              </Lead>
             </Card>
           </div>
         </header>

@@ -1,5 +1,4 @@
-import { Button } from './Button'
-import { Card } from './Card'
+import { Button, Card } from '@/design-system'
 
 export type AttentionCardProps = {
   /** Visit reference, e.g. "V-2210". */
@@ -24,11 +23,15 @@ export function AttentionCard({
 }: AttentionCardProps) {
   return (
     <Card radius="md" padding="md">
-      <div className="cp-attention__head">
-        <span className="cp-sp-row__code">{visitRef}</span>
-        <span className="cp-sp-row__name">{step}</span>
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="font-code text-[12px]/none font-bold text-ink">{visitRef}</span>
+        <span className="font-sans text-[11px] font-normal text-ink-muted">{step}</span>
       </div>
-      <div className={`cp-attention__reason ${urgent ? 'cp-attention__reason--urgent' : ''}`}>
+      <div
+        className={`mb-2.5 font-sans text-caption font-normal ${
+          urgent ? 'text-primary' : 'text-ink-muted'
+        }`}
+      >
         {reason}
       </div>
       <Button variant="ghost" onClick={onAction}>

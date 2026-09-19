@@ -7,11 +7,16 @@
  * packages/floorplans/floors/*.svg — the app chrome and the hospital signage
  * are one system (ADR-0003).
  *
- * Four blocks below, in order:
+ * Three blocks below, in order:
  *   1. :root          raw palette + the shadcn semantic names mapped onto it
  *   2. @theme         values Tailwind must emit as custom properties
  *   3. @theme inline  colours, resolved through the :root names above
- *   4. :root shim     legacy --cp-* names, all derived — delete at step 3
+ *
+ * There used to be a fourth block: a `--cp-*` shim so the pre-Tailwind
+ * component CSS could keep working while it was migrated one file at a time.
+ * The last file that needed it (design-system/components.css) is gone, so the
+ * shim is too — every component now reads a Tailwind utility or one of the
+ * names below directly.
  */
 
 @import 'tailwindcss';
@@ -189,79 +194,4 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-}
-
-/* ── 4. Transition shim ───────────────────────────────────────────────── */
-
-/*
- * design-system/components.css (987 lines) and pages/design/design-page.css
- * (405 lines) still read --cp-*. Every name here derives from a token above —
- * nothing is re-typed, so there is still one source of truth. This block dies
- * with the last .css file that needs it, at step 3 of the Tailwind migration.
- */
-:root {
-  --cp-primary: var(--primary);
-  --cp-primary-tint: var(--primary-tint);
-  --cp-primary-edge: var(--primary-edge);
-  --cp-secondary: var(--secondary);
-  --cp-secondary-tint: var(--secondary-tint);
-  --cp-secondary-edge: var(--secondary-edge);
-  --cp-ink: var(--ink);
-  --cp-ink-muted: var(--ink-muted);
-  --cp-neutral: var(--neutral);
-  --cp-surface: var(--surface);
-  --cp-line: var(--line);
-  --cp-success: var(--success);
-  --cp-success-tint: var(--success-tint);
-  --cp-warning: var(--warning);
-  --cp-warning-tint: var(--warning-tint);
-
-  --cp-zone-public: var(--zone-public);
-  --cp-zone-public-edge: var(--zone-public-edge);
-  --cp-zone-opd: var(--zone-opd);
-  --cp-zone-opd-edge: var(--zone-opd-edge);
-  --cp-zone-diagnostic: var(--zone-diagnostic);
-  --cp-zone-diagnostic-edge: var(--zone-diagnostic-edge);
-  --cp-zone-pharmacy: var(--zone-pharmacy);
-  --cp-zone-pharmacy-edge: var(--zone-pharmacy-edge);
-  --cp-zone-rehab: var(--zone-rehab);
-  --cp-zone-rehab-edge: var(--zone-rehab-edge);
-  --cp-zone-ipd: var(--zone-ipd);
-  --cp-zone-ipd-edge: var(--zone-ipd-edge);
-  --cp-zone-support: var(--zone-support);
-  --cp-zone-support-edge: var(--zone-support-edge);
-
-  --cp-font-sans: var(--font-sans);
-  --cp-font-code: var(--font-code);
-
-  --cp-text-display-stat: var(--text-display-stat--font-weight) var(--text-display-stat) / var(--text-display-stat--line-height) var(--font-code);
-  --cp-text-h1: var(--text-h1--font-weight) var(--text-h1) / var(--text-h1--line-height) var(--font-sans);
-  --cp-text-h2: var(--text-h2--font-weight) var(--text-h2) / var(--text-h2--line-height) var(--font-sans);
-  --cp-text-body-md: var(--text-body-md--font-weight) var(--text-body-md) / var(--text-body-md--line-height) var(--font-sans);
-  --cp-text-body-sm: var(--text-body-sm--font-weight) var(--text-body-sm) / var(--text-body-sm--line-height) var(--font-sans);
-  --cp-text-label-code: var(--text-label-code--font-weight) var(--text-label-code) / var(--text-label-code--line-height) var(--font-code);
-  --cp-text-caption: var(--text-caption--font-weight) var(--text-caption) / var(--text-caption--line-height) var(--font-sans);
-  --cp-text-button: var(--text-button--font-weight) var(--text-button) / var(--text-button--line-height) var(--font-code);
-
-  --cp-radius-sm: var(--radius-sm);
-  --cp-radius-md: var(--radius-md);
-  --cp-radius-lg: var(--radius-lg);
-  --cp-radius-xl: var(--radius-xl);
-  --cp-radius-full: var(--radius-full);
-  --cp-radius-ticket: var(--radius-ticket);
-
-  /* CarePath's named spacing is Tailwind's 4px scale under another name. */
-  --cp-space-xs: calc(var(--spacing) * 1);
-  --cp-space-sm: calc(var(--spacing) * 2);
-  --cp-space-md: calc(var(--spacing) * 3);
-  --cp-space-lg: calc(var(--spacing) * 4);
-  --cp-space-xl: calc(var(--spacing) * 5);
-  --cp-space-2xl: calc(var(--spacing) * 6);
-  --cp-space-3xl: calc(var(--spacing) * 8);
-  --cp-space-4xl: calc(var(--spacing) * 10);
-  --cp-gutter: var(--spacing-gutter);
-  --cp-gutter-desktop: var(--spacing-gutter-desktop);
-
-  --cp-shadow-bar: var(--shadow-bar);
-  --cp-shadow-sheet: var(--shadow-sheet);
 }

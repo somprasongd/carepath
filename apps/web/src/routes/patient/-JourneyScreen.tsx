@@ -7,8 +7,8 @@ import {
   PageTitle,
   RefPill,
   Screen,
+  ScreenBody,
   ScreenDock,
-  ScreenScroll,
   StickyActionBar,
 } from '@/design-system'
 import { journeySteps, visitRef } from '@/mocks/demo-data'
@@ -22,16 +22,14 @@ export function JourneyScreen({ onNavigate }: { onNavigate?: () => void }) {
     <Screen variant="patient">
       <AppBar wordmark="CarePath" trailing={<RefPill>{visitRef}</RefPill>} />
 
-      <ScreenScroll style={{ padding: '6px var(--cp-gutter) 158px' }}>
-        <div style={{ margin: '14px 0 6px' }}>
-          <PageTitle>การมาโรงพยาบาลของคุณวันนี้</PageTitle>
-        </div>
-        <div style={{ maxWidth: 300, marginBottom: 30 }}>
-          <Lead>ติดตามขั้นตอนของคุณ แล้วไปยังจุดบริการถัดไปได้จากปุ่มด้านล่าง</Lead>
-        </div>
+      <ScreenBody className="pt-1.5 pb-40">
+        <PageTitle className="mt-3.5 mb-1.5">การมาโรงพยาบาลของคุณวันนี้</PageTitle>
+        <Lead className="mb-7 max-w-[300px]">
+          ติดตามขั้นตอนของคุณ แล้วไปยังจุดบริการถัดไปได้จากปุ่มด้านล่าง
+        </Lead>
 
         <JourneyRail steps={journeySteps} />
-      </ScreenScroll>
+      </ScreenBody>
 
       <ScreenDock>
         <StickyActionBar label="ขั้นตอนถัดไป" value="รับยา · ห้องยา ชั้น 1">

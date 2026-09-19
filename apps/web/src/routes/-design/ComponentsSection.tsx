@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import {
-  AttentionCard,
   BottomSheet,
   BottomTabBar,
   Button,
@@ -9,15 +8,16 @@ import {
   DataTable,
   InfoNote,
   JourneyRail,
+  LinkButton,
   LoadBadge,
   LocationBanner,
   QueuePill,
   RefPill,
   RouteStatusBadge,
   SchematicMap,
-  ServicePointMappingCard,
-  ServicePointRow,
+  SectionTitle,
   SideRail,
+  Stack,
   StatCard,
   StickyActionBar,
   TableCode,
@@ -27,6 +27,8 @@ import {
   type Column,
   type Zone,
 } from '@/design-system'
+import { AttentionCard } from '@/features/visit'
+import { ServicePointMappingCard, ServicePointRow } from '@/features/servicepoint'
 import {
   attentionList,
   currentLocation,
@@ -52,7 +54,7 @@ const tableColumns: Column<ServicePointLoad>[] = [
     key: 'waiting',
     header: 'กำลังรอ',
     render: (sp) => (
-      <span className={`cp-sp-row__count ${sp.load === 'busy' ? 'cp-sp-row__count--busy' : ''}`}>
+      <span className={`font-code text-label-code ${sp.load === 'busy' ? 'text-primary' : 'text-ink'}`}>
         {sp.waiting}
       </span>
     ),
@@ -129,9 +131,9 @@ export function ComponentsSection() {
       <SubHead>พื้นผิวและการ์ด</SubHead>
       <div className="ds-grid ds-grid--wide">
         <Specimen name="Card · lg" note="การ์ดมาตรฐาน: ขอบ 1px ไม่มีเงา" paper>
-          <Card style={{ width: '100%' }}>
-            <div className="cp-h2">ห้องยา</div>
-            <div className="cp-rail__meta">ชั้น 1 · PHARMACY-01</div>
+          <Card className="w-full">
+            <SectionTitle className="mb-0">ห้องยา</SectionTitle>
+            <div className="mt-0.5 font-sans text-body-sm text-ink-muted">ชั้น 1 · PHARMACY-01</div>
           </Card>
         </Specimen>
         <Specimen
@@ -139,16 +141,14 @@ export function ComponentsSection() {
           note="มุมซ้ายบนคม มุมอื่นโค้ง — สัญญะ 'ใบคิวที่คุณถืออยู่' สงวนไว้ให้ขั้นตอนปัจจุบันเท่านั้น"
           paper
         >
-          <Card radius="ticket" padding="md" style={{ width: '100%' }}>
-            <div className="cp-rail__eyebrow">ขั้นตอนปัจจุบัน</div>
-            <div className="cp-ticket__name">เจาะเลือด</div>
-            <div className="cp-ticket__place" style={{ marginBottom: 0 }}>
-              ห้องเจาะเลือด · ชั้น 2 · LAB-01
-            </div>
+          <Card radius="ticket" padding="md" className="w-full">
+            <div className="mb-1 font-sans text-caption text-ink-muted">ขั้นตอนปัจจุบัน</div>
+            <div className="mb-1 text-[18px] font-bold text-ink">เจาะเลือด</div>
+            <div className="font-sans text-body-sm text-ink-muted">ห้องเจาะเลือด · ชั้น 2 · LAB-01</div>
           </Card>
         </Specimen>
         <Specimen name="StatCard" note="KPI สีส้มได้เพียงตัวเดียวต่อหนึ่งหน้าจอ" paper block>
-          <div className="cp-grid-2">
+          <div className="grid grid-cols-2 gap-3">
             <StatCard compact label="กำลังใช้บริการ" value="24" unit="ราย" />
             <StatCard compact tone="attention" label="ไม่ทราบตำแหน่ง" value="3" unit="ราย" />
           </div>
@@ -181,7 +181,7 @@ export function ComponentsSection() {
               you={currentLocation}
             />
           </Specimen>
-          <div style={{ height: 'var(--cp-space-lg)' }} />
+          <div className="h-4" />
           <Specimen
             name="LocationBanner"
             note="สถานะจาก location provider ที่ใช้อยู่ (QR / Zigbee / เลือกเอง) ตาม ADR-0004"
@@ -210,25 +210,25 @@ export function ComponentsSection() {
           ))}
         </Specimen>
         <Specimen name="ServicePointMappingCard" note="การเชื่อมขั้นตอนการดูแล → สถานที่จริง หนึ่งใบ" paper block>
-          <div className="cp-stack">
+          <Stack>
             <ServicePointMappingCard {...servicePointMappings[3]} />
             <ServicePointMappingCard {...servicePointMappings[6]} />
-          </div>
+          </Stack>
         </Specimen>
         <Specimen name="AttentionCard" note="ผู้ป่วยที่ประชาสัมพันธ์ต้องลงมือทำอะไรสักอย่าง" paper block>
-          <div className="cp-stack">
+          <Stack>
             {attentionList.map((item) => (
               <AttentionCard key={item.visitRef} {...item} />
             ))}
-          </div>
+          </Stack>
         </Specimen>
         <Specimen name="InfoNote · ZoneLegend" note="อธิบายกฎของโดเมน ไม่ใช่การเตือน" paper block>
-          <div className="cp-stack">
+          <Stack>
             <InfoNote>ห้องที่ยังไม่มีโหนดนำทางจะเลือกได้ แต่จะยังไม่แสดงเส้นทางให้ผู้ป่วย</InfoNote>
             <Card>
               <ZoneLegend only={['public', 'opd', 'diagnostic', 'pharmacy']} />
             </Card>
-          </div>
+          </Stack>
         </Specimen>
       </div>
 
@@ -248,7 +248,7 @@ export function ComponentsSection() {
       <SubHead>โครงหน้าจอที่ลอยอยู่</SubHead>
       <div className="ds-grid ds-grid--wide">
         <Specimen name="StickyActionBar" note="อยู่ในระยะนิ้วโป้ง · หนึ่งปุ่มหลักเท่านั้น" paper block>
-          <div style={{ maxWidth: 390 }}>
+          <div className="max-w-[390px]">
             <StickyActionBar label="ขั้นตอนถัดไป" value="รับยา · ห้องยา ชั้น 1">
               <Button variant="primary" block>
                 <span>นำทางไปห้องยา</span>
@@ -258,16 +258,12 @@ export function ComponentsSection() {
           </div>
         </Specimen>
         <Specimen name="BottomSheet" note="สรุปเป็นตัวเลขใหญ่ แล้วตามด้วยคำบอกทางแบบข้อความ" paper block>
-          <div style={{ maxWidth: 390 }}>
+          <div className="max-w-[390px]">
             <BottomSheet
               primary="3 นาที"
               secondary="· 65 เมตร"
               steps={walkingSteps}
-              footer={
-                <button type="button" className="cp-link">
-                  แจ้งเจ้าหน้าที่หากหลงทาง
-                </button>
-              }
+              footer={<LinkButton>แจ้งเจ้าหน้าที่หากหลงทาง</LinkButton>}
             />
           </div>
         </Specimen>
@@ -276,12 +272,12 @@ export function ComponentsSection() {
       <SubHead>เมนู</SubHead>
       <div className="ds-grid ds-grid--wide">
         <Specimen name="BottomTabBar" note="เจ้าหน้าที่บนมือถือ · 4 ปลายทางเดียวกับบนเดสก์ท็อป" paper block>
-          <div style={{ maxWidth: 390, border: '1px solid var(--cp-line)' }}>
+          <div className="max-w-[390px] border border-line">
             <BottomTabBar items={staffNavItems} activeId={tab} onSelect={setTab} />
           </div>
         </Specimen>
         <Specimen name="SideRail" note="เจ้าหน้าที่บนเดสก์ท็อป · rail กว้าง 220px ตายตัว" paper block>
-          <div style={{ height: 420, display: 'flex' }}>
+          <div className="flex h-[420px]">
             <SideRail
               items={staffRailItems}
               activeId={railItem}

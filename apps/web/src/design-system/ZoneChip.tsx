@@ -1,5 +1,33 @@
 import type { ReactNode } from 'react'
 import { zones, type Zone } from './tokens'
+import { Badge } from './ui/badge'
+
+/*
+ * Every zone is spelled out because Tailwind only emits classes it can read in
+ * the source — `bg-zone-${zone}` would compile to nothing. These fills must
+ * stay byte-identical to the `:root` values in
+ * packages/floorplans/floors/*.svg (ADR-0003); src/styles/index.css holds the
+ * single copy of the values themselves.
+ */
+const chipFill: Record<Zone, string> = {
+  public: 'bg-zone-public',
+  opd: 'bg-zone-opd',
+  diagnostic: 'bg-zone-diagnostic',
+  pharmacy: 'bg-zone-pharmacy',
+  rehab: 'bg-zone-rehab',
+  ipd: 'bg-zone-ipd',
+  support: 'bg-zone-support',
+}
+
+const dotFill: Record<Zone, string> = {
+  public: 'bg-zone-public border-zone-public-edge',
+  opd: 'bg-zone-opd border-zone-opd-edge',
+  diagnostic: 'bg-zone-diagnostic border-zone-diagnostic-edge',
+  pharmacy: 'bg-zone-pharmacy border-zone-pharmacy-edge',
+  rehab: 'bg-zone-rehab border-zone-rehab-edge',
+  ipd: 'bg-zone-ipd border-zone-ipd-edge',
+  support: 'bg-zone-support border-zone-support-edge',
+}
 
 export type ZoneChipProps = {
   zone: Zone
@@ -13,15 +41,20 @@ export type ZoneChipProps = {
  */
 export function ZoneChip({ zone, children }: ZoneChipProps) {
   return (
-    <span className="cp-chip" data-zone={zone}>
+    <Badge variant="zone" className={chipFill[zone]}>
       {children ?? zones[zone].label}
-    </span>
+    </Badge>
   )
 }
 
 /** The chip reduced to its colour — for dense rows where the code carries the name. */
 export function ZoneDot({ zone }: { zone: Zone }) {
-  return <span className="cp-dot" data-zone={zone} aria-hidden="true" />
+  return (
+    <span
+      className={`inline-block size-2.5 shrink-0 rounded-full border ${dotFill[zone]}`}
+      aria-hidden="true"
+    />
+  )
 }
 
 /**
@@ -30,12 +63,16 @@ export function ZoneDot({ zone }: { zone: Zone }) {
  */
 export function ZoneLegend({ only }: { only?: Zone[] }) {
   const keys = (only ?? (Object.keys(zones) as Zone[])) as Zone[]
+
   return (
-    <ul className="cp-legend">
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {keys.map((zone) => (
-        <li className="cp-legend__row" key={zone}>
-          <span className="cp-swatch-box" data-zone={zone} aria-hidden="true" />
-          <span className="cp-legend__label">
+        <li className="flex items-center gap-2" key={zone}>
+          <span
+            className={`inline-block size-3 shrink-0 rounded-[4px] ${chipFill[zone]}`}
+            aria-hidden="true"
+          />
+          <span className="font-sans text-caption font-normal text-ink-muted">
             {zones[zone].label} — {zones[zone].use}
           </span>
         </li>

@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { Button as UIButton } from './ui/button'
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost'
 
@@ -15,6 +16,9 @@ export type ButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> 
   children: ReactNode
 }
 
+/** Each variant carries its own height — see the size rules in ui/button.tsx. */
+const sizeFor = { primary: 'lg', secondary: 'md', ghost: 'sm' } as const
+
 export function Button({
   variant = 'primary',
   href,
@@ -24,20 +28,44 @@ export function Button({
   type = 'button',
   ...rest
 }: ButtonProps) {
-  const classes = ['cp-btn', `cp-btn--${variant}`, block ? 'cp-btn--block' : '', className ?? '']
-    .filter(Boolean)
-    .join(' ')
-
   if (href) {
     return (
-      <a className={classes} href={href}>
-        {children}
-      </a>
+      <UIButton asChild variant={variant} size={sizeFor[variant]} block={block} className={className}>
+        <a href={href}>{children}</a>
+      </UIButton>
     )
   }
 
   return (
-    <button className={classes} type={type} {...rest}>
+    <UIButton
+      type={type}
+      variant={variant}
+      size={sizeFor[variant]}
+      block={block}
+      className={className}
+      {...rest}
+    >
+      {children}
+    </UIButton>
+  )
+}
+
+/** A text-only action — the quiet sibling of `ghost`. */
+export function LinkButton({
+  children,
+  onClick,
+  className,
+}: {
+  children: ReactNode
+  onClick?: () => void
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`cursor-pointer border-0 bg-none p-0 text-caption font-bold text-secondary no-underline ${className ?? ''}`}
+    >
       {children}
     </button>
   )

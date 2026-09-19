@@ -9,7 +9,7 @@ function PatientJourneyRoute() {
   const navigate = useNavigate()
 
   return (
-    <div className="cp-viewport">
+    <div className="h-dvh">
       <JourneyScreen onNavigate={() => navigate({ to: '/patient/navigate' })} />
     </div>
   )

@@ -14,6 +14,11 @@ export type StatCardProps = {
   compact?: boolean
 }
 
+function valueSize(textValue: boolean, compact: boolean) {
+  if (compact) return textValue ? 'text-[16px]' : 'text-[24px]'
+  return textValue ? 'text-[26px]' : 'text-display-stat'
+}
+
 export function StatCard({
   label,
   value,
@@ -23,21 +28,45 @@ export function StatCard({
   textValue = false,
   compact = false,
 }: StatCardProps) {
+  const attention = tone === 'attention'
+
   return (
     <Card
-      tone={tone === 'attention' ? 'attention' : 'surface'}
+      tone={attention ? 'attention' : 'surface'}
       radius={compact ? 'md' : 'lg'}
       padding={compact ? 'md' : 'xl'}
-      className={`cp-stat ${compact ? 'cp-stat--compact' : ''} ${
-        tone === 'attention' ? 'cp-stat--attention' : ''
-      }`}
     >
-      <div className="cp-stat__label">{label}</div>
-      <div className={`cp-stat__value ${textValue ? 'cp-stat__value--text' : ''}`}>
-        {value}
-        {unit && <span className="cp-stat__unit"> {unit}</span>}
+      <div
+        className={`font-sans text-caption ${compact ? 'mb-1.5' : 'mb-2.5'} ${
+          attention ? 'text-warning' : 'text-ink-muted'
+        }`}
+      >
+        {label}
       </div>
-      {note && <div className="cp-stat__note">{note}</div>}
+      <div
+        className={`font-code font-bold ${valueSize(textValue, compact)} ${
+          attention ? 'text-primary' : 'text-ink'
+        }`}
+      >
+        {value}
+        {unit && (
+          <span
+            className={`font-sans text-caption ${attention ? 'text-primary' : 'text-ink-muted'}`}
+          >
+            {' '}
+            {unit}
+          </span>
+        )}
+      </div>
+      {note && (
+        <div
+          className={`mt-1.5 font-sans text-caption ${
+            attention ? 'text-warning' : 'text-ink-muted'
+          }`}
+        >
+          {note}
+        </div>
+      )}
     </Card>
   )
 }

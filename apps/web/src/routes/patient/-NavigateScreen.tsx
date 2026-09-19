@@ -1,6 +1,7 @@
 import {
   AppBar,
   BottomSheet,
+  LinkButton,
   LocationBanner,
   SchematicMap,
   Screen,
@@ -29,13 +30,13 @@ export function NavigateScreen({ onBack }: { onBack?: () => void }) {
         subtitle="ชั้น 1 · Pharmacy · PHARMACY-01"
       />
 
-      <div style={{ margin: '0 var(--cp-gutter) 14px', flexShrink: 0 }}>
+      <div className="mx-gutter mb-3.5 shrink-0">
         <LocationBanner actionLabel="สแกนใหม่">
           ตำแหน่งล่าสุดจากการสแกน QR ที่ทางลงชั้น 1 · 2 นาทีที่แล้ว
         </LocationBanner>
       </div>
 
-      <div style={{ flex: '1 1 auto', padding: '4px var(--cp-gutter) 0', overflow: 'hidden' }}>
+      <div className="flex-1 overflow-hidden px-gutter pt-1">
         <SchematicMap
           rooms={floor1Rooms}
           corridor={floor1Corridor}
@@ -50,11 +51,7 @@ export function NavigateScreen({ onBack }: { onBack?: () => void }) {
           primary="3 นาที"
           secondary="· 65 เมตร"
           steps={walkingSteps}
-          footer={
-            <button type="button" className="cp-link">
-              แจ้งเจ้าหน้าที่หากหลงทาง
-            </button>
-          }
+          footer={<LinkButton>แจ้งเจ้าหน้าที่หากหลงทาง</LinkButton>}
         />
       </ScreenDock>
     </Screen>

@@ -1,7 +1,4 @@
-import { Card } from './Card'
-import { RouteStatusBadge, type RouteStatus } from './StatusBadge'
-import { ZoneDot } from './ZoneChip'
-import type { Zone } from './tokens'
+import { Card, RouteStatusBadge, ZoneDot, type RouteStatus, type Zone } from '@/design-system'
 
 export type ServicePointRowProps = {
   zone: Zone
@@ -17,13 +14,15 @@ export type ServicePointRowProps = {
 /** Dense staff list row: colour, code, name, count. Scannable against the map. */
 export function ServicePointRow({ zone, code, name, waiting, busy }: ServicePointRowProps) {
   return (
-    <div className="cp-sp-row">
+    <div className="flex items-center gap-3 border-b border-line py-2.5 last:border-b-0">
       <ZoneDot zone={zone} />
-      <div className="cp-sp-row__body">
-        <div className="cp-sp-row__code">{code}</div>
-        <div className="cp-sp-row__name">{name}</div>
+      <div className="min-w-0 flex-1">
+        <div className="font-code text-[12px]/none font-bold text-ink">{code}</div>
+        <div className="font-sans text-[11px] font-normal text-ink-muted">{name}</div>
       </div>
-      <div className={`cp-sp-row__count ${busy ? 'cp-sp-row__count--busy' : ''}`}>{waiting}</div>
+      <div className={`font-code text-label-code ${busy ? 'text-primary' : 'text-ink'}`}>
+        {waiting}
+      </div>
     </div>
   )
 }
@@ -41,7 +40,8 @@ export type ServicePointMappingProps = {
 
 /**
  * One care-step → place link, the mobile counterpart of a row in the staff
- * desktop mapping table.
+ * desktop mapping table. Care Graph and Navigation Graph stay separate models
+ * (ADR-0002); this card is where a human joins them.
  */
 export function ServicePointMappingCard({
   zone,
@@ -53,15 +53,15 @@ export function ServicePointMappingCard({
 }: ServicePointMappingProps) {
   return (
     <Card radius="md" padding="md">
-      <div className="cp-mapping__head">
+      <div className="mb-2 flex items-center gap-2">
         <ZoneDot zone={zone} />
-        <span className="cp-sp-row__code">{service}</span>
-        <span className="cp-mapping__target" style={{ margin: 0 }}>
-          {serviceName}
-        </span>
+        <span className="font-code text-[12px]/none font-bold text-ink">{service}</span>
+        <span className="font-sans text-caption font-normal text-ink-muted">{serviceName}</span>
       </div>
-      <div className="cp-mapping__target">→ {target}</div>
-      {note && <div className="cp-mapping__note">{note}</div>}
+      <div className="mb-2.5 font-sans text-caption font-normal text-ink-muted">→ {target}</div>
+      {note && (
+        <div className="-mt-1.5 mb-2.5 text-[11px] leading-[1.5] text-ink-muted">{note}</div>
+      )}
       <RouteStatusBadge status={status} />
     </Card>
   )

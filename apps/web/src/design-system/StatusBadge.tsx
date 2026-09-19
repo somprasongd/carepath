@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Badge } from './ui/badge'
 
 export type RouteStatus = 'routable' | 'not-routable'
 
@@ -9,27 +10,31 @@ export type RouteStatus = 'routable' | 'not-routable'
  */
 export function RouteStatusBadge({ status }: { status: RouteStatus }) {
   return status === 'routable' ? (
-    <span className="cp-badge cp-badge--routable">เดินทางได้</span>
+    <Badge variant="routable">เดินทางได้</Badge>
   ) : (
-    <span className="cp-badge cp-badge--blocked">ยังไม่รองรับเส้นทาง</span>
+    <Badge variant="blocked">ยังไม่รองรับเส้นทาง</Badge>
   )
 }
 
 /** Operational load on a service point — never a red/green alert colour. */
 export function LoadBadge({ load }: { load: 'normal' | 'busy' }) {
   return load === 'busy' ? (
-    <span className="cp-badge cp-badge--busy">หนาแน่น</span>
+    <Badge variant="busy">หนาแน่น</Badge>
   ) : (
-    <span className="cp-badge cp-badge--quiet">ปกติ</span>
+    <Badge variant="quiet">ปกติ</Badge>
   )
 }
 
 /** Queue number in the signage numeral face. */
 export function QueuePill({ children }: { children: ReactNode }) {
-  return <span className="cp-queue-pill">{children}</span>
+  return <Badge variant="queue">{children}</Badge>
 }
 
 /** Visit / patient reference code, shown as a quiet outlined pill. */
-export function RefPill({ children }: { children: ReactNode }) {
-  return <span className="cp-ref-pill">{children}</span>
+export function RefPill({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <Badge variant="ref" className={className}>
+      {children}
+    </Badge>
+  )
 }

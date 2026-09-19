@@ -9,12 +9,13 @@ export type StickyActionBarProps = {
   children: ReactNode
 }
 
+/** The other element allowed a shadow: it floats over the scrolling journey. */
 export function StickyActionBar({ label, value, children }: StickyActionBarProps) {
   return (
-    <div className="cp-actionbar">
-      <div className="cp-actionbar__context">
-        <span className="cp-actionbar__label">{label}</span>
-        <span className="cp-actionbar__value">{value}</span>
+    <div className="flex flex-col gap-2.5 border-t border-line bg-surface px-gutter pt-[14px] pb-[22px] shadow-bar">
+      <div className="flex items-baseline gap-2">
+        <span className="font-sans text-caption font-normal text-ink-muted">{label}</span>
+        <span className="font-sans text-body-md font-bold text-ink">{value}</span>
       </div>
       {children}
     </div>
