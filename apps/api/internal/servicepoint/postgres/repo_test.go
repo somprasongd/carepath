@@ -37,6 +37,16 @@ func TestGetByCode(t *testing.T) {
 		t.Fatalf("GetByCode = %+v, want seeded SP-LAB at LAB-01 active", sp)
 	}
 
+	// Seeded for the #22 demo order flow: XRAY resolves to the imaging room
+	// on the ground floor.
+	xray, err := repo.GetByCode(context.Background(), "XRAY")
+	if err != nil {
+		t.Fatalf("GetByCode XRAY: %v", err)
+	}
+	if xray.ID != "SP-XRAY" || xray.PlaceID != "XRAY-01" {
+		t.Fatalf("GetByCode XRAY = %+v, want SP-XRAY at XRAY-01", xray)
+	}
+
 	if _, err := repo.GetByCode(context.Background(), "NOPE"); !errors.Is(err, servicepoint.ErrNotFound) {
 		t.Fatalf("error = %v, want servicepoint.ErrNotFound", err)
 	}
