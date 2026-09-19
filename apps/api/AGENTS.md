@@ -31,10 +31,10 @@ A module gets a package only when it has a real feature — never an empty skele
 4. `internal/<module>/postgres/repo.go` — pgx adapter implementing `Repo`; every query goes through `database.Querier(ctx)`.
 5. Wire it in `cmd/server/main.go`: repo → service → handler → routes.
 6. New table? Add `infra/postgres/migrations/NNNNNN_name.up.sql` + matching `.down.sql`, then `make migrate-up`. Keep DDL idempotent (`IF NOT EXISTS`, `ON CONFLICT`) so existing volumes still migrate.
-7. Tests: unit tests for the service using fakes (see `internal/visit/service_test.go`); integration tests for the postgres adapter (see `internal/servicepoint/postgres/repo_test.go`).
+7. Tests: unit tests for the service using fakes (see `internal/journey/service_test.go`); integration tests for the postgres adapter (see `internal/servicepoint/postgres/repo_test.go`).
 8. `make swag` if you added or changed annotated endpoints.
 
-Reference implementations: `servicepoint` (repo + service, no HTTP), `visit` (full stack incl. handler), `his` (integration port + adapter + ingest poller), `journey` (event-driven projection with idempotent apply, plus the journey read API and the HIS-command transition proxy), `location` (provider port + QR/manual/mock adapters + HTTP, per ADR-0004).
+Reference implementations: `servicepoint` (repo + service, no HTTP), `journey` (full stack incl. handler; event-driven projection with idempotent apply, the CarePath-owned journey plan, and the HIS-command transition proxy), `location` (full stack incl. handler; provider port + QR/manual/mock adapters, per ADR-0004), `his` (integration port + adapter + ingest poller).
 
 ## Rules — DB & transactions
 
