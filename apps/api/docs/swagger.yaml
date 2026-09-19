@@ -35,6 +35,31 @@ definitions:
       placeId:
         type: string
     type: object
+  session.createRequest:
+    properties:
+      idToken:
+        type: string
+      source:
+        type: string
+    type: object
+  session.createResponse:
+    properties:
+      expiresAt:
+        type: string
+      identity:
+        $ref: '#/definitions/session.identityResponse'
+      sessionToken:
+        type: string
+    type: object
+  session.identityResponse:
+    properties:
+      displayName:
+        type: string
+      externalId:
+        type: string
+      source:
+        type: string
+    type: object
   visit.NextStep:
     properties:
       sequence:
@@ -68,6 +93,54 @@ info:
   title: CarePath API
   version: 1.0.0
 paths:
+  /api/v1/auth/session:
+    get:
+      description: 'Resolves the Authorization: Bearer session token to the identity
+        behind it.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/session.identityResponse'
+        "401":
+          description: session not found or expired
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Get the current session identity
+      tags:
+      - auth
+    post:
+      consumes:
+      - application/json
+      description: Exchanges a LINE ID token (or, when enabled, a demo identity) for
+        an opaque CarePath session token.
+      parameters:
+      - description: 'source: line|demo, idToken: the LINE ID token (ignored for demo)'
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/session.createRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/session.createResponse'
+        "400":
+          description: invalid request body
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "401":
+          description: invalid identity token, or demo auth disabled
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Create a patient session
+      tags:
+      - auth
   /api/v1/visits/{visitId}:
     get:
       description: Returns the HIS visit enriched with the next actionable step and

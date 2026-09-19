@@ -3,7 +3,9 @@ module carepath/apps/api
 go 1.25.0
 
 require (
+	github.com/MicahParks/keyfunc/v3 v3.8.2
 	github.com/gofiber/fiber/v3 v3.0.0
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/swaggo/swag v1.16.4
 )
@@ -11,7 +13,6 @@ require (
 require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/MicahParks/jwkset v0.11.3 // indirect
-	github.com/MicahParks/keyfunc/v3 v3.8.2 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
@@ -21,7 +22,6 @@ require (
 	github.com/go-openapi/swag v0.19.15 // indirect
 	github.com/gofiber/schema v1.6.0 // indirect
 	github.com/gofiber/utils/v2 v2.0.0 // indirect
-	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect

@@ -15,6 +15,76 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/v1/auth/session": {
+            "get": {
+                "description": "Resolves the Authorization: Bearer session token to the identity behind it.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get the current session identity",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/session.identityResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "session not found or expired",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Exchanges a LINE ID token (or, when enabled, a demo identity) for an opaque CarePath session token.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Create a patient session",
+                "parameters": [
+                    {
+                        "description": "source: line|demo, idToken: the LINE ID token (ignored for demo)",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/session.createRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/session.createResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid request body",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "invalid identity token, or demo auth disabled",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/visits/{visitId}": {
             "get": {
                 "description": "Returns the HIS visit enriched with the next actionable step and its service point.",
@@ -192,6 +262,45 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "placeId": {
+                    "type": "string"
+                }
+            }
+        },
+        "session.createRequest": {
+            "type": "object",
+            "properties": {
+                "idToken": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "session.createResponse": {
+            "type": "object",
+            "properties": {
+                "expiresAt": {
+                    "type": "string"
+                },
+                "identity": {
+                    "$ref": "#/definitions/session.identityResponse"
+                },
+                "sessionToken": {
+                    "type": "string"
+                }
+            }
+        },
+        "session.identityResponse": {
+            "type": "object",
+            "properties": {
+                "displayName": {
+                    "type": "string"
+                },
+                "externalId": {
+                    "type": "string"
+                },
+                "source": {
                     "type": "string"
                 }
             }
