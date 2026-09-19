@@ -26,6 +26,7 @@ import (
 	"carepath/apps/api/internal/location/manual"
 	locationpostgres "carepath/apps/api/internal/location/postgres"
 	"carepath/apps/api/internal/location/qr"
+	"carepath/apps/api/internal/location/zigbee"
 	"carepath/apps/api/internal/navigation"
 	navigationpostgres "carepath/apps/api/internal/navigation/postgres"
 	"carepath/apps/api/internal/platform/db"
@@ -70,12 +71,12 @@ func run(ctx context.Context, log *slog.Logger) error {
 	hospitalMap := hospitalmap.NewService(hospitalmappostgres.New(database))
 	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), hospitalMap)
 
-	// Current location (#32): scanned QR fixes (and manual picks, the
-	// fallback/debug source) resolve through their provider onto a canonical
+	// Current location (#32/#33): scanned QR fixes, manual picks, and the
+	// demo Zigbee simulator resolve through their provider onto a canonical
 	// navigation node and become the visit's routing start point.
 	navigationGraph := navigation.NewService(navigationpostgres.New(database))
 	locations, err := location.NewService(locationpostgres.New(database), navigationGraph,
-		qr.New(hospitalMap), manual.New())
+		qr.New(hospitalMap), manual.New(), zigbee.New(navigationGraph))
 	if err != nil {
 		return err
 	}
@@ -136,7 +137,9 @@ func run(ctx context.Context, log *slog.Logger) error {
 	session.NewHandler(sessions).Register(app.Group("/api/v1"))
 	journey.NewHandler(journeys).Register(app.Group("/api/v1"))
 	servicepoint.NewHandler(servicePoints).Register(app.Group("/api/v1"))
-	location.NewHandler(locations).Register(app.Group("/api/v1"))
+	locationHandler := location.NewHandler(locations)
+	locationHandler.Register(app.Group("/api/v1"))
+	locationHandler.RegisterDemo(app.Group("/api/v1"))
 
 	return app.Listen(":" + envOrDefault("PORT", "8080"))
 }

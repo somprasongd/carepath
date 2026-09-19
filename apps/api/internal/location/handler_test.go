@@ -14,6 +14,8 @@ import (
 	"carepath/apps/api/internal/hospitalmap"
 	"carepath/apps/api/internal/location"
 	"carepath/apps/api/internal/location/qr"
+	"carepath/apps/api/internal/location/zigbee"
+	"carepath/apps/api/internal/navigation"
 )
 
 // fakePlaces backs the real QR provider in these tests: REG-01 is routable,
@@ -134,5 +136,127 @@ func TestCurrentBeforeAnyScan(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404 before any scan", resp.StatusCode)
+	}
+}
+
+// demoGraph is the slice of the seeded navigation graph the Zigbee
+// simulator resolves against: PUBLIC holds an entrance, a corridor, and two
+// place entries; PHARMACY one place entry.
+var (
+	zonePublic   = "PUBLIC"
+	zonePharmacy = "PHARMACY"
+	demoGraph    = []navigation.NavNode{
+		{ID: "I-1301/node-main-entrance", FloorID: "I-1301", NodeType: "ENTRANCE", Zone: &zonePublic},
+		{ID: "I-1301/node-ramp", FloorID: "I-1301", NodeType: "CORRIDOR", Zone: &zonePublic},
+		{ID: "I-1301/node-cashier", FloorID: "I-1301", NodeType: "PLACE_ENTRY", Zone: &zonePublic},
+		{ID: "I-1301/node-reception", FloorID: "I-1301", NodeType: "PLACE_ENTRY", Zone: &zonePublic},
+		{ID: "I-1301/node-pharmacy", FloorID: "I-1301", NodeType: "PLACE_ENTRY", Zone: &zonePharmacy},
+		{ID: "I-1302/node-lift", FloorID: "I-1302", NodeType: "ELEVATOR"},
+	}
+)
+
+// The demo app wires the real Zigbee simulator provider so the endpoint
+// tests exercise the same path production does — handler-composed fix to
+// provider to canonical observation.
+func newDemoTestApp(t *testing.T) (*fiber.App, *fakeRepo) {
+	t.Helper()
+	repo := &fakeRepo{}
+	nav := &fakeNavigation{nodes: demoGraph}
+	svc, err := location.NewService(repo, nav, qr.New(&fakePlaces{}), zigbee.New(nav))
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	app := fiber.New()
+	handler := location.NewHandler(svc)
+	handler.Register(app.Group("/api/v1"))
+	handler.RegisterDemo(app.Group("/api/v1"))
+	return app, repo
+}
+
+func postZigbeeFix(t *testing.T, app *fiber.App, body string) (*http.Response, location.Observation) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/demo/zigbee/location", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	var obs location.Observation
+	if resp.StatusCode == http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		if err := json.Unmarshal(raw, &obs); err != nil {
+			t.Fatalf("decode response %q: %v", raw, err)
+		}
+	}
+	return resp, obs
+}
+
+// AC #1 of #33 through the HTTP boundary: a zone update posted to the demo
+// endpoint becomes the visit's current Zigbee observation, resolved to the
+// zone's representative node.
+func TestSimulateZigbeeZoneFix(t *testing.T) {
+	app, repo := newDemoTestApp(t)
+
+	resp, obs := postZigbeeFix(t, app,
+		`{"visitId":"VISIT-Z","floorId":"I-1301","zone":"PUBLIC","confidence":0.8}`)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d (%s), want 200", resp.StatusCode, body)
+	}
+	if obs.VisitID != "VISIT-Z" || obs.NodeID != "I-1301/node-cashier" || obs.FloorID != "I-1301" {
+		t.Fatalf("obs = %+v, want the PUBLIC representative node for VISIT-Z", obs)
+	}
+	if obs.Zone == nil || *obs.Zone != "PUBLIC" {
+		t.Fatalf("obs.Zone = %v, want PUBLIC", obs.Zone)
+	}
+	if obs.Source != location.SourceZigbee {
+		t.Fatalf("obs.Source = %q, want ZIGBEE", obs.Source)
+	}
+	if obs.Confidence == nil || *obs.Confidence != 0.8 {
+		t.Fatalf("obs.Confidence = %v, want 0.8", obs.Confidence)
+	}
+	if len(repo.recorded) != 1 {
+		t.Fatalf("repo.recorded = %d entries, want 1", len(repo.recorded))
+	}
+	if got := repo.recorded[0]; got.VisitID != obs.VisitID || got.NodeID != obs.NodeID || got.Source != obs.Source {
+		t.Fatalf("repo.recorded[0] = %+v, want the returned observation", got)
+	}
+
+	// The simulator wrote through the canonical store: the visit's current
+	// location is now the Zigbee fix.
+	get, err := app.Test(httptest.NewRequest(http.MethodGet, "/api/v1/journeys/VISIT-Z/location", nil))
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	raw, _ := io.ReadAll(get.Body)
+	var current location.Observation
+	if err := json.Unmarshal(raw, &current); err != nil {
+		t.Fatalf("decode GET response %q: %v", raw, err)
+	}
+	if current.NodeID != obs.NodeID || current.Source != location.SourceZigbee {
+		t.Fatalf("GET = %+v, want the simulated observation", current)
+	}
+}
+
+func TestSimulateZigbeeInvalidFixes(t *testing.T) {
+	app, _ := newDemoTestApp(t)
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"malformed json", `{"zone":`},
+		{"missing visit", `{"floorId":"I-1301","zone":"PUBLIC"}`},
+		{"missing zone", `{"visitId":"VISIT-Z","floorId":"I-1301"}`},
+		{"unknown zone", `{"visitId":"VISIT-Z","floorId":"I-1301","zone":"ICU"}`},
+		{"zone on wrong floor", `{"visitId":"VISIT-Z","floorId":"I-1302","zone":"PUBLIC"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, _ := postZigbeeFix(t, app, tt.body)
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", resp.StatusCode)
+			}
+		})
 	}
 }

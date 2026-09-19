@@ -133,6 +133,17 @@ definitions:
       source:
         type: string
     type: object
+  location.zigbeeSimulatorRequestBody:
+    properties:
+      confidence:
+        type: number
+      floorId:
+        type: string
+      visitId:
+        type: string
+      zone:
+        type: string
+    type: object
   main.HealthResponse:
     properties:
       service:
@@ -237,6 +248,42 @@ paths:
       summary: Create a patient session
       tags:
       - auth
+  /api/v1/demo/zigbee/location:
+    post:
+      consumes:
+      - application/json
+      description: 'Demo-only simulator for the Zigbee positioning service (#33):
+        reports a zone-level fix for the visit through the canonical ZIGBEE location
+        provider and returns the recorded observation. The zone resolves to its representative
+        navigation node, which becomes the routing start point like any other location.
+        A real Zigbee integration will consume positioning-service pushes through
+        a separate adapter, not this endpoint.'
+      parameters:
+      - description: 'Simulated zone fix: visitId, floorId, zone, optional confidence'
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/location.zigbeeSimulatorRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/location.Observation'
+        "400":
+          description: invalid body, or a floor/zone that does not resolve to a known
+            location
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Simulate a Zigbee zone fix
+      tags:
+      - location
   /api/v1/journeys/{visitId}:
     get:
       description: 'Returns the CarePath-derived journey plan (ADR-0009): steps in

@@ -26,6 +26,16 @@ flowchart LR
 
 The positioning service should output normalized observations such as building/floor/zone/place/confidence.
 
+### MVP simulator (#33)
+
+Until real hardware exists, `POST /api/v1/demo/zigbee/location` simulates
+the positioning-service push: `{visitId, floorId, zone, confidence?}`. The
+fix resolves through the canonical ZIGBEE location provider (ADR-0004) to
+the zone's representative navigation node and becomes the visit's routing
+start point. The simulator is an adapter of its own — a real Zigbee
+integration (the flow above) lands as a separate provider and does not
+reuse it.
+
 ## Tag assignment
 
 ```text

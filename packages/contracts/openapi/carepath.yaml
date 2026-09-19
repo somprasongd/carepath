@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.7.1
+  version: 0.8.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -237,6 +237,42 @@ paths:
         '400':
           description: Invalid body, unknown source, or a fix that does not
             resolve to a known location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/demo/zigbee/location:
+    post:
+      description: >
+        Demo-only Zigbee simulator (#33): reports a zone-level fix for the
+        visit through the canonical ZIGBEE location provider (ADR-0004).
+        The zone resolves to its representative navigation node, which
+        becomes the routing start point like any other location. Stands in
+        for the external positioning service of docs/integration/
+        location-zigbee.md during demos; a real Zigbee integration will be
+        a separate adapter consuming positioning pushes, not this endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZigbeeSimulatorRequest'
+      responses:
+        '200':
+          description: The recorded observation, now the current location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationObservation'
+        '400':
+          description: Invalid body, or a floor/zone that does not resolve
+            to a known location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -556,3 +592,18 @@ components:
           type: string
           description: Provider source to resolve through, e.g. QR.
         raw: { type: string }
+    ZigbeeSimulatorRequest:
+      type: object
+      description: One simulated Zigbee zone fix for the demo endpoint
+        (#33) — where the visit's tag is and how confident the simulated
+        positioning is.
+      required: [visitId, floorId, zone]
+      properties:
+        visitId: { type: string }
+        floorId: { type: string }
+        zone:
+          type: string
+          description: Positioning zone on that floor, e.g. PUBLIC, WELLNESS.
+        confidence:
+          type: [number, 'null']
+          description: Optional 0..1 confidence of the simulated fix.
