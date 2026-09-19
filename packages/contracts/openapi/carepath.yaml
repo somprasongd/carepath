@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.9.0
+  version: 0.10.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -512,19 +512,43 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/v1/navigation/route:
     get:
-      description: Not implemented yet — reserved for the navigation module.
+      description: >
+        Shortest walkable route for the SVG overlay (#29). `from` is the
+        current location's navigation node id — the nodeId of a location
+        observation (e.g. I-1301/node-reception) — and `to` is the
+        destination service point's code (same key as
+        /api/v1/service-points/{code}); the server resolves it to the
+        place's entry node before routing.
       parameters:
         - in: query
           name: from
           required: true
+          description: Globally unique navigation node id ("<floorId>/<localId>").
           schema: { type: string }
         - in: query
           name: to
           required: true
+          description: Destination service point code, e.g. PHARMACY.
           schema: { type: string }
       responses:
         '200':
-          description: Navigation route
+          description: Ordered route — nodes[0] is the origin, the last node the destination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NavigationRoute'
+        '400':
+          description: Missing or empty from/to
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown node or service point, destination without a mapped place, or no walkable path
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   securitySchemes:
     bearerAuth:
@@ -544,9 +568,14 @@ components:
   schemas:
     Error:
       type: object
-      required: [error]
+      description: Error envelope shared by all endpoints. code is the
+        machine-readable apperr kind ("invalid", "unauthorized",
+        "forbidden", "not_found", "conflict", "upstream", "internal") the
+        frontend branches on; error is the human-safe message.
+      required: [error, code]
       properties:
         error: { type: string }
+        code: { type: string }
     LoginRequest:
       type: object
       description: Staff/admin credentials (ADR-0010). The demo deployment seeds
@@ -597,6 +626,54 @@ components:
           items:
             type: string
             enum: [ADMIN, STAFF]
+    NavigationRoute:
+      type: object
+      description: Ordered shortest path between two nodes (#28). Nodes[0]
+        is the origin, the last node the destination, and segments[i] is the
+        edge walked from nodes[i] to nodes[i+1]; totalDistance sums the
+        segment costs in authored SVG units, not metres.
+      required: [nodes, segments, totalDistance]
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/NavNode'
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/NavEdge'
+        totalDistance: { type: number }
+    NavNode:
+      type: object
+      description: One walkable point of the hospital. x/y are floor-local
+        SVG units, so the overlay groups consecutive nodes by floorId and
+        draws a polyline per floor.
+      required: [id, floorId, x, y, nodeType]
+      properties:
+        id: { type: string }
+        floorId: { type: string }
+        x: { type: number }
+        y: { type: number }
+        nodeType:
+          type: string
+          description: What kind of walkable point this is.
+          enum: [ENTRANCE, PLACE_ENTRY, CORRIDOR, ELEVATOR, STAIRS]
+        zone: { type: string }
+    NavEdge:
+      type: object
+      description: One directed walk between neighbouring nodes; edgeType
+        carries the turn-by-turn cue (corridor vs elevator vs stairs).
+        Two-way walks are two segments.
+      required: [id, fromNodeId, toNodeId, edgeType, distance, accessible]
+      properties:
+        id: { type: string }
+        fromNodeId: { type: string }
+        toNodeId: { type: string }
+        edgeType:
+          type: string
+          enum: [CORRIDOR, ELEVATOR, STAIRS]
+        distance: { type: number }
+        accessible: { type: boolean }
     ServicePoint:
       type: object
       description: Links a service code to a physical Place in the hospital map.

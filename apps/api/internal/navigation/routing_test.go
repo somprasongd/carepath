@@ -50,7 +50,7 @@ func nodeIDs(route Route) []string {
 }
 
 func TestRouteReturnsOrderedShortestPath(t *testing.T) {
-	svc := NewService(routeGraph())
+	svc := NewService(routeGraph(), nil)
 
 	route, err := svc.Route(context.Background(), "F1/a", "F1/c", RouteOptions{})
 	if err != nil {
@@ -73,7 +73,7 @@ func TestRouteReturnsOrderedShortestPath(t *testing.T) {
 }
 
 func TestRouteUnknownEndpointIsNotFound(t *testing.T) {
-	svc := NewService(routeGraph())
+	svc := NewService(routeGraph(), nil)
 	ctx := context.Background()
 
 	if _, err := svc.Route(ctx, "F1/a", "F1/missing", RouteOptions{}); !errors.Is(err, ErrNodeNotFound) {
@@ -87,7 +87,7 @@ func TestRouteUnknownEndpointIsNotFound(t *testing.T) {
 func TestRouteUnreachableDestinationIsNoRoute(t *testing.T) {
 	repo := routeGraph()
 	repo.nodes["F2/z"] = NavNode{ID: "F2/z", FloorID: "F2", NodeType: "CORRIDOR"} // no edges at all
-	svc := NewService(repo)
+	svc := NewService(repo, nil)
 	ctx := context.Background()
 
 	if _, err := svc.Route(ctx, "F1/a", "F2/z", RouteOptions{}); !errors.Is(err, ErrNoRoute) {
@@ -113,7 +113,7 @@ func TestRouteAccessibleOnlyAvoidsStairs(t *testing.T) {
 			bidirectional([][3]any{{"F1/a", "F1/l", 40.0}, {"F1/l", "F2/l", 40.0}, {"F2/l", "F2/c", 40.0}}, true)...,
 		),
 	}
-	svc := NewService(repo)
+	svc := NewService(repo, nil)
 	ctx := context.Background()
 
 	plain, err := svc.Route(ctx, "F1/a", "F2/c", RouteOptions{})
@@ -143,7 +143,7 @@ func TestRouteAccessibleOnlyAvoidsStairs(t *testing.T) {
 }
 
 func TestRouteToSelfIsTrivial(t *testing.T) {
-	svc := NewService(routeGraph())
+	svc := NewService(routeGraph(), nil)
 
 	route, err := svc.Route(context.Background(), "F1/a", "F1/a", RouteOptions{})
 	if err != nil {
@@ -157,7 +157,7 @@ func TestRouteToSelfIsTrivial(t *testing.T) {
 func TestRouteRejectsNegativeEdgeDistance(t *testing.T) {
 	repo := routeGraph()
 	repo.edges = append(repo.edges, NavEdge{ID: "F1/b>F1/d", FromNodeID: "F1/b", ToNodeID: "F1/d", EdgeType: "CORRIDOR", Distance: -1})
-	svc := NewService(repo)
+	svc := NewService(repo, nil)
 
 	if _, err := svc.Route(context.Background(), "F1/a", "F1/c", RouteOptions{}); apperr.KindOf(err) != apperr.KindInternal {
 		t.Fatalf("error = %v, want an internal-kind error for corrupt distance", err)

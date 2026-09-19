@@ -19,7 +19,9 @@ func TestZigbeeZoneFixFeedsRouting(t *testing.T) {
 	database := newDB(t)
 	ctx := context.Background()
 
-	graph := navigation.NewService(navigationpostgres.New(database))
+	// The provider only validates fixes against graph nodes, so the
+	// servicepoint side of the routing service (#28) is not wired here.
+	graph := navigation.NewService(navigationpostgres.New(database), nil)
 	svc, err := location.NewService(New(database), graph, zigbee.New(graph))
 	if err != nil {
 		t.Fatalf("NewService: %v", err)

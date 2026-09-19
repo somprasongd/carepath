@@ -10,9 +10,12 @@ import (
 	"carepath/apps/api/internal/platform/logger"
 )
 
-// ErrorResponse is the error envelope returned by all API endpoints.
+// ErrorResponse is the error envelope returned by all API endpoints. Code
+// is the machine-readable apperr kind ("invalid", "not_found", …) clients
+// branch on (#28); Error is the human-safe message.
 type ErrorResponse struct {
 	Error string `json:"error" example:"visit not found"`
+	Code  string `json:"code" example:"not_found"`
 }
 
 // Error maps err to a status via apperr.KindOf, logs it with the
@@ -27,11 +30,11 @@ func Error(c fiber.Ctx, err error) error {
 
 	if status >= 500 {
 		log.Error("request error", "kind", kind.String(), "error", err.Error(), "status", status)
-		return c.Status(status).JSON(ErrorResponse{Error: genericMessage(kind)})
+		return c.Status(status).JSON(ErrorResponse{Error: genericMessage(kind), Code: kind.String()})
 	}
 
 	log.Warn("request error", "kind", kind.String(), "error", err.Error(), "status", status)
-	return c.Status(status).JSON(ErrorResponse{Error: err.Error()})
+	return c.Status(status).JSON(ErrorResponse{Error: err.Error(), Code: kind.String()})
 }
 
 func genericMessage(kind apperr.Kind) string {

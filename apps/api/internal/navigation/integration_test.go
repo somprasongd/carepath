@@ -6,15 +6,21 @@ import (
 	"os"
 	"testing"
 
+	"carepath/apps/api/internal/hospitalmap"
+	hospitalmappostgres "carepath/apps/api/internal/hospitalmap/postgres"
 	"carepath/apps/api/internal/navigation"
 	navigationpostgres "carepath/apps/api/internal/navigation/postgres"
 	"carepath/apps/api/internal/platform/apperr"
 	"carepath/apps/api/internal/platform/db"
+	"carepath/apps/api/internal/servicepoint"
+	servicepointpostgres "carepath/apps/api/internal/servicepoint/postgres"
 )
 
 // Integration test of the routing service against a real Postgres. Requires
 // the schema and seed data from infra/postgres/migrations; run `make
-// migrate-up` first.
+// migrate-up` first. The destination side is wired through the real
+// servicepoint module so RouteToServicePoint exercises the same resolution
+// the handler serves (#28).
 func newRoutingService(t *testing.T) navigation.Service {
 	t.Helper()
 	databaseURL := os.Getenv("DATABASE_URL")
@@ -26,7 +32,9 @@ func newRoutingService(t *testing.T) navigation.Service {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(database.Close)
-	return navigation.NewService(navigationpostgres.New(database))
+	places := hospitalmap.NewService(hospitalmappostgres.New(database))
+	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), places)
+	return navigation.NewService(navigationpostgres.New(database), servicePoints)
 }
 
 // The Happy Path demo journey's cross-floor leg — main entrance (ground) to
@@ -95,5 +103,32 @@ func TestRouteUnknownNodeOnSeed(t *testing.T) {
 
 	if _, err := svc.Route(context.Background(), "I-1301/node-main-entrance", "I-1301/node-nope", navigation.RouteOptions{}); !errors.Is(err, navigation.ErrNodeNotFound) {
 		t.Fatalf("error = %v (%s), want navigation.ErrNodeNotFound", err, apperr.KindOf(err))
+	}
+}
+
+// AC #1/#2 of #28 over the seeded data: `from` is the current-location
+// node id (what a QR observation carries), `to` is a service point code,
+// and the route ends exactly at that service point's place entry node.
+func TestRouteToServicePointOnSeed(t *testing.T) {
+	svc := newRoutingService(t)
+	ctx := context.Background()
+
+	route, err := svc.RouteToServicePoint(ctx, "I-1301/node-main-entrance", "PHARMACY", navigation.RouteOptions{})
+	if err != nil {
+		t.Fatalf("RouteToServicePoint: %v", err)
+	}
+	if route.Nodes[0].ID != "I-1301/node-main-entrance" {
+		t.Fatalf("route starts at %+v, want the main entrance", route.Nodes[0])
+	}
+	if got := route.Nodes[len(route.Nodes)-1].ID; got != "I-1301/node-pharmacy" {
+		t.Fatalf("route ends at %s, want the pharmacy place entry node", got)
+	}
+}
+
+func TestRouteToServicePointUnknownCodeOnSeed(t *testing.T) {
+	svc := newRoutingService(t)
+
+	if _, err := svc.RouteToServicePoint(context.Background(), "I-1301/node-main-entrance", "NOSUCH", navigation.RouteOptions{}); apperr.KindOf(err) != apperr.KindNotFound {
+		t.Fatalf("error = %v (%s), want a not-found classification", err, apperr.KindOf(err))
 	}
 }

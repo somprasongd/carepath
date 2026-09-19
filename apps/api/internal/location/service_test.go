@@ -74,8 +74,12 @@ func (f *fakeNavigation) ListEdges(context.Context) ([]navigation.NavEdge, error
 
 // Route is unused by these tests — location.Service never calls it — but is
 // required to satisfy navigation.Service (#27 added it after this fake was
-// written).
+// written). Same for RouteToServicePoint (#28).
 func (f *fakeNavigation) Route(context.Context, string, string, navigation.RouteOptions) (navigation.Route, error) {
+	return navigation.Route{}, nil
+}
+
+func (f *fakeNavigation) RouteToServicePoint(context.Context, string, string, navigation.RouteOptions) (navigation.Route, error) {
 	return navigation.Route{}, nil
 }
 

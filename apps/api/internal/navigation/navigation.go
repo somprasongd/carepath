@@ -21,6 +21,11 @@ var ErrNodeNotFound = apperr.New(apperr.KindNotFound, "navigation node not found
 // out every connection.
 var ErrNoRoute = apperr.New(apperr.KindNotFound, "no route between the given nodes")
 
+// ErrDestinationUnmapped is returned when the destination service point
+// exists but has no place in the hospital map, or its place has no entry
+// node — there is nothing to route to yet.
+var ErrDestinationUnmapped = apperr.New(apperr.KindNotFound, "service point has no mapped destination")
+
 // NavNode is one walkable point of the hospital: a floor, a coordinate in
 // that floor's SVG space, and what kind of point it is. ID is globally
 // unique as "<floorId>/<localId>" (the JSON/SVG node ids are floor-local —
