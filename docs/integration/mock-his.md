@@ -49,6 +49,10 @@ Rules the contract encodes:
 
 Mock-only demo behavior: completing a step readies the next `PENDING` step, and completing the last open step completes the visit (both surface as `visit.updated` events). Seed history replays deterministically on startup.
 
+## CarePath-side ingest (#21)
+
+`apps/api` consumes the feed with a poller (`internal/his/ingest`; interval via `HIS_INGEST_INTERVAL`, default 5s). Each canonical event drives `journey.Service.ApplyHISEvent`, which re-reads the visit snapshot and upserts the CarePath-owned journey projection (`carepath.journey_visit` / `carepath.journey_step`) — the HIS stays the system of record; the projection never guesses state the event payload does not carry. `eventId` is the consumer dedupe key (`carepath.his_applied_event`), so duplicate delivery never duplicates a step, and the feed cursor is kept durably in `carepath.his_ingest_state` so a restart resumes where it left off. Steps whose `serviceCode` has no configured service point are projected with a null `service_point_id` plus a warning log — mapping stays CarePath configuration in the `servicepoint` module.
+
 ## Production replacement
 
 ```text

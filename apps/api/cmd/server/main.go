@@ -7,12 +7,17 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/swaggo/swag"
 
 	_ "carepath/apps/api/docs"
 	"carepath/apps/api/internal/his/httpclient"
+	"carepath/apps/api/internal/his/ingest"
+	ingestpostgres "carepath/apps/api/internal/his/ingest/postgres"
+	"carepath/apps/api/internal/journey"
+	journeypostgres "carepath/apps/api/internal/journey/postgres"
 	"carepath/apps/api/internal/platform/db"
 	"carepath/apps/api/internal/platform/logger"
 	"carepath/apps/api/internal/servicepoint"
@@ -54,6 +59,14 @@ func run(ctx context.Context, log *slog.Logger) error {
 	servicePoints := servicepoint.NewService(servicepointpostgres.New(database))
 	visits := visit.NewService(hisClient, servicePoints, database)
 
+	// Inbound HIS boundary (#21): poll the canonical event feed and keep the
+	// journey projection in sync with the system of record.
+	journeys := journey.NewService(hisClient, servicePoints, journeypostgres.New(database), database)
+	poller := ingest.New(hisClient, journeys, ingestpostgres.New(database), log)
+	interval := envDuration("HIS_INGEST_INTERVAL", 5*time.Second)
+	go poller.Run(context.Background(), interval)
+	log.Info("HIS ingest poller started", "interval", interval.String())
+
 	app := fiber.New()
 	app.Use(logger.Middleware(log))
 	app.Use(func(c fiber.Ctx) error {
@@ -91,6 +104,20 @@ func envOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil {
+		log := slog.Default()
+		log.Warn("invalid duration in env; using fallback", "key", key, "value", value, "fallback", fallback.String())
+		return fallback
+	}
+	return parsed
 }
 
 // health godoc

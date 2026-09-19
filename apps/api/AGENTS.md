@@ -34,7 +34,7 @@ A module gets a package only when it has a real feature — never an empty skele
 7. Tests: unit tests for the service using fakes (see `internal/visit/service_test.go`); integration tests for the postgres adapter (see `internal/servicepoint/postgres/repo_test.go`).
 8. `make swag` if you added or changed annotated endpoints.
 
-Reference implementations: `servicepoint` (repo + service, no HTTP), `visit` (full stack incl. handler), `his` (outbound integration port + adapter).
+Reference implementations: `servicepoint` (repo + service, no HTTP), `visit` (full stack incl. handler), `his` (integration port + adapter + ingest poller), `journey` (event-driven projection with idempotent apply).
 
 ## Rules — DB & transactions
 

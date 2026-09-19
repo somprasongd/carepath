@@ -5,12 +5,17 @@
 | Name | Columns | Comment | Type |
 | ---- | ------- | ------- | ---- |
 | [carepath.service_point](carepath.service_point.md) | 5 |  | BASE TABLE |
+| [carepath.journey_visit](carepath.journey_visit.md) | 4 |  | BASE TABLE |
+| [carepath.journey_step](carepath.journey_step.md) | 5 |  | BASE TABLE |
+| [carepath.his_applied_event](carepath.his_applied_event.md) | 3 |  | BASE TABLE |
+| [carepath.his_ingest_state](carepath.his_ingest_state.md) | 3 |  | BASE TABLE |
 
 ## Relations
 
 ```mermaid
 erDiagram
 
+"carepath.journey_step" }o--|| "carepath.journey_visit" : "FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE"
 
 "carepath.service_point" {
   text id
@@ -18,6 +23,29 @@ erDiagram
   text name
   text place_id
   boolean active
+}
+"carepath.journey_visit" {
+  text visit_id
+  text patient_ref
+  text status
+  timestamp_with_time_zone synced_at
+}
+"carepath.journey_step" {
+  text visit_id FK
+  integer sequence
+  text service_code
+  text status
+  text service_point_id
+}
+"carepath.his_applied_event" {
+  text event_id
+  text visit_id
+  timestamp_with_time_zone applied_at
+}
+"carepath.his_ingest_state" {
+  boolean singleton
+  text last_event_id
+  timestamp_with_time_zone updated_at
 }
 ```
 

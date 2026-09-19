@@ -17,6 +17,20 @@ jobs:
     strategy:
       matrix:
         module: [apps/api, apps/mock-his]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: carepath
+          POSTGRES_USER: carepath
+          POSTGRES_PASSWORD: carepath
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U carepath -d carepath"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     defaults:
       run:
         working-directory: ${{ matrix.module }}
@@ -26,6 +40,16 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.work
+
+      - name: Apply database migrations
+        if: matrix.module == 'apps/api'
+        run: |
+          sudo apt-get -yq install postgresql-client >/dev/null
+          for f in ../../infra/postgres/migrations/*.up.sql; do
+            echo "applying $f"
+            psql "postgres://carepath:carepath@localhost:5432/carepath?sslmode=disable" \
+              -v ON_ERROR_STOP=1 -f "$f"
+          done
 
       - name: gofmt check
         run: |
@@ -43,6 +67,8 @@ jobs:
         run: go build ./...
 
       - name: go test
+        env:
+          DATABASE_URL: ${{ matrix.module == 'apps/api' && 'postgres://carepath:carepath@localhost:5432/carepath?sslmode=disable' || '' }}
         run: go test ./...
 
   web:
