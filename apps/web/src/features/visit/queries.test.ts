@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Journey } from './queries'
-import { journeyQueryOptions } from './queries'
+import { journeyQueryOptions, transitionStepUrl } from './queries'
 
 function journey(overrides: Partial<Journey> = {}): Journey {
   return {
@@ -27,6 +27,23 @@ const intervalFor = (data: Journey | undefined) => {
     | undefined
   return interval({ state: { data } })
 }
+
+describe('transitionStepUrl (#38 staff controls)', () => {
+  it('keeps the stepKey colons raw — the API route param does not decode %3A', () => {
+    expect(transitionStepUrl('VISIT-002', 'CLINIC:MED:1')).toBe(
+      '/api/v1/journeys/VISIT-002/steps/CLINIC:MED:1/transition',
+    )
+    expect(transitionStepUrl('VISIT-002', 'XRAY:1')).toBe(
+      '/api/v1/journeys/VISIT-002/steps/XRAY:1/transition',
+    )
+  })
+
+  it('still encodes the visit id, which is a plain opaque token', () => {
+    expect(transitionStepUrl('VISIT 2', 'REGISTRATION')).toBe(
+      '/api/v1/journeys/VISIT%202/steps/REGISTRATION/transition',
+    )
+  })
+})
 
 describe('journeyQueryOptions realtime (#36)', () => {
   it('polls the journey every 15s while the visit can still change', () => {

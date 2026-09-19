@@ -83,15 +83,26 @@ export type StepTargetStatus = Extract<
  * step status directly; the 200 body is the refreshed journey, so the detail
  * cache is written directly and the list just needs invalidating.
  */
+/**
+ * The transition endpoint URL. The stepKey goes in raw: its colons
+ * (CLINIC:MED:1) are legal path characters, but encodeURIComponent turns
+ * them into %3A, which the API's route param does not decode — the
+ * transition then 404s on every clinic/order step. Keys come from the
+ * planner's restricted alphabet, so they are path-safe as-is.
+ */
+export function transitionStepUrl(visitId: string, stepKey: string): string {
+  return `/api/v1/journeys/${encodeURIComponent(visitId)}/steps/${stepKey}/transition`
+}
+
 export function useTransitionStep(visitId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (input: { stepKey: string; to: StepTargetStatus }) =>
-      apiPost<Journey>(
-        `/api/v1/journeys/${encodeURIComponent(visitId)}/steps/${encodeURIComponent(input.stepKey)}/transition`,
-        { to: input.to, source: 'staff-web' },
-      ),
+      apiPost<Journey>(transitionStepUrl(visitId, input.stepKey), {
+        to: input.to,
+        source: 'staff-web',
+      }),
     onSuccess: (journey) => {
       queryClient.setQueryData(journeyQueryOptions(visitId).queryKey, journey)
       void queryClient.invalidateQueries({ queryKey: ['staff', 'visits'] })

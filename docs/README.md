@@ -59,6 +59,7 @@ Hackathon submission deliverables (brief §10), assembled from the docs above:
 - 4. Working Software — not a document; see `make up` / `docker compose up --build`
 - [5. Test Result](deliverables/05-test-result.md)
 - [6. Presentation Slides (outline)](deliverables/06-presentation-slides.md)
+- [7. Demo Script (ซ้อมจริงแล้ว)](deliverables/07-demo-script.md)
 
 ## Process
 
