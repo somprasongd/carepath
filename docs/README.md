@@ -38,6 +38,10 @@ This directory is the working source of truth for architecture, requirements, de
 - [Mock HIS API](api/mock-his-api.md)
 - Shared OpenAPI contracts: [`packages/contracts/openapi/`](../packages/contracts/openapi/)
 
+## Designs
+
+- [Patient & Staff UI (mobile-first mockup)](designs/patient-staff-ui.html) — exported interactive design canvas covering the patient journey/navigation screens and the staff dashboard/service-point mapping screens, mobile and desktop. Reference for visual direction only — not wired into `apps/web`.
+
 ## Process
 
 - [AI-Native SDLC Workflow](process/ai-native-sdlc-workflow.md) — how intent → design → plan → build → test → deploy is meant to flow in this repo, and what's still missing (CI, tests, hooks/skills).
