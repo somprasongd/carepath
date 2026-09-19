@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.1.0
+  version: 0.2.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -110,6 +110,34 @@ paths:
                 $ref: '#/components/schemas/Identity'
         '401':
           description: Session not found or expired
+
+  /api/v1/journeys/{visitId}:
+    get:
+      description: >
+        The patient journey: the CarePath-owned projection of the HIS visit
+        (ADR-0008), with steps ordered by sequence and the deterministic
+        current/next step resolution. A visit not yet projected (ingest lag)
+        returns 404.
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The projected journey
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Journey'
+        '404':
+          description: No journey projected for this visit id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -182,6 +210,59 @@ components:
         sequence: { type: integer }
         status: { type: string }
         servicePoint: { $ref: '#/components/schemas/ServicePoint' }
+    JourneyStep:
+      type: object
+      description: One care step of the journey projection, resolved to its
+        configured service point when one exists.
+      required: [sequence, serviceCode, status, servicePointId]
+      properties:
+        sequence: { type: integer }
+        serviceCode:
+          type: string
+          description: External service code in HIS vocabulary (e.g. LAB).
+        status:
+          type: string
+          description: Canonical step status (PENDING, READY, STARTED, COMPLETED, CANCELLED).
+        servicePointId:
+          type: [string, "null"]
+          description: Bound service point id; null when no service point is configured for the code (explicit unmapped state).
+        servicePoint:
+          allOf:
+            - $ref: '#/components/schemas/ServicePoint'
+          nullable: true
+          description: The bound service point, when configured and still active.
+    Journey:
+      type: object
+      description: The projected journey of one HIS visit with deterministic
+        current/next step resolution.
+      required: [visitId, patientRef, status, completed, steps, syncedAt]
+      properties:
+        visitId: { type: string }
+        patientRef: { type: string }
+        status:
+          type: string
+          description: Canonical visit status.
+          enum: [ACTIVE, COMPLETED, CANCELLED]
+        completed:
+          type: boolean
+          description: True iff the visit status is COMPLETED — the unambiguous
+            finished signal; current and next are null in that case.
+        steps:
+          type: array
+          description: All steps of the visit ordered by sequence.
+          items: { $ref: '#/components/schemas/JourneyStep' }
+        current:
+          allOf:
+            - $ref: '#/components/schemas/JourneyStep'
+          nullable: true
+          description: The first STARTED step by sequence, if any.
+        next:
+          allOf:
+            - $ref: '#/components/schemas/JourneyStep'
+          nullable: true
+          description: The first READY step by sequence — the next actionable
+            step, if any.
+        syncedAt: { type: string, format: date-time }
     VisitView:
       type: object
       description: The Visit fields plus the resolved next step.

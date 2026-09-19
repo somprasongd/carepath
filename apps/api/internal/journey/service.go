@@ -2,6 +2,7 @@ package journey
 
 import (
 	"context"
+	"sort"
 
 	"carepath/apps/api/internal/his"
 	"carepath/apps/api/internal/platform/apperr"
@@ -20,6 +21,10 @@ type Service interface {
 	ApplyHISEvent(ctx context.Context, event his.Event) error
 	// GetVisit returns the projected journey for reading.
 	GetVisit(ctx context.Context, visitID string) (Visit, error)
+	// GetJourney returns the patient-facing view of the projection: steps
+	// ordered by sequence, each resolved to its service point, with the
+	// deterministic current (first STARTED) and next (first READY) step.
+	GetJourney(ctx context.Context, visitID string) (View, error)
 }
 
 type service struct {
@@ -98,6 +103,72 @@ func (s *service) ApplyHISEvent(ctx context.Context, event his.Event) error {
 
 func (s *service) GetVisit(ctx context.Context, visitID string) (Visit, error) {
 	return s.repo.GetVisit(ctx, visitID)
+}
+
+func (s *service) GetJourney(ctx context.Context, visitID string) (View, error) {
+	var view View
+	err := s.tx.WithinTransaction(ctx, func(ctx context.Context) error {
+		visit, err := s.repo.GetVisit(ctx, visitID)
+		if err != nil {
+			return err
+		}
+		view, err = s.buildView(ctx, visit)
+		return err
+	})
+	if err != nil {
+		return View{}, err
+	}
+	return view, nil
+}
+
+// buildView resolves service points for the projection's stored bindings and
+// derives current/next. Resolution is deterministic: steps are ordered by
+// sequence, current is the first STARTED step, next the first READY one. It
+// must be called with the transaction-bound ctx so the servicepoint read
+// joins the projection read.
+func (s *service) buildView(ctx context.Context, visit Visit) (View, error) {
+	points, err := s.servicePoints.List(ctx)
+	if err != nil {
+		return View{}, err
+	}
+	byID := make(map[string]servicepoint.ServicePoint, len(points))
+	for _, sp := range points {
+		byID[sp.ID] = sp
+	}
+
+	steps := make([]StepView, len(visit.Steps))
+	for i, step := range visit.Steps {
+		steps[i] = StepView{
+			Sequence:       step.Sequence,
+			ServiceCode:    step.ServiceCode,
+			Status:         step.Status,
+			ServicePointID: step.ServicePointID,
+		}
+		if step.ServicePointID != nil {
+			if sp, ok := byID[*step.ServicePointID]; ok {
+				steps[i].ServicePoint = &sp
+			}
+		}
+	}
+	sort.Slice(steps, func(a, b int) bool { return steps[a].Sequence < steps[b].Sequence })
+
+	view := View{
+		VisitID:    visit.VisitID,
+		PatientRef: visit.PatientRef,
+		Status:     visit.Status,
+		Completed:  visit.Status == statusVisitCompleted,
+		Steps:      steps,
+		SyncedAt:   visit.SyncedAt,
+	}
+	for i := range steps {
+		switch {
+		case view.Current == nil && steps[i].Status == statusStepStarted:
+			view.Current = &steps[i]
+		case view.Next == nil && steps[i].Status == statusStepReady:
+			view.Next = &steps[i]
+		}
+	}
+	return view, nil
 }
 
 // project resolves each step's service-point binding. A step whose service

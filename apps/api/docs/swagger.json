@@ -78,6 +78,47 @@
                 }
             }
         },
+        "/api/v1/journeys/{visitId}": {
+            "get": {
+                "description": "Returns the CarePath-owned journey projection: steps ordered by sequence, each resolved to its service point, with the deterministic current (first STARTED) and next (first READY) step. A completed visit is reported with completed=true and no current/next.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "journeys"
+                ],
+                "summary": "Get the patient journey",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit ID",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/journey.View"
+                        }
+                    },
+                    "404": {
+                        "description": "no journey projected for this visit",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/visits/{visitId}": {
             "get": {
                 "description": "Returns the HIS visit enriched with the next actionable step and its service point.",
@@ -226,6 +267,58 @@
                 "error": {
                     "type": "string",
                     "example": "visit not found"
+                }
+            }
+        },
+        "journey.StepView": {
+            "type": "object",
+            "properties": {
+                "sequence": {
+                    "type": "integer"
+                },
+                "serviceCode": {
+                    "type": "string"
+                },
+                "servicePoint": {
+                    "$ref": "#/definitions/servicepoint.ServicePoint"
+                },
+                "servicePointId": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "journey.View": {
+            "type": "object",
+            "properties": {
+                "completed": {
+                    "type": "boolean"
+                },
+                "current": {
+                    "$ref": "#/definitions/journey.StepView"
+                },
+                "next": {
+                    "$ref": "#/definitions/journey.StepView"
+                },
+                "patientRef": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/journey.StepView"
+                    }
+                },
+                "syncedAt": {
+                    "type": "string"
+                },
+                "visitId": {
+                    "type": "string"
                 }
             }
         },

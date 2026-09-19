@@ -118,6 +118,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 
 	visit.NewHandler(visits).Register(app.Group("/api/v1"))
 	session.NewHandler(sessions).Register(app.Group("/api/v1"))
+	journey.NewHandler(journeys).Register(app.Group("/api/v1"))
 
 	return app.Listen(":" + envOrDefault("PORT", "8080"))
 }

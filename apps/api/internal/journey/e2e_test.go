@@ -161,6 +161,25 @@ func TestIngestToProjectionEndToEnd(t *testing.T) {
 			got.Steps[1].Status, got.Steps[2].Status)
 	}
 
+	// #18: the journey view reads the projection — ordered steps, resolved
+	// service points, and the deterministic next step after the transition.
+	view, err := journeys.GetJourney(ctx, "VISIT-E2E")
+	if err != nil {
+		t.Fatalf("GetJourney: %v", err)
+	}
+	if view.Completed || view.Current != nil {
+		t.Fatalf("completed/current = %v/%+v, want false/nil mid-journey", view.Completed, view.Current)
+	}
+	if view.Next == nil || view.Next.Sequence != 3 || view.Next.ServiceCode != "PHARMACY" {
+		t.Fatalf("next = %+v, want PHARMACY at sequence 3", view.Next)
+	}
+	if view.Next.ServicePoint == nil || view.Next.ServicePoint.ID != "SP-PHARMACY" {
+		t.Fatalf("next service point = %+v, want seeded SP-PHARMACY", view.Next.ServicePoint)
+	}
+	if view.Steps[3].ServicePointID != nil || view.Steps[3].ServicePoint != nil {
+		t.Fatalf("unmapped MYSTERY step = %+v, want nil binding", view.Steps[3])
+	}
+
 	// Duplicate delivery (cursor rewound): the eventId check answers it and
 	// no step is duplicated (#21 AC2).
 	exec(`UPDATE carepath.his_ingest_state SET last_event_id = 'EVT-000001' WHERE singleton`)
