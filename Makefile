@@ -42,30 +42,28 @@ swag:
 # Run api/mock-his/web as background processes; PIDs and output land in logs/.
 start:
 	@mkdir -p logs
-	nohup $(MAKE) api > logs/api.log 2>&1 & echo $$! > logs/api.pid
-	nohup $(MAKE) mock-his > logs/mock-his.log 2>&1 & echo $$! > logs/mock-his.pid
-	nohup $(MAKE) web > logs/web.log 2>&1 & echo $$! > logs/web.pid
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	$(MAKE) api > logs/api.log 2>&1 & echo $$! > logs/api.pid; \
+	$(MAKE) mock-his > logs/mock-his.log 2>&1 & echo $$! > logs/mock-his.pid; \
+	$(MAKE) web > logs/web.log 2>&1 & echo $$! > logs/web.pid 
 	@echo "started: api=$$(cat logs/api.pid) mock-his=$$(cat logs/mock-his.pid) web=$$(cat logs/web.pid)"
 	@echo "logs: logs/api.log logs/mock-his.log logs/web.log"
 	@echo "stop with: make stop"
 
-# Stop processes started by `make deploy`.
+# Stop processes started by `make start`. Kills by port rather than the pid
+# files: on setups where SHELL resolves through a WSL/interop boundary, $!
+# captures the wrapper's pid, not the actual server process, so pid-based
+# kill silently misses it and ports stay held across restarts.
 stop:
-	@for svc in api mock-his web; do \
-		if [ -f logs/$$svc.pid ]; then \
-			pid=$$(cat logs/$$svc.pid); \
-			if kill -0 $$pid 2>/dev/null; then \
-				pkill -P $$pid 2>/dev/null; \
-				kill $$pid 2>/dev/null; \
-				echo "stopped $$svc (pid $$pid)"; \
-			else \
-				echo "$$svc not running (stale pid $$pid)"; \
-			fi; \
-			rm -f logs/$$svc.pid; \
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	for port in "$${CAREPATH_API_PORT:-8080}" "$${MOCK_HIS_PORT:-8090}" 5173; do \
+		if fuser -k $$port/tcp 2>/dev/null; then \
+			echo "stopped port $$port"; \
 		else \
-			echo "$$svc: no pid file"; \
+			echo "port $$port: nothing listening"; \
 		fi; \
 	done
+	@rm -f logs/*.pid
 
 fetch:
 	git fetch

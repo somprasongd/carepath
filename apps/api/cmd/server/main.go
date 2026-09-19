@@ -5,7 +5,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"time"
 
@@ -60,7 +62,7 @@ type HealthResponse struct {
 }
 
 func run(ctx context.Context, log *slog.Logger) error {
-	databaseURL := envOrDefault("DATABASE_URL", "postgres://carepath:carepath@localhost:5432/carepath?sslmode=disable")
+	databaseURL := resolveDatabaseURL()
 	database, err := db.New(ctx, databaseURL)
 	if err != nil {
 		return err
@@ -142,6 +144,31 @@ func run(ctx context.Context, log *slog.Logger) error {
 	locationHandler.RegisterDemo(app.Group("/api/v1"))
 
 	return app.Listen(":" + envOrDefault("PORT", "8080"))
+}
+
+// resolveDatabaseURL builds the connection string's shape (scheme, host,
+// port, path) from DATABASE_URL if set, otherwise from POSTGRES_HOST/PORT/DB
+// (matching docker-compose's own defaults). Credentials always come from
+// POSTGRES_USER/POSTGRES_PASSWORD and are layered on top, so DATABASE_URL
+// never needs to carry secrets and POSTGRES_USER is never silently ignored.
+func resolveDatabaseURL() string {
+	raw := envOrDefault("DATABASE_URL", fmt.Sprintf("postgres://%s:%s/%s?sslmode=disable",
+		envOrDefault("POSTGRES_HOST", "localhost"),
+		envOrDefault("POSTGRES_PORT", "5432"),
+		envOrDefault("POSTGRES_DB", "carepath"),
+	))
+	dsn, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	if user := os.Getenv("POSTGRES_USER"); user != "" {
+		if password := os.Getenv("POSTGRES_PASSWORD"); password != "" {
+			dsn.User = url.UserPassword(user, password)
+		} else {
+			dsn.User = url.User(user)
+		}
+	}
+	return dsn.String()
 }
 
 func envOrDefault(key, fallback string) string {
