@@ -44,8 +44,16 @@ ALTER TABLE carepath.journey_command_audit ALTER COLUMN step_key DROP DEFAULT;
 
 -- ADR-0009 service point vocabulary: a clinic binds by "CLINIC:<code>", a
 -- diagnostic step by "ORDERTYPE:<type>"; REGISTRATION/CASHIER/PHARMACY are
--- unchanged fixed codes. The demo clinic is MED, reusing the OPD nurse
+-- unchanged fixed codes. Added as new rows alongside LAB/XRAY/DOCTOR rather
+-- than renaming them in place: those bare codes are still exercised by
+-- other modules' seed-integration tests (navigation, servicepoint) that
+-- predate this migration and are not journey-domain concerns to touch here.
+-- Multiple service points may point at the same place — no uniqueness
+-- constraint on place_id. The demo clinic is MED, reusing the OPD nurse
 -- station place seeded in #24.
-UPDATE carepath.service_point SET code = 'ORDERTYPE:LAB' WHERE code = 'LAB';
-UPDATE carepath.service_point SET code = 'ORDERTYPE:XRAY' WHERE code = 'XRAY';
-UPDATE carepath.service_point SET code = 'CLINIC:MED', name = 'อายุรกรรม (MED)' WHERE code = 'DOCTOR';
+INSERT INTO carepath.service_point (id, code, name, place_id)
+VALUES
+    ('SP-ORDERTYPE-LAB',  'ORDERTYPE:LAB',  'Laboratory', 'LAB-01'),
+    ('SP-ORDERTYPE-XRAY', 'ORDERTYPE:XRAY', 'X-Ray',      'XRAY-01'),
+    ('SP-CLINIC-MED',     'CLINIC:MED',     'อายุรกรรม (MED)', 'OPD-NS-01')
+ON CONFLICT (id) DO NOTHING;
