@@ -263,29 +263,46 @@ erDiagram
     }
 ```
 
-### E. Identity, RBAC, and audit (M8, NFR-09)
+### E. Identity, RBAC, and audit (M8, NFR-09) — built shape defined by ADR-0010
+
+[ADR-0010](../adr/0010-staff-auth-jwt-argon2.md) turns this section from design
+into the MVP build: `app_user` / `role` / `user_role` stay exactly as designed,
+`refresh_token` is added (a staff session must be revocable), and the actor
+columns move onto the command audit table that already exists in the live
+schema (`carepath.journey_command_audit`) rather than waiting for the generic
+`audit_log` below.
 
 ```mermaid
 erDiagram
     APP_USER ||--o{ USER_ROLE : has
     ROLE ||--o{ USER_ROLE : "granted to"
+    APP_USER ||--o{ REFRESH_TOKEN : holds
     APP_USER ||--o{ AUDIT_LOG : performs
 
     APP_USER {
         text user_id PK
-        text username
-        text password_hash
+        text username UK
+        text password_hash "argon2id PHC string (NFR-08)"
         text full_name
         boolean is_active
+        timestamptz created_at
     }
     ROLE {
         text role_id PK
-        text code
+        text code "MVP: ADMIN, STAFF"
         text name
     }
     USER_ROLE {
         text user_id FK
         text role_id FK
+    }
+    REFRESH_TOKEN {
+        text token_hash PK "sha256 of the opaque token"
+        text user_id FK
+        timestamptz issued_at
+        timestamptz expires_at
+        timestamptz used_at "non-null = spent by rotation"
+        timestamptz revoked_at "non-null = logged out / revoked"
     }
     AUDIT_LOG {
         bigint audit_log_id PK
@@ -298,6 +315,25 @@ erDiagram
         timestamptz changed_at
     }
 ```
+
+Design notes:
+
+- **No plaintext, and no reversible secret anywhere.** `password_hash` is an
+  argon2id PHC string (`$argon2id$v=19$m=65536,t=3,p=2$…`) so the cost
+  parameters travel with each hash and can be raised per user over time.
+  `refresh_token.token_hash` is a SHA-256 of a 256-bit random token — no slow
+  hash needed there, since the token is not guessable, and a database leak
+  yields nothing usable.
+- **`user_role` is many-to-many from day one** even though the MVP seeds only
+  two roles. Splitting `STAFF` into `REGISTRATION_STAFF` /
+  `SERVICE_POINT_STAFF`, or adding `EXECUTIVE` for the S7 dashboard, is then
+  two inserts, not a migration of shape.
+- **A refresh token is a row, not a claim.** Revocation (logout, or reuse
+  detection after a replay) needs server-side state, so the refresh token is
+  opaque and stored; only the 15-minute access token is a self-contained JWT.
+- **Seeded accounts:** `admin` (ADMIN) and `staff` (STAFF), password `demo`,
+  inserted `ON CONFLICT DO NOTHING` by the seed migration. Demo credentials in
+  a public repository — see ADR-0010 §9 and §12.
 
 ### Cross-schema references (application-enforced, not a DB foreign key)
 
@@ -335,10 +371,10 @@ The original answer here (`visit_step_dependency` self-referencing edges) assume
 ## 2.6 SQL scripts
 
 - [`sql/mock-his-schema.sql`](sql/mock-his-schema.sql) — `his` schema: `patient`, `visit`, `visit_step`, `visit_step_dependency`
-- [`sql/carepath-schema.sql`](sql/carepath-schema.sql) — `carepath` schema: hospital map, service-point hours, identity/RBAC, audit log, pathway templates, queue, location, relative-tracking links, plus role reference data
+- [`sql/carepath-schema.sql`](sql/carepath-schema.sql) — `carepath` schema: hospital map, service-point hours, identity/RBAC (incl. `refresh_token` per ADR-0010), audit log, pathway templates, queue, location, relative-tracking links, plus role reference data and the two demo accounts
 
 Apply order: `000001_init_schema.up.sql` → `000002_seed_service_points.up.sql` → `mock-his-schema.sql` → `carepath-schema.sql`.
 
 ## 2.7 Next step
 
-These two scripts are a design deliverable, not yet wired into `golang-migrate`. When a module in the [technical blueprint](../architecture/technical-blueprint.md)'s "planned" list (`hospitalmap`, `journey`/pathway, `identity`) gets built, carve its tables out of these files into `infra/postgres/migrations/NNN_*.up.sql`/`.down.sql`, add the matching `.down.sql` (`DROP TABLE`/`DROP SCHEMA` in reverse order), and run `make docs-erd` so `docs/architecture/erd/` reflects the real, live schema again.
+These two scripts are a design deliverable, not yet wired into `golang-migrate`. §E is the next section to be carved out: ADR-0010 schedules `000011_staff_auth.{up,down}.sql` (`app_user`, `role`, `user_role`, `refresh_token`, the two roles, the two seed users) and `000012_journey_audit_actor.{up,down}.sql` (`actor_user_id`, `actor_username` on `journey_command_audit`). When a module in the [technical blueprint](../architecture/technical-blueprint.md)'s "planned" list (`auth`, `notification`) gets built, carve its tables out of these files into `infra/postgres/migrations/NNN_*.up.sql`/`.down.sql`, add the matching `.down.sql` (`DROP TABLE`/`DROP SCHEMA` in reverse order), and run `make docs-erd` so `docs/architecture/erd/` reflects the real, live schema again.

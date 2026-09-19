@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.8.0
+  version: 0.9.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -58,6 +58,119 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/auth/login:
+    post:
+      description: >
+        Staff/admin login (ADR-0010, FR-18). Verifies a username against an
+        argon2id password hash and returns a short-lived JWT access token
+        plus a rotating opaque refresh token. Patients never use this
+        endpoint — they authenticate through POST /api/v1/auth/session with a
+        LINE identity. An unknown username, a wrong password and a
+        deactivated account are deliberately indistinguishable: all three
+        return the same 401 body, and the server spends the same time on all
+        three.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/auth/refresh:
+    post:
+      description: >
+        Exchanges a refresh token for a new access + refresh pair (ADR-0010
+        §4). Refresh tokens are single-use — this call spends the presented
+        one. Presenting an already-spent token is treated as a leak: every
+        refresh token belonging to that user is revoked and the call returns
+        401, forcing a real login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: A new token pair; the presented refresh token is now spent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unknown, expired, revoked, or already-spent refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/auth/logout:
+    post:
+      description: >
+        Revokes the presented refresh token. Idempotent — an unknown,
+        expired or already-revoked token also returns 204, so a client can
+        always clear its own state. The access token is stateless and stays
+        valid until it expires (at most ACCESS_TOKEN_TTL, default 15
+        minutes).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '204':
+          description: Logged out
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/auth/me:
+    get:
+      description: >
+        The staff/admin identity and role codes behind the presented access
+        token (ADR-0010). The web console calls it on boot to restore a
+        session from a stored refresh token.
+      security:
+        - staffAuth: []
+      responses:
+        '200':
+          description: The authenticated staff identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffIdentity'
+        '401':
+          description: Missing, malformed, or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/journeys/{visitId}:
     get:
       description: >
@@ -102,7 +215,11 @@ paths:
         instance, may not yet make its follow-up clinic step actionable if the
         order hasn't resulted (ADR-0009 §5). commandId is an optional
         caller-assigned idempotency key (a fresh UUID is generated when
-        absent); source names the acting surface for the audit trail.
+        absent); source names the acting surface for the audit trail, while
+        the authenticated user behind the token is recorded as the actor
+        (ADR-0010 §11, NFR-09).
+      security:
+        - staffAuth: []
       parameters:
         - in: path
           name: visitId
@@ -127,6 +244,18 @@ paths:
                 $ref: '#/components/schemas/Journey'
         '400':
           description: Invalid body or unknown target status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing, malformed, or expired staff access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Authenticated, but the user's roles do not allow this action
           content:
             application/json:
               schema:
@@ -159,6 +288,8 @@ paths:
         planner inferred is dropped. Use when a doctor orders a test for a
         future visit rather than this one, or when the connected HIS cannot
         emit `encounter.completed` at all.
+      security:
+        - staffAuth: []
       parameters:
         - in: path
           name: visitId
@@ -175,6 +306,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Journey'
+        '401':
+          description: Missing, malformed, or expired staff access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Authenticated, but the user's roles do not allow this action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Visit not found, journey not projected, or the visit has no open round at this clinic
           content:
@@ -336,8 +479,10 @@ paths:
         CarePath knows, freshest sync first — the same per-visit shape as the
         single-journey read. Reads the CarePath projection only; a visit
         opened in the HIS but not yet ingested is absent until its first fact
-        lands. Mounted under /api/v1/staff so the NFR-08 auth guard (#43) can
-        cover the group.
+        lands. Mounted under /api/v1/staff so the NFR-08 auth guard covers the
+        whole group with one middleware (ADR-0010 §7).
+      security:
+        - staffAuth: []
       responses:
         '200':
           description: All projected journeys, newest sync first
@@ -347,6 +492,18 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Journey'
+        '401':
+          description: Missing, malformed, or expired staff access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Authenticated, but the user's roles do not allow this action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
           content:
@@ -373,13 +530,73 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      description: A CarePath session token from POST /api/v1/auth/session.
+      description: >
+        A patient session token from POST /api/v1/auth/session — opaque,
+        server-side, issued against a LINE identity.
+    staffAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        A staff/admin JWT access token from POST /api/v1/auth/login or
+        /api/v1/auth/refresh (ADR-0010). Distinct from bearerAuth: different
+        subject, different store, different lifetime.
   schemas:
     Error:
       type: object
       required: [error]
       properties:
         error: { type: string }
+    LoginRequest:
+      type: object
+      description: Staff/admin credentials (ADR-0010). The demo deployment seeds
+        admin/demo (ADMIN) and staff/demo (STAFF) — demo credentials only.
+      required: [username, password]
+      properties:
+        username: { type: string, example: staff }
+        password: { type: string, format: password, example: demo }
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+    AuthTokens:
+      type: object
+      description: >
+        The credential pair issued by login and refresh. accessToken is an
+        HS256 JWT carrying sub/username/roles/typ=access; refreshToken is an
+        opaque random string the server keeps only as a SHA-256 hash, and is
+        spent by the next refresh.
+      required: [accessToken, refreshToken, expiresAt, refreshExpiresAt, identity]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresAt:
+          type: string
+          format: date-time
+          description: When accessToken expires (ACCESS_TOKEN_TTL, default 15m).
+        refreshExpiresAt:
+          type: string
+          format: date-time
+          description: When refreshToken expires (REFRESH_TOKEN_TTL, default 7d).
+        identity: { $ref: '#/components/schemas/StaffIdentity' }
+    StaffIdentity:
+      type: object
+      description: A staff/admin user. Not interchangeable with Identity, which
+        describes a patient's external (LINE) identity.
+      required: [userId, username, displayName, roles]
+      properties:
+        userId: { type: string }
+        username: { type: string }
+        displayName: { type: string }
+        roles:
+          type: array
+          description: Role codes granted to this user (ADR-0010 §5). The console
+            derives its landing screen and visible actions from these — a user
+            never picks their own role.
+          items:
+            type: string
+            enum: [ADMIN, STAFF]
     ServicePoint:
       type: object
       description: Links a service code to a physical Place in the hospital map.

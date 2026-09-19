@@ -22,7 +22,7 @@ Full narrative: [Product Requirements](../requirements/product-requirements.md).
 | Patient / relative | Views their own visit journey, gets routed to the next step, receives queue notifications; a relative can follow progress via a shared link |
 | Registration / screening staff | Looks up a visit CarePath has already derived a plan for, once the HIS reports it opened (ADR-0009); does not create the visit or enter anything into the HIS from CarePath |
 | Service-point staff | Calls the queue, updates step status, inserts unplanned steps |
-| Hospital admin | Maintains hospital map data, service-point mapping, pathway templates, and user/role access |
+| Hospital admin | Maintains hospital map data, service-point mapping, journey-planning rules, and user/role access (MVP: roles are enforced, accounts are seeded — [ADR-0010](../adr/0010-staff-auth-jwt-argon2.md)) |
 | Hospital executive | Views wait-time and bottleneck reporting across service points |
 | HIS / Mock HIS (external system) | System of record for visit and service-step status; CarePath reads/forwards through an adapter, never direct DB access |
 
@@ -39,7 +39,7 @@ Full detail and current build status: [MVP Scope](../requirements/mvp-scope.md).
 | M5 | Step-by-step navigation instructions with distance/time | Must | [FR-04](../requirements/functional-requirements.md), [FR-08](../requirements/functional-requirements.md) |
 | M6 | Shortest-route calculation from graph data (no hardcoded routes) | Must | [FR-07](../requirements/functional-requirements.md) |
 | M7 | Service-point staff console (call queue, update status, insert unplanned step) | Must | [FR-15](../requirements/functional-requirements.md), [FR-16](../requirements/functional-requirements.md) |
-| M8 | Authentication & role-based access control | Must | [FR-18](../requirements/functional-requirements.md) |
+| M8 | Authentication & role-based access control (staff/admin password login, argon2id + JWT access/refresh, `STAFF`/`ADMIN` roles — [ADR-0010](../adr/0010-staff-auth-jwt-argon2.md)) | Must | [FR-18](../requirements/functional-requirements.md) |
 | S1 | Queue length & wait-time estimate | Should | [FR-17](../requirements/functional-requirements.md) |
 | S2 | QR-code current-location scanning | Should | [FR-06](../requirements/functional-requirements.md) |
 | S3 | Floor plan image with route overlay | Should | [FR-08](../requirements/functional-requirements.md) |
@@ -75,7 +75,7 @@ Full detail: [Functional Requirements](../requirements/functional-requirements.m
 | FR-15 | Service-point staff call the queue and update step status |
 | FR-16 | Staff insert an unplanned step without breaking prerequisite ordering |
 | FR-17 | Display queue length and estimated wait time per service point |
-| FR-18 | Authentication and role-based access control; patients see only their own data |
+| FR-18 | Authentication and role-based access control; patients see only their own data. *MVP slice (ADR-0010):* staff/admin username + password (argon2id), JWT access + rotating refresh tokens, `STAFF`/`ADMIN` roles guarding every staff endpoint. Patient-scoped read authorization and user-management screens are out of the slice |
 | FR-19 | Thai/English runtime language switch |
 | FR-20 | Large-text mode and stairs-avoiding route option |
 | FR-21 | Notify a patient when their queue is approaching |
@@ -102,7 +102,7 @@ Full detail: [Non-Functional Requirements](../requirements/non-functional-requir
 | NFR-05 Performance | Route calculation feels interactive; primary screens render within 3 seconds on demo data |
 | NFR-06 Observability | Structured logs and health endpoints; OpenTelemetry recommended |
 | NFR-07 Contract-first integration | Externally visible HTTP contracts are OpenAPI, version-controlled |
-| NFR-08 Security | Server-side session verification; RBAC on staff/admin endpoints; one-way password hashing; parameterized queries; HIS credentials server-side only; TLS in production |
+| NFR-08 Security | Server-side session verification; RBAC on staff/admin endpoints; one-way password hashing (argon2id, PHC-encoded); short-lived signed access tokens with revocable rotating refresh tokens; no credential-existence leaks on failed login; parameterized queries; HIS credentials server-side only; TLS in production |
 | NFR-09 Audit trail | Every visit/step/queue status change records who, when, and old→new status |
 | NFR-10 Usability | Usable without training; human-readable error messages, never raw system errors |
 | NFR-11 Accessibility | Large text, sufficient color contrast, usable on small screens |
@@ -128,7 +128,8 @@ Full stories with acceptance rationale: [User Stories](../requirements/user-stor
 | US-05 | Hospital admin | map a logical service (e.g. LAB) to a physical place | workflow changes are independent of floor-plan design | Must (M1) |
 | US-06 | Hospital admin | maintain floor/route data independently of clinical flow | facility changes (e.g. a moved room) don't break pathways or routes | Must (M1, M6) |
 | US-16 | Hospital admin | review the journey-planning rules CarePath applies | I can tell when a patient's derived plan reflects hospital policy correctly | Must (M2) |
-| US-17 | Hospital admin | manage user accounts and role permissions | each role sees/does only what it should | Must (M8) |
+| US-17 | Hospital admin | manage user accounts and role permissions | each role sees/does only what it should | Must (M8) — MVP enforces roles; no management screen |
+| US-22 | Staff / admin | sign in with a hospital-issued username and password and stay signed in for a shift | the console is not open to anyone on the network, and my changes are recorded against my name | Must (M8) |
 | US-18 | Hospital executive | see bottlenecks and average wait time | I can allocate staff where needed | Should (S7) |
 | US-07 | Developer | use Mock HIS for deterministic visits/service states | demo and tests don't depend on production HIS | Must (supports M3–M7) |
 | US-08 | Integration engineer | consume a stable HIS port from CarePath core | a real HIS connector can replace Mock HIS without touching journey/navigation logic | Non-functional |
@@ -166,6 +167,7 @@ flowchart LR
         UC13(["Manage users &amp; roles"])
         UC14(["View bottleneck &amp;<br/>wait-time dashboard"])
         UC15(["Sync visit / service state<br/>with HIS"])
+        UC16(["Log in to the console<br/>(staff / admin)"])
     end
 
     Patient --> UC1
@@ -176,12 +178,16 @@ flowchart LR
     Patient --> UC6
     Relative --> UC7
     RegStaff --> UC8
+    RegStaff --> UC16
     SPStaff --> UC9
     SPStaff --> UC10
+    SPStaff --> UC16
     Admin --> UC11
     Admin --> UC12
     Admin --> UC13
+    Admin --> UC16
     Exec --> UC14
+    Exec --> UC16
 
     UC3 -. include .-> UC4
     UC2 -. include .-> UC15
@@ -190,7 +196,7 @@ flowchart LR
     UC15 --> HIS
 ```
 
-Authentication and role-based access (FR-18) is a precondition of every staff/admin/executive use case (UC8–UC14) and is omitted as an edge to keep the diagram readable. UC8 has no edge into UC15: per ADR-0009 the HIS opens the visit and reports orders/clinics/encounters itself, and CarePath derives the journey plan from those facts — it never sends a step-related command back to the HIS. The fact→plan flow this collapses into one edge is spelled out in [docs/integration/mock-his.md § How CarePath turns HIS facts into a journey plan](../integration/mock-his.md#how-carepath-turns-his-facts-into-a-journey-plan).
+Authentication and role-based access (FR-18) is a precondition of every staff/admin/executive use case — UC8–UC14 each `include` UC16, drawn as actor edges rather than seven include edges to keep the diagram readable. Per [ADR-0010](../adr/0010-staff-auth-jwt-argon2.md) the MVP builds UC16 (argon2id password login, JWT access + rotating refresh token, `STAFF`/`ADMIN`) and the enforcement UC13 configures, but not UC13's management screen — accounts are seeded by migration and edited in the database. Patient use cases are not behind UC16; patients authenticate through LINE (UC1). UC8 has no edge into UC15: per ADR-0009 the HIS opens the visit and reports orders/clinics/encounters itself, and CarePath derives the journey plan from those facts — it never sends a step-related command back to the HIS. The fact→plan flow this collapses into one edge is spelled out in [docs/integration/mock-his.md § How CarePath turns HIS facts into a journey plan](../integration/mock-his.md#how-carepath-turns-his-facts-into-a-journey-plan).
 
 ## 1.8 Key design constraints (from the brief and ADRs)
 
@@ -199,4 +205,5 @@ Authentication and role-based access (FR-18) is a precondition of every staff/ad
 - The HIS has no concept of an ordered patient journey — it reports visit/clinic/order/encounter facts and CarePath derives the plan itself ([ADR-0009](../adr/0009-carepath-owns-journey-plan.md), amending [ADR-0008](../adr/0008-his-canonical-event-contract.md)).
 - Care Graph (what's next) and Navigation Graph (how to get there) are kept as separate models ([ADR-0002](../adr/0002-separate-care-and-navigation-graphs.md)).
 - Floor plans are SVG for the MVP — no 3D ([ADR-0003](../adr/0003-svg-floor-plan.md)).
+- Patients and staff authenticate through two separate mechanisms — LINE identity vs. a CarePath-stored password — and neither borrows the other's token ([ADR-0010](../adr/0010-staff-auth-jwt-argon2.md)).
 - The relational database must reach at least 3NF (covered in deliverable 2, ER Diagram and Database Design — not yet produced).

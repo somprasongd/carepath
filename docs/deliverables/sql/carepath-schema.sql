@@ -100,7 +100,8 @@ CREATE TABLE IF NOT EXISTS carepath.service_point_hours (
 CREATE TABLE IF NOT EXISTS carepath.app_user (
     user_id       text PRIMARY KEY,
     username      text NOT NULL UNIQUE,
-    password_hash text NOT NULL, -- one-way hash only (NFR-08); never plaintext
+    password_hash text NOT NULL, -- argon2id PHC string (ADR-0010); never plaintext (NFR-08)
+                                 -- $argon2id$v=19$m=65536,t=3,p=2$<salt>$<hash>
     full_name     text NOT NULL,
     is_active     boolean NOT NULL DEFAULT true,
     created_at    timestamptz NOT NULL DEFAULT now()
@@ -109,7 +110,7 @@ CREATE TABLE IF NOT EXISTS carepath.app_user (
 CREATE TABLE IF NOT EXISTS carepath.role (
     role_id text PRIMARY KEY,
     code    text NOT NULL UNIQUE CHECK (code IN
-        ('PATIENT', 'REGISTRATION_STAFF', 'SERVICE_POINT_STAFF', 'ADMIN', 'EXECUTIVE')),
+        ('PATIENT', 'STAFF', 'REGISTRATION_STAFF', 'SERVICE_POINT_STAFF', 'ADMIN', 'EXECUTIVE')),
     name    text NOT NULL
 );
 
@@ -118,6 +119,22 @@ CREATE TABLE IF NOT EXISTS carepath.user_role (
     role_id text NOT NULL REFERENCES carepath.role (role_id),
     PRIMARY KEY (user_id, role_id)
 );
+
+-- Staff refresh tokens (ADR-0010 §4). The access token is a short-lived JWT and
+-- is deliberately NOT stored; only the long-lived, revocable half is a row. The
+-- token itself is never persisted — token_hash is sha256(token), so a dump of
+-- this table yields nothing a thief can present.
+CREATE TABLE IF NOT EXISTS carepath.refresh_token (
+    token_hash text PRIMARY KEY,
+    user_id    text NOT NULL REFERENCES carepath.app_user (user_id) ON DELETE CASCADE,
+    issued_at  timestamptz NOT NULL DEFAULT now(),
+    expires_at timestamptz NOT NULL,
+    used_at    timestamptz, -- non-null = spent by a rotation; replaying it revokes the user's set
+    revoked_at timestamptz  -- non-null = logged out, or revoked by reuse detection
+);
+
+CREATE INDEX IF NOT EXISTS refresh_token_user_idx ON carepath.refresh_token (user_id);
+CREATE INDEX IF NOT EXISTS refresh_token_expires_at_idx ON carepath.refresh_token (expires_at);
 
 -- Every status change on a visit/step/queue ticket, regardless of which table
 -- it touched (NFR-09). old_value/new_value are minimal JSON snapshots, not full
@@ -222,10 +239,29 @@ CREATE TABLE IF NOT EXISTS carepath.visit_share_link (
 
 -- ── Reference data ───────────────────────────────────────────────────────────
 
+-- The full role catalogue this design allows. Per ADR-0010 the MVP seeds and
+-- enforces only ADMIN and STAFF (see the STAFF row below); the rest stay here
+-- as the growth path — adding one later is an insert, not a migration.
 INSERT INTO carepath.role (role_id, code, name) VALUES
     ('ROLE-PATIENT', 'PATIENT', 'Patient'),
+    ('ROLE-STAFF', 'STAFF', 'Hospital Staff'),
     ('ROLE-REGISTRATION', 'REGISTRATION_STAFF', 'Registration / Screening Staff'),
     ('ROLE-SERVICE-POINT', 'SERVICE_POINT_STAFF', 'Service-Point Staff'),
     ('ROLE-ADMIN', 'ADMIN', 'Hospital Admin'),
     ('ROLE-EXECUTIVE', 'EXECUTIVE', 'Hospital Executive')
 ON CONFLICT (role_id) DO NOTHING;
+
+-- Demo accounts (ADR-0010 §9): admin/demo and staff/demo. The hashes below are
+-- placeholders in this design script — the real migration commits the actual
+-- argon2id encoding of "demo", which makes these credentials public by
+-- construction: local development and the hackathon demo only. Before any
+-- deployment others can reach, delete or deactivate both rows (ADR-0010 §12).
+INSERT INTO carepath.app_user (user_id, username, password_hash, full_name) VALUES
+    ('USER-ADMIN', 'admin', '$argon2id$v=19$m=65536,t=3,p=2$<salt>$<hash>', 'ผู้ดูแลระบบ (demo)'),
+    ('USER-STAFF', 'staff', '$argon2id$v=19$m=65536,t=3,p=2$<salt>$<hash>', 'เจ้าหน้าที่ (demo)')
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO carepath.user_role (user_id, role_id) VALUES
+    ('USER-ADMIN', 'ROLE-ADMIN'),
+    ('USER-STAFF', 'ROLE-STAFF')
+ON CONFLICT DO NOTHING;

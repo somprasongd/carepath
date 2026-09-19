@@ -8,6 +8,55 @@ Source of truth for externally visible behavior: [`packages/contracts/openapi/ca
 
 `GET /health`
 
+## Authentication
+
+Two credentials, two audiences — see [ADR-0010](../adr/0010-staff-auth-jwt-argon2.md).
+
+| | Patient | Staff / admin |
+|---|---|---|
+| Login | `POST /api/v1/auth/session` (LINE ID token, or the demo bypass) | `POST /api/v1/auth/login` (username + password) |
+| Credential | opaque session token (`bearerAuth`) | JWT access token (`staffAuth`) + opaque refresh token |
+| Lifetime | 24h (`SESSION_TTL`) | 15 min access (`ACCESS_TOKEN_TTL`), 7 day refresh (`REFRESH_TOKEN_TTL`) |
+| Who am I | `GET /api/v1/auth/session` | `GET /api/v1/auth/me` |
+
+`POST /api/v1/auth/login`
+
+`{username, password}` → access token, refresh token, both expiries, and the
+identity with its role codes. Passwords are argon2id hashes, verified
+server-side. An unknown username, a wrong password, and a deactivated account
+return the same 401 — no user enumeration.
+
+`POST /api/v1/auth/refresh`
+
+`{refreshToken}` → a new pair. Refresh tokens are single-use: this call spends
+the presented one. Replaying a spent token revokes every refresh token of that
+user and returns 401.
+
+`POST /api/v1/auth/logout`
+
+`{refreshToken}` → 204. Idempotent — an unknown or already-revoked token also
+returns 204. The access token is stateless and stays valid until it expires.
+
+`GET /api/v1/auth/me`
+
+The staff identity and roles behind the presented access token.
+
+### Which endpoints require a staff token
+
+Send `Authorization: Bearer <accessToken>`; a missing or expired token is 401,
+a valid token without a permitted role is 403.
+
+| Endpoint | Roles |
+|---|---|
+| `GET /api/v1/staff/visits` | `STAFF`, `ADMIN` |
+| `POST /api/v1/journeys/{visitId}/steps/{stepKey}/transition` | `STAFF`, `ADMIN` |
+| `POST /api/v1/journeys/{visitId}/clinics/{clinicCode}/close-round` | `STAFF`, `ADMIN` |
+| `GET /api/v1/auth/me` | any authenticated staff user |
+
+Everything else — the journey read, service points, location, and route — is
+open in the MVP, because the patient screens consume it. Binding the journey
+read to the patient's own session is tracked separately (ADR-0010 §7).
+
 ## Journey
 
 `GET /api/v1/journeys/{visitId}`
@@ -16,17 +65,17 @@ The journey plan CarePath derived from HIS facts ([ADR-0009](../adr/0009-carepat
 
 `POST /api/v1/journeys/{visitId}/steps/{stepKey}/transition`
 
-Staff command to move a step to `STARTED`, `COMPLETED`, or `CANCELLED`. CarePath owns step status directly (ADR-0009) — this no longer forwards anything to the HIS. Returns the refreshed journey with the plan recomputed against the new fact.
+Staff command to move a step to `STARTED`, `COMPLETED`, or `CANCELLED`. CarePath owns step status directly (ADR-0009) — this no longer forwards anything to the HIS. Returns the refreshed journey with the plan recomputed against the new fact. Requires a `STAFF` or `ADMIN` access token; the authenticated user is recorded as the actor in the command audit (NFR-09).
 
 `POST /api/v1/journeys/{visitId}/clinics/{clinicCode}/close-round`
 
-Staff override: confirms a clinic is done with the patient for this round even without an `encounter.completed` fact from the HIS, dropping any not-yet-started "return to this clinic" step the planner had inferred.
+Staff override: confirms a clinic is done with the patient for this round even without an `encounter.completed` fact from the HIS, dropping any not-yet-started "return to this clinic" step the planner had inferred. Requires a `STAFF` or `ADMIN` access token.
 
 ## Staff visit monitor
 
 `GET /api/v1/staff/visits`
 
-The projected journey of every visit CarePath knows, freshest sync first — same per-visit shape as the single-journey read (#37).
+The projected journey of every visit CarePath knows, freshest sync first — same per-visit shape as the single-journey read (#37). Requires a `STAFF` or `ADMIN` access token; the `/api/v1/staff` prefix exists so one middleware covers the whole group.
 
 ## Service points
 
@@ -60,8 +109,10 @@ ordered step list, which it does not (ADR-0009). They were deprecated when the
 contract first moved to the planner model and removed once nothing depended on
 them any longer — superseded fully by `GET /api/v1/journeys/{visitId}`.
 
-Implemented today: health, auth session, the journey projection with step
-transitions and the clinic round override, the staff visit monitor, and the
-service point reads (with places/floors resolved from Postgres). The route
+Implemented today: health, auth session (patient), the journey projection with
+step transitions and the clinic round override, the staff visit monitor, and
+the service point reads (with places/floors resolved from Postgres). The route
 and location endpoints remain intentionally documented as the next build
-slices.
+slices. **Staff authentication (`/api/v1/auth/login|refresh|logout|me`) is
+specified in the contract and ADR-0010 but not yet implemented** — the staff
+endpoints above still answer without a token until the `auth` module lands.

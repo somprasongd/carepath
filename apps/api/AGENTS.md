@@ -54,6 +54,16 @@ Reference implementations: `servicepoint` (repo + service, no HTTP), `journey` (
 - Errors are logged **once**, at the boundary (`httpx.Error` or the logger middleware) — do not re-log the same error in every layer.
 - Keep output structured (`log.Info("resolved next step", "visit_id", id)`); never assemble message strings by hand. Format/level come from `LOG_FORMAT` / `LOG_LEVEL` (default JSON / info) — don't hardcode handlers.
 
+## Rules — auth (ADR-0010)
+
+- Two identity kinds, two modules: `session` (patients, LINE, opaque token) and `auth` (staff/admin, password, JWT + refresh). Never make one accept the other's token, and never merge their tables.
+- Protect routes **per group in `cmd/server/main.go`** with `auth.RequireRole(...)`, never with a global `app.Use`. `GET /api/v1/journeys/{visitId}` is a patient surface and must stay open — a blanket guard breaks every patient screen.
+- Read the acting user with `auth.PrincipalFromContext(ctx)`; pass it into audited commands so NFR-09's "who" is a user, not a surface string.
+- Unauthenticated → `apperr.KindUnauthorized` (401). Authenticated but wrong role → `apperr.KindForbidden` (403). Use the module's error variables; don't hand-roll a status.
+- Never log a password, a token, or an `Authorization` header — not truncated, not at debug level. Log `user_id`/`username` instead.
+- A login failure is one error for every cause (unknown user, wrong password, deactivated account), and an unknown username still pays for one argon2 verify so timing tells nothing.
+- Password hashing lives in `internal/auth/password.go` and nowhere else; the stored value is the full argon2id PHC string, and verification re-reads the parameters from it rather than assuming today's constants.
+
 ## Rules — errors
 
 - Domain errors are module-level variables built with `apperr`:

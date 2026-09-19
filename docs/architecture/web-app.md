@@ -24,11 +24,15 @@ apps/web/src/
   design-system/     Presentation primitives — must stay ignorant of the API
     ui/              shadcn CLI output, edited in place
     tokens.ts, …     CarePath-authored primitives (Button, Card, JourneyRail, …)
+  auth/              Patient (LINE LIFF) auth: AuthProvider, LoginGate, RequireAuth
   features/          Domain compositions — where the API is allowed in
     visit/           queries.ts (useVisit), journey.ts (VisitView → JourneyRail),
                      components/AttentionCard.tsx
     servicepoint/    ServicePointRow and friends (demo data for now)
-  api/               client.ts (fetch wrapper, ApiError) + schema.d.ts (generated)
+    auth/            Staff/admin auth (ADR-0010) — login/refresh/logout queries,
+                     the token store, StaffAuthProvider + RequireStaffAuth
+  api/               client.ts (fetch wrapper, ApiError, token attach + refresh)
+                     + schema.d.ts (generated)
   mocks/             demo-data.ts — static data for /design and staff screens
   styles/            index.css — the single token source (@theme)
 ```
@@ -52,7 +56,8 @@ Status per screen today:
 | --- | --- |
 | `/patient/journey` | Live — `GET /api/v1/visits/:id` (default `VISIT-001`, override with `?visit=`) |
 | `/patient/navigate` | Destination live from the same query; schematic floor plan still demo (only the pharmacy plan exists — other places render the "ยังไม่รองรับเส้นทาง" state until `/api/v1/navigation/route` is implemented) |
-| `/staff/*` | Demo data from `mocks/demo-data.ts` — staff endpoints don't exist yet |
+| `/staff/*` | Live for the patient list and step transitions (`/api/v1/staff/visits`); queue and overview are still `mocks/demo-data.ts`. Once ADR-0010 lands, the whole group mounts behind `RequireStaffAuth` and every request carries a staff access token |
+| `/login` | Currently inert (local state, role cards). Becomes a real `POST /api/v1/auth/login` form under ADR-0010 — no role picker, the landing screen is derived from the role in the token |
 | `/design` | Demo data by design; it must never depend on the API |
 
 ## Commands
@@ -67,6 +72,29 @@ npm run gen:api    # regenerate src/api/schema.d.ts from the contract
 
 Linting uses oxlint rather than eslint + typescript-eslint: the app builds with TypeScript 7, whose npm package no longer ships the JS compiler API that @typescript-eslint's parser needs. Unit tests are vitest, colocated as `*.test.ts` — the mapping functions in `features/visit/journey.ts` are the priority coverage target. `gen:api` pins `openapi-typescript` + `typescript@5` in an isolated npx run for the same TS7 reason — see [packages/contracts/README.md](../../packages/contracts/README.md).
 
+## Staff authentication (ADR-0010)
+
+Two auth surfaces coexist and must not be merged: `src/auth/` gates `/patient/*`
+on a LINE (or demo) identity; `src/features/auth/` gates `/staff/*` on a
+username/password login.
+
+- **The access token lives in memory only** (React context state) — it is on
+  every request, so keeping it out of `localStorage` shrinks the XSS payoff.
+- **The refresh token lives in `localStorage`** — that is what survives a page
+  reload without a second login. The trade-off (and why an httpOnly cookie was
+  rejected for the MVP) is recorded in ADR-0010 §12.
+- `api/client.ts` owns the retry: attach the access token, and on a 401 attempt
+  exactly one refresh, retry the original request once, then clear both tokens
+  and route to `/login`. One refresh in flight at a time — concurrent 401s wait
+  on the same promise, never fire N refreshes.
+- `setApiAuthToken` currently holds **one** module-level token, set by the
+  patient auth providers. The staff token must not reuse that slot: both route
+  trees live in the same SPA, so one shared slot can send a patient session
+  token to a staff endpoint. One slot per audience.
+- Never render a token, never log one, never put one in a URL or a query key.
+- Role gating is UI affordance, not security: hiding an admin action in React
+  is a courtesy; the API is what actually enforces it.
+
 ## Conventions
 
 - A response shape that exists in `schema.d.ts` is never hand-written; change the contract and regenerate (contract changes are integration-boundary changes — see the root AGENTS.md rules).
@@ -74,4 +102,5 @@ Linting uses oxlint rather than eslint + typescript-eslint: the app builds with 
 - No hex values in screens — if one appears, a token is missing from `styles/index.css`.
 - Zone colours stay byte-identical to the `:root` block in `packages/floorplans/floors/*.svg`.
 - `design-system/` renders props only; anything that knows a domain concept belongs in `features/`.
+- A screen never decides what a user may do from a locally stored flag — read the roles out of the auth context, which reads them from the token.
 - Agents working in this app should read `apps/web/AGENTS.md` for the working rules.

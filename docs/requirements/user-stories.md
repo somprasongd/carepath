@@ -43,6 +43,11 @@ As staff at a service point (exam room, lab, X-ray, pharmacy), I want to call th
 ### US-15 Confirm whether a patient returns after an extra test — *Must (M7)* — revised by ADR-0009
 As staff at a clinic, when I order an additional test mid-visit CarePath already adds it (and a tentative return step) to the patient's plan on its own; I want to confirm or correct whether the patient needs to come back to me afterward so that the plan matches what I actually intend, even when the HIS itself never tells CarePath the encounter is finished.
 
+### US-22 Log in to the staff console — *Must (M8)* — added by ADR-0010
+As hospital staff, I want to sign in with the username and password the hospital issued me and stay signed in for the length of my shift, so that I can use the console without re-entering my password every few minutes, and so that anything I change is recorded against my name rather than an anonymous shared login.
+
+Acceptance: a wrong password gives a plain-language error that does not reveal whether the username exists; a successful login lands me on the screen my role implies (not one I pick myself); reloading the page keeps me signed in; signing out makes the session unusable from that browser.
+
 ## Hospital admin
 
 ### US-05 Configure service-point mapping — *Must (M1)*
@@ -54,8 +59,10 @@ As hospital staff or an administrator, I want floor and route data maintained in
 ### US-16 Review the journey planning rules — *Must (M2)* — revised by ADR-0009
 As a system administrator, I want to see and understand the ordering rules CarePath's journey planner applies (registration first, diagnostics before/after a clinic, one cashier step, pharmacy after cashier) so that I can tell when a patient's derived plan reflects hospital policy correctly. Per ADR-0009 these rules are hospital policy encoded in the planner rather than a per-patient template an administrator assembles — the HIS reports no ordered step list to template against.
 
-### US-17 Manage user roles and access — *Must (M8)*
+### US-17 Manage user roles and access — *Must (M8)* — MVP slice scoped by ADR-0010
 As a system administrator, I want to manage user accounts and role-based permissions so that each user (patient, staff, admin, executive) sees and can do only what their role allows.
+
+**MVP slice:** the *enforcement* half is in scope — accounts exist with argon2id-hashed passwords, roles (`STAFF`, `ADMIN`) are granted per user, and every staff/admin endpoint checks the role in the caller's token ([ADR-0010](../adr/0010-staff-auth-jwt-argon2.md)). The *management UI* half is not: MVP accounts are seeded by migration and changed in the database. The user↔role model is many-to-many from the start, so adding the screen later does not require reshaping the data.
 
 ## Hospital executive
 

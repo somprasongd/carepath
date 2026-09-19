@@ -25,6 +25,7 @@
 - OpenAPI contracts (`packages/contracts/openapi/`) plus swaggo-generated Swagger docs served by the API
 - PostgreSQL 17 via pgx; schema managed by golang-migrate (`infra/postgres/migrations/`)
 - Structured logging with `log/slog`: JSON (default) or text via `LOG_FORMAT`, level via `LOG_LEVEL`; request-scoped logger with request ID created by middleware and carried in ctx (`internal/platform/logger`)
+- Authentication: two separate mechanisms by audience — patients get an opaque session token against a verified LINE identity (`internal/session`), staff/admin get an argon2id-verified password login returning an HS256 JWT access token plus a rotating opaque refresh token (`internal/auth`, [ADR-0010](../adr/0010-staff-auth-jwt-argon2.md)); `golang.org/x/crypto/argon2` and `github.com/golang-jwt/jwt/v5`
 - Modular Monolith for the CarePath API
 
 ### Integration and realtime
@@ -47,6 +48,7 @@ This section is the canonical description of the `apps/api` internal structure. 
 Planned module list — a module gets a package when it has real features, never as an empty skeleton:
 
 ```text
+auth           (specified, ADR-0010 — staff/admin users, argon2id passwords, JWT access + rotating refresh tokens, RequireRole middleware)
 identity       (implemented — Verifier port; LINE ID-token verification adapter)
 journey        (implemented — CarePath-owned journey plan derived from HIS facts, ADR-0008 amended by ADR-0009; superseded and removed the visit module)
 servicepoint   (implemented)
@@ -78,6 +80,11 @@ apps/api/
     │   └── line/           # LINE ID-token verification (JWKS)
     ├── session/            # patient sessions bound to visits (+ HTTP handler)
     │   └── postgres/
+    ├── auth/               # staff/admin auth (ADR-0010) — specified, not built yet
+    │   │                   #   password.go  argon2id hash/verify (PHC string)
+    │   │                   #   token.go     HS256 JWT issue/verify + opaque refresh tokens
+    │   │                   #   middleware.go RequireRole for the staff route groups
+    │   └── postgres/       # app_user / role / user_role / refresh_token
     ├── hospitalmap/        # buildings/floors/places/zones read model
     │   └── postgres/
     ├── navigation/         # walkable graph read model: NavNode/NavEdge (ADR-0002)
@@ -100,6 +107,14 @@ module/
 ```
 
 Rules (full detail in ADR-0007): dependencies point inward (handler → service → Repo port ← postgres adapter); services own transaction boundaries via `db.Transactor` and share them through ctx; cross-module calls go through the callee's Service only, never its Repo. Ports/adapters can be adopted progressively without forcing microservices.
+
+Auth wiring: `internal/auth` exposes `RequireRole(service, roles...)`, applied
+per route group in the composition root — never globally, because the patient
+journey read shares a path prefix with staff reads of the same data. The
+resolved principal travels in ctx (`auth.PrincipalFromContext`) so handlers can
+record the actor on audited commands (NFR-09). Configuration: `JWT_SECRET`
+(unset → a random key per boot, with a warning), `ACCESS_TOKEN_TTL` (15m),
+`REFRESH_TOKEN_TTL` (168h).
 
 Error model: modules expose domain error variables built with `apperr.New(kind, message)` (`internal/platform/apperr`); kinds map to statuses 400 invalid, 401 unauthorized, 403 forbidden, 404 not found, 409 conflict, 500 internal, 502 upstream. Only `httpx.Error` (the HTTP boundary) performs the mapping and logging — internal (500) causes are masked to a generic client message while the detail stays in the request log.
 

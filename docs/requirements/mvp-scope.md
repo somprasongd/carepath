@@ -12,7 +12,7 @@ Mirrors the MoSCoW prioritization in the hackathon brief (§5). See [Functional 
 - Navigation from current location to next destination, as step-by-step instructions with distance/time estimate (M5)
 - Shortest-route calculation from the navigation graph — no hardcoded routes (M6)
 - Service-point staff console: call queue, update step status, insert unplanned steps (M7)
-- Authentication and role-based access control (M8)
+- Authentication and role-based access control (M8) — staff/admin username + password login (argon2id), JWT access + refresh tokens, `STAFF`/`ADMIN` roles guarding the staff endpoints ([ADR-0010](../adr/0010-staff-auth-jwt-argon2.md))
 - Mock HIS service and a replaceable HIS adapter interface
 
 ## Should Have — after Must Have works
@@ -45,5 +45,7 @@ Mirrors the MoSCoW prioritization in the hackathon brief (§5). See [Functional 
 - Production-grade Zigbee location precision
 - Complex multi-building routing
 - Full hospital map administration UI (CRUD screens) — data can be seeded/edited without a polished admin UI
+- User-management screens (create/disable a user, reset a password) — MVP users are seeded by migration and managed in the database (ADR-0010)
+- Password reset/change flows, login rate limiting, MFA, and SSO / hospital Active Directory integration
 
 The architecture should allow all of the above later without making them dependencies of the MVP.

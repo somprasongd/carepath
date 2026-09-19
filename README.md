@@ -14,6 +14,7 @@
 - [แนวคิดหลัก](#แนวคิดหลัก)
 - [ภาพรวมสถาปัตยกรรม](#ภาพรวมสถาปัตยกรรม)
 - [User Journey แยกตามบทบาท](#user-journey-แยกตามบทบาท)
+  - [0. การเข้าสู่ระบบของเจ้าหน้าที่](#0-การเข้าสู่ระบบของเจ้าหน้าที่-staff--admin)
   - [1. ผู้ป่วย](#1-ผู้ป่วย-patient)
   - [2. เจ้าหน้าที่จุดบริการ](#2-เจ้าหน้าที่จุดบริการ-service-point-staff)
   - [3. เจ้าหน้าที่ประชาสัมพันธ์ / คัดกรอง](#3-เจ้าหน้าที่ประชาสัมพันธ์--คัดกรอง-registration-staff)
@@ -76,6 +77,7 @@ flowchart TB
     end
 
     subgraph APP["CarePath API · Go + Fiber v3 · modular monolith"]
+      AUTH["auth · login เจ้าหน้าที่<br/>argon2id + JWT · ออกแบบแล้ว"]
       SESSION["session · ยืนยันตัวตน LINE/demo"]
       JOURNEY["journey · planner + projection"]
       SP["servicepoint · service → place"]
@@ -99,6 +101,7 @@ flowchart TB
     LIFF --> SESSION
     LIFF --> JOURNEY
     LIFF --> LOC
+    STAFF --> AUTH
     STAFF --> JOURNEY
     STAFF --> SP
 
@@ -116,7 +119,7 @@ flowchart TB
 | Service | เทคโนโลยี | พอร์ต | หน้าที่ |
 |---|---|---|---|
 | `apps/web` | React + TypeScript + Vite + TanStack Router/Query | `5173` | หน้าจอผู้ป่วย (LIFF) และคอนโซลเจ้าหน้าที่ |
-| `apps/api` | Go + Fiber v3 | `8080` | CarePath API — journey planner, service point, navigation, location, session |
+| `apps/api` | Go + Fiber v3 | `8080` | CarePath API — journey planner, service point, navigation, location, session ผู้ป่วย, auth เจ้าหน้าที่ |
 | `apps/mock-his` | Go + Fiber v3 | `8090` | HIS จำลอง + คอนโซลขับ demo (`/console`) |
 | `postgres` | PostgreSQL 17 | `5432` | projection ของ journey, service point, map, location |
 
@@ -126,12 +129,60 @@ flowchart TB
 
 | บทบาท | เข้าระบบทาง | ทำอะไรได้ | สถานะ |
 |---|---|---|---|
+| เจ้าหน้าที่ทุกบทบาท + ผู้ดูแลระบบ | หน้า `/login` ด้วย username + password | เข้าคอนโซลเจ้าหน้าที่ตามสิทธิ์ของบทบาท (`STAFF` / `ADMIN`) | ออกแบบครบแล้ว ([ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md)) · ยังไม่ implement |
 | ผู้ป่วย | LINE OA → LIFF | ดูเส้นทางทั้งวัน, ดูขั้นตอนถัดไป, นำทางไปจุดบริการ, สแกน QR ระบุตำแหน่ง | ใช้งานได้จริง (ยกเว้น QR ใน UI และเส้นทางแบบ turn-by-turn) |
 | เจ้าหน้าที่จุดบริการ | คอนโซลเจ้าหน้าที่ | ดูผู้ป่วยวันนี้, เปลี่ยนสถานะขั้นตอน, ปิดรอบตรวจของคลินิก | ใช้งานได้จริง (เรียกคิวยังเป็นหน้าจอ demo) |
 | เจ้าหน้าที่ประชาสัมพันธ์ / คัดกรอง | คอนโซลเจ้าหน้าที่ | ค้น visit แล้วดูแผนที่ CarePath คำนวณให้ | ใช้งานได้จริง |
 | ผู้ดูแลระบบ | คอนโซลเจ้าหน้าที่ | ดู mapping จุดบริการ ↔ สถานที่, ผังอาคาร, กติกาการวางแผน | อ่านได้ · หน้าจอแก้ไขยังไม่อยู่ใน MVP |
 | ผู้บริหาร | คอนโซลเจ้าหน้าที่ | dashboard คอขวด/เวลารอเฉลี่ย | ออกแบบไว้ · ยังไม่พัฒนา |
 | ญาติผู้ป่วย | ลิงก์จำกัดเวลา | ติดตามว่าผู้ป่วยอยู่ขั้นตอนไหน | ออกแบบไว้ · ยังไม่พัฒนา |
+
+### 0. การเข้าสู่ระบบของเจ้าหน้าที่ (Staff / Admin)
+
+> **ออกแบบครบแล้ว · ยังไม่ implement** — รายละเอียดทั้งหมดอยู่ใน [ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md) และ contract ใน `packages/contracts/openapi/carepath.yaml`
+
+ผู้ป่วยเข้าระบบผ่าน LINE (`session`) ส่วนเจ้าหน้าที่เข้าด้วย username/password ที่โรงพยาบาลออกให้ (`auth`) — **แยกกันคนละกลไก** เพราะพยาบาลที่จุดบริการไม่มี LINE identity มายืนยัน และผู้ป่วยไม่มีรหัสผ่านในระบบ CarePath
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor S as เจ้าหน้าที่ / ผู้ดูแลระบบ
+    participant W as คอนโซลเจ้าหน้าที่
+    participant A as CarePath API · auth
+    participant DB as PostgreSQL
+
+    S->>W: กรอก username + password ที่ /login
+    W->>A: POST /api/v1/auth/login
+    A->>DB: อ่าน app_user + role ตาม username
+    A->>A: ตรวจรหัสผ่านด้วย argon2id (constant-time)
+    Note over A: ถ้าไม่มี user ก็ยัง verify กับ hash หลอก<br/>เพื่อไม่ให้เดาได้จากเวลาตอบกลับ
+    A->>DB: บันทึก refresh token (เก็บเฉพาะ sha256)
+    A-->>W: access token (JWT 15 นาที) + refresh token (7 วัน) + role
+    W->>W: access token เก็บใน memory · refresh token เก็บใน localStorage
+    W-->>S: เข้าหน้าที่ตรงกับบทบาท (ไม่ได้ให้เลือกบทบาทเอง)
+
+    S->>W: เปลี่ยนสถานะขั้นตอนของผู้ป่วย
+    W->>A: POST .../transition พร้อม header Authorization: Bearer access token
+    A->>A: middleware ตรวจ signature/expiry แล้วอ่าน role จาก token
+    A->>DB: บันทึกว่าใครเป็นคนสั่ง (NFR-09)
+
+    alt access token หมดอายุ
+        W->>A: POST /api/v1/auth/refresh
+        A->>DB: ตรวจว่า refresh token ยังไม่ถูกใช้/ถอน แล้วหมุนใบใหม่
+        A-->>W: access + refresh คู่ใหม่ (ใบเก่าใช้ไม่ได้อีก)
+    else refresh token ที่ถูกใช้ไปแล้วถูกนำมาใช้ซ้ำ
+        A->>DB: ถือว่ารั่ว — ถอน refresh token ทั้งหมดของ user นั้น
+        A-->>W: 401 · ต้อง login ใหม่
+    end
+```
+
+| สิ่งที่ต้องรู้ | ค่า |
+|---|---|
+| บัญชี demo | `admin` / `demo` (ADMIN) · `staff` / `demo` (STAFF) — **รหัสผ่านสาธิตเท่านั้น** hash อยู่ใน migration ที่เปิดสาธารณะ |
+| อายุ token | access 15 นาที (`ACCESS_TOKEN_TTL`) · refresh 7 วัน (`REFRESH_TOKEN_TTL`) |
+| คีย์เซ็น JWT | `JWT_SECRET` — ถ้าไม่ตั้ง API จะสุ่มคีย์ใหม่ทุกครั้งที่บูตพร้อม log warning (token เดิมใช้ไม่ได้หลัง restart) |
+| endpoint ที่ต้องมี token | `GET /api/v1/staff/visits` · `POST .../steps/{stepKey}/transition` · `POST .../clinics/{clinicCode}/close-round` · `GET /api/v1/auth/me` |
+| ยังเปิดอยู่โดยตั้งใจ | `GET /api/v1/journeys/{visitId}`, service point, location, route — หน้าจอผู้ป่วยใช้ endpoint เดียวกัน การผูก journey กับ session ของผู้ป่วยเองเป็นงานอีกก้อน (ADR-0010 §7) |
 
 ### 1. ผู้ป่วย (Patient)
 
@@ -289,7 +340,7 @@ sequenceDiagram
     Note over AD: เปลี่ยนผังอาคารไม่กระทบกติกาการวางแผนเส้นทางการรักษา
 ```
 
-**หมายเหตุสถานะ:** หน้า "ผังจุดบริการ" อ่านข้อมูลจริง · หน้า "ผังอาคาร" ยังเป็น placeholder · หน้าจอ CRUD ผังอาคารอยู่นอกขอบเขต MVP โดยตั้งใจ · การกำหนดสิทธิ์ตามบทบาท (RBAC) ยังเป็นหน้าจอเลือกบทบาทเท่านั้น ยังไม่มี backend
+**หมายเหตุสถานะ:** หน้า "ผังจุดบริการ" อ่านข้อมูลจริง · หน้า "ผังอาคาร" ยังเป็น placeholder · หน้าจอ CRUD ผังอาคารอยู่นอกขอบเขต MVP โดยตั้งใจ · RBAC ออกแบบครบแล้วใน [ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md) (argon2id + JWT, บทบาท `STAFF`/`ADMIN`) แต่ยังไม่ implement — หน้า `/login` ปัจจุบันยังเป็นหน้าจอเลือกบทบาทที่ไม่ได้ยืนยันตัวตนจริง และหน้าจอจัดการผู้ใช้ไม่อยู่ใน MVP (บัญชีสร้างจาก migration แล้วแก้ที่ฐานข้อมูล)
 
 ### 5. ผู้บริหารโรงพยาบาล (Executive)
 
@@ -548,7 +599,8 @@ carepath-monorepo/
 │   │       ├── navigation/   กราฟนำทาง + shortest path
 │   │       ├── location/     QR / manual provider
 │   │       ├── identity/     ตรวจ LINE ID token
-│   │       ├── session/      session token
+│   │       ├── session/      session token ของผู้ป่วย
+│   │       ├── auth/         login เจ้าหน้าที่ · argon2id + JWT (ออกแบบแล้ว)
 │   │       └── platform/     db, logger, apperr, httpx
 │   ├── mock-his/         HIS จำลอง + console ขับ demo
 │   └── web/              React + TS + Vite (มี AGENTS.md ของตัวเอง)
@@ -580,7 +632,7 @@ carepath-monorepo/
 | ระบุตำแหน่งด้วย QR | ⚠️ API พร้อม · ยังไม่ผูกกับ UI |
 | เส้นทาง turn-by-turn + ลากเส้นบนผัง | 🚧 มีใน contract · ยังไม่มี handler |
 | Session ผ่าน LINE LIFF | ⚠️ API พร้อม · ต้องตั้ง `LINE_CHANNEL_ID` |
-| RBAC ตามบทบาท | 🚧 มีหน้าจอเลือกบทบาท · ยังไม่มี backend |
+| Login เจ้าหน้าที่ + RBAC (argon2id · JWT access/refresh) | 📐 ออกแบบครบใน [ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md) + contract · ยังไม่ implement |
 | เรียกคิว / เวลารอ | 🚧 หน้าจอ demo |
 | Dashboard ผู้บริหาร · ลิงก์ให้ญาติ · แจ้งเตือนใกล้ถึงคิว | 🚧 ยังไม่พัฒนา |
 | Zigbee positioning | 🔭 นอกขอบเขต MVP · ออกแบบ interface รองรับไว้แล้ว |
@@ -601,6 +653,7 @@ carepath-monorepo/
 6. Backend เป็น **modular monolith** ไม่แตกเป็น microservices ([ADR-0001](docs/adr/0001-monorepo-modular-monolith.md))
 7. **CarePath เป็นเจ้าของแผนการเดินทาง · HIS เป็นเจ้าของข้อเท็จจริงเชิงคลินิก** ([ADR-0009](docs/adr/0009-carepath-owns-journey-plan.md))
 8. ระบบภายนอก **ไม่ร่วมใน DB transaction** — อ่าน snapshot ให้เสร็จก่อนเปิด transaction ([ADR-0007](docs/adr/0007-hexagonal-modules-transaction-in-context.md))
+9. **ตัวตนผู้ป่วยกับตัวตนเจ้าหน้าที่แยกกัน** — ผู้ป่วยมาจาก LINE (`session`, opaque token) เจ้าหน้าที่มาจาก username/password ของ CarePath (`auth`, JWT + refresh) ห้ามยุบรวมหรือใช้ token ข้ามฝั่ง ([ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md))
 
 ---
 

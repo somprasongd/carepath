@@ -124,6 +124,214 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Staff/admin login (ADR-0010, FR-18). Verifies a username against an argon2id password hash and returns a short-lived JWT access token plus a rotating opaque refresh token. Patients never use this endpoint — they authenticate through POST /api/v1/auth/session with a LINE identity. An unknown username, a wrong password and a deactivated account are deliberately indistinguishable: all three return the same 401 body, and the server spends the same time on all three. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LoginRequest"];
+                };
+            };
+            responses: {
+                /** @description Authenticated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AuthTokens"];
+                    };
+                };
+                /** @description Invalid request body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Invalid credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Exchanges a refresh token for a new access + refresh pair (ADR-0010 §4). Refresh tokens are single-use — this call spends the presented one. Presenting an already-spent token is treated as a leak: every refresh token belonging to that user is revoked and the call returns 401, forcing a real login. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RefreshTokenRequest"];
+                };
+            };
+            responses: {
+                /** @description A new token pair; the presented refresh token is now spent */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AuthTokens"];
+                    };
+                };
+                /** @description Invalid request body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Unknown, expired, revoked, or already-spent refresh token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Revokes the presented refresh token. Idempotent — an unknown, expired or already-revoked token also returns 204, so a client can always clear its own state. The access token is stateless and stays valid until it expires (at most ACCESS_TOKEN_TTL, default 15 minutes). */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RefreshTokenRequest"];
+                };
+            };
+            responses: {
+                /** @description Logged out */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Invalid request body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The staff/admin identity and role codes behind the presented access token (ADR-0010). The web console calls it on boot to restore a session from a stored refresh token. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The authenticated staff identity */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StaffIdentity"];
+                    };
+                };
+                /** @description Missing, malformed, or expired access token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/journeys/{visitId}": {
         parameters: {
             query?: never;
@@ -189,7 +397,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Staff command: transition one step's status (ADR-0009 — CarePath owns step status; this no longer forwards to the HIS). Used by the service-point console to mark a step arrived/in-progress/completed (FR-15) or cancelled. Returns the refreshed journey with the plan recomputed against the new fact — completing a diagnostic step, for instance, may not yet make its follow-up clinic step actionable if the order hasn't resulted (ADR-0009 §5). commandId is an optional caller-assigned idempotency key (a fresh UUID is generated when absent); source names the acting surface for the audit trail. */
+        /** @description Staff command: transition one step's status (ADR-0009 — CarePath owns step status; this no longer forwards to the HIS). Used by the service-point console to mark a step arrived/in-progress/completed (FR-15) or cancelled. Returns the refreshed journey with the plan recomputed against the new fact — completing a diagnostic step, for instance, may not yet make its follow-up clinic step actionable if the order hasn't resulted (ADR-0009 §5). commandId is an optional caller-assigned idempotency key (a fresh UUID is generated when absent); source names the acting surface for the audit trail, while the authenticated user behind the token is recorded as the actor (ADR-0010 §11, NFR-09). */
         post: {
             parameters: {
                 query?: never;
@@ -217,6 +425,24 @@ export interface paths {
                 };
                 /** @description Invalid body or unknown target status */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing, malformed, or expired staff access token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Authenticated, but the user's roles do not allow this action */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -288,6 +514,24 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Journey"];
+                    };
+                };
+                /** @description Missing, malformed, or expired staff access token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Authenticated, but the user's roles do not allow this action */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
                     };
                 };
                 /** @description Visit not found, journey not projected, or the visit has no open round at this clinic */
@@ -564,7 +808,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Staff visit monitor (#37): the projected journey of every visit CarePath knows, freshest sync first — the same per-visit shape as the single-journey read. Reads the CarePath projection only; a visit opened in the HIS but not yet ingested is absent until its first fact lands. Mounted under /api/v1/staff so the NFR-08 auth guard (#43) can cover the group. */
+        /** @description Staff visit monitor (#37): the projected journey of every visit CarePath knows, freshest sync first — the same per-visit shape as the single-journey read. Reads the CarePath projection only; a visit opened in the HIS but not yet ingested is absent until its first fact lands. Mounted under /api/v1/staff so the NFR-08 auth guard covers the whole group with one middleware (ADR-0010 §7). */
         get: {
             parameters: {
                 query?: never;
@@ -581,6 +825,24 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Journey"][];
+                    };
+                };
+                /** @description Missing, malformed, or expired staff access token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Authenticated, but the user's roles do not allow this action */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
                     };
                 };
                 /** @description Internal server error */
@@ -645,6 +907,43 @@ export interface components {
     schemas: {
         Error: {
             error: string;
+        };
+        /** @description Staff/admin credentials (ADR-0010). The demo deployment seeds admin/demo (ADMIN) and staff/demo (STAFF) — demo credentials only. */
+        LoginRequest: {
+            /** @example staff */
+            username: string;
+            /**
+             * Format: password
+             * @example demo
+             */
+            password: string;
+        };
+        RefreshTokenRequest: {
+            refreshToken: string;
+        };
+        /** @description The credential pair issued by login and refresh. accessToken is an HS256 JWT carrying sub/username/roles/typ=access; refreshToken is an opaque random string the server keeps only as a SHA-256 hash, and is spent by the next refresh. */
+        AuthTokens: {
+            accessToken: string;
+            refreshToken: string;
+            /**
+             * Format: date-time
+             * @description When accessToken expires (ACCESS_TOKEN_TTL, default 15m).
+             */
+            expiresAt: string;
+            /**
+             * Format: date-time
+             * @description When refreshToken expires (REFRESH_TOKEN_TTL, default 7d).
+             */
+            refreshExpiresAt: string;
+            identity: components["schemas"]["StaffIdentity"];
+        };
+        /** @description A staff/admin user. Not interchangeable with Identity, which describes a patient's external (LINE) identity. */
+        StaffIdentity: {
+            userId: string;
+            username: string;
+            displayName: string;
+            /** @description Role codes granted to this user (ADR-0010 §5). The console derives its landing screen and visible actions from these — a user never picks their own role. */
+            roles: ("ADMIN" | "STAFF")[];
         };
         /** @description Links a service code to a physical Place in the hospital map. Place is the resolved destination (place + floor); null when the place is not in the map yet — the same explicit unmapped state as a null servicePoint on a journey step (#24). */
         ServicePoint: {

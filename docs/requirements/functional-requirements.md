@@ -68,9 +68,20 @@ An order placed mid-visit (e.g. a doctor ordering an extra test) is automaticall
 
 CarePath displays the current queue length at a service point and an estimated wait time derived from the number of outstanding tickets.
 
-## FR-18 Authentication and role-based access control — *Must (M8)*
+## FR-18 Authentication and role-based access control — *Must (M8)* — MVP slice defined by ADR-0010
 
-Users authenticate before using staff/admin/executive functions. Access to data and actions is restricted by role; a patient can see only their own visit data.
+Users authenticate before using staff/admin functions. Access to data and actions is restricted by role; a patient can see only their own visit data.
+
+The MVP slice, per [ADR-0010](../adr/0010-staff-auth-jwt-argon2.md):
+
+- Staff and admins log in with a username and password issued by the hospital. Passwords are stored as argon2id hashes and verified server-side (see [NFR-08](non-functional-requirements.md)).
+- A successful login returns a short-lived JWT access token (15 min) and a rotating, revocable refresh token (7 days). The access token carries the user's role codes.
+- Two roles exist in the MVP — `STAFF` and `ADMIN` — held in a many-to-many user↔role model so more roles (an `EXECUTIVE` for FR-22, or a split of `STAFF` into registration and service-point) are data, not a schema change.
+- A user never chooses their own role: it comes from the token, and the console derives its landing screen and available actions from it.
+- Every staff/admin endpoint (`/api/v1/staff/*`, step transitions, the clinic-round override) requires a valid token with a permitted role; patient-facing endpoints are not blocked by the guard.
+- The acting user is recorded on every command for the audit trail ([NFR-09](non-functional-requirements.md)).
+
+Deliberately **not** in the MVP slice, and tracked separately: binding `GET /api/v1/journeys/{visitId}` to the requesting patient's own session (the "patient sees only their own data" half of this requirement), user-management screens (FR-18 via [US-17](user-stories.md#us-17-manage-user-roles-and-access--must-m8)), password reset/change, login rate limiting, and SSO.
 
 ## FR-19 Multi-language support — *Should (S4)*
 

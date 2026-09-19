@@ -20,9 +20,11 @@ flowchart TB
 
     LIFF --> API
     ADMIN --> API
+    API --> AUTH
     LIFF --> RT
 
     subgraph CORE[CarePath Core]
+      AUTH[Auth / RBAC]
       VISIT[Visit]
       JOURNEY[Journey / Care Graph]
       SP[ServicePoint]
@@ -80,6 +82,7 @@ flowchart TB
 | Navigation Graph | Calculates a route through walkable nodes and edges |
 | Location Provider | Resolves the patient's current place/zone |
 | LINE LIFF/Web | Presents journey and navigation |
+| Auth | Authenticates staff/admin users (argon2id password → JWT access + rotating refresh token) and carries their roles into every request; patients authenticate separately via LINE ([ADR-0010](../adr/0010-staff-auth-jwt-argon2.md)) |
 
 ## Key principle
 

@@ -34,6 +34,12 @@ Physical place on a floor plan.
 ### Navigation Node / Edge
 Walkable graph used to calculate routes.
 
+### StaffUser / Role
+A staff or admin account CarePath owns: username, argon2id password hash, display name, active flag, and one or more roles (`STAFF`, `ADMIN` in the MVP) granted many-to-many. Distinct from the patient identity, which CarePath does not own — it comes from LINE and is only ever borrowed for the length of a session ([ADR-0010](../adr/0010-staff-auth-jwt-argon2.md)).
+
+### RefreshToken
+A revocable, single-use credential a staff session is renewed with. Stored as a hash, with issued/expiry timestamps plus "spent" and "revoked" markers; rotation replaces it on every use, and replaying a spent one revokes the user's whole set.
+
 ### TagAssignment
 Optional mapping of an active visit to a Zigbee tag.
 
@@ -42,6 +48,10 @@ Normalized observation from QR, Zigbee, or another provider.
 
 ```mermaid
 erDiagram
+    STAFF_USER ||--o{ USER_ROLE : has
+    ROLE ||--o{ USER_ROLE : "granted to"
+    STAFF_USER ||--o{ REFRESH_TOKEN : holds
+    STAFF_USER ||--o{ COMMAND_AUDIT : performs
     VISIT ||--o{ CLINIC_ROUND : assigned_to
     VISIT ||--o{ ORDER : places
     VISIT ||--o{ VISIT_STEP : plans_as
@@ -66,3 +76,5 @@ erDiagram
 6. A `VisitStep` that is `STARTED`, `COMPLETED`, or `CANCELLED` is history: replanning never removes or reorders it (ADR-0009 §7).
 7. `VisitStep`s sharing a planning phase carry no order between them; more than one may be `READY` at once (ADR-0009 §6).
 8. The patient's display name (ADR-0009 §8) is the only demographic CarePath stores beyond the opaque HN/VN references, and only for staff-facing reads.
+9. A `StaffUser` never carries a patient identity and a patient session never carries a role — the two identity kinds are separate models with separate stores (ADR-0010 §1).
+10. A password exists only as an argon2id hash and a refresh token only as its SHA-256 hash; neither the plaintext password nor the raw refresh token is ever persisted or logged (NFR-08).

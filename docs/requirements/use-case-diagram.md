@@ -28,6 +28,7 @@ flowchart LR
         UC13(["Manage users &amp; roles"])
         UC14(["View bottleneck &amp;<br/>wait-time dashboard"])
         UC15(["Sync visit / service state<br/>with HIS"])
+        UC16(["Log in to the console<br/>(staff / admin)"])
     end
 
     Patient --> UC1
@@ -38,12 +39,16 @@ flowchart LR
     Patient --> UC6
     Relative --> UC7
     RegStaff --> UC8
+    RegStaff --> UC16
     SPStaff --> UC9
     SPStaff --> UC10
+    SPStaff --> UC16
     Admin --> UC11
     Admin --> UC12
     Admin --> UC13
+    Admin --> UC16
     Exec --> UC14
+    Exec --> UC16
 
     UC3 -. include .-> UC4
     UC2 -. include .-> UC15
@@ -54,7 +59,7 @@ flowchart LR
 
 ## Notes
 
-- **Authentication & role-based access (FR-18)** applies across every staff/admin/executive use case (UC8–UC14) and is omitted from the diagram as an edge to avoid clutter — treat it as a precondition of the system boundary, not a separate use case.
+- **Authentication & role-based access (FR-18)** applies across every staff/admin/executive use case: **UC8–UC14 each `include` UC16**, drawn here as actor edges rather than seven include edges to keep the diagram readable. Per [ADR-0010](../adr/0010-staff-auth-jwt-argon2.md) the MVP implements UC16 for two roles (`STAFF`, `ADMIN`) with argon2id passwords and JWT access/refresh tokens; **UC13 (manage users & roles) has no screen in the MVP** — accounts are seeded by migration and edited in the database, while the *enforcement* it exists to configure is real. Patient use cases (UC1–UC7) are not behind UC16: patients authenticate through LINE (UC1), a separate mechanism with its own session token.
 - **UC15 (Sync visit/service state with HIS)** is the canonical event/command boundary defined in [ADR-0008](../adr/0008-his-canonical-event-contract.md): the HIS remains the system of record for visit/step status, and CarePath actions (queue call, step completion, unplanned-step insertion) are forwarded as commands rather than written directly. Visit opening and service ordering (UC8) happen in the HIS itself — CarePath only reads the resulting events, so UC8 has no command edge into UC15.
 - **UC3 includes UC4** because route calculation needs a resolved starting point; when no QR scan has happened yet, the patient falls back to manual location selection (see [ADR-0004](../adr/0004-location-provider-abstraction.md)).
 
@@ -74,6 +79,7 @@ flowchart LR
 | Service-point staff | UC10 Insert unplanned step | [US-15](user-stories.md#us-15-insert-an-unplanned-step--must-m7) | FR-16 |
 | Hospital admin | UC11 Manage hospital map & service points | [US-05](user-stories.md#us-05-configure-service-point-mapping--must-m1), [US-06](user-stories.md#us-06-update-floornavigation-data--must-m1-m6) | FR-05, FR-11 |
 | Hospital admin | UC12 Manage pathway templates | [US-16](user-stories.md#us-16-create-and-edit-care-pathway-templates--must-m2) | FR-13 |
-| Hospital admin | UC13 Manage users & roles | [US-17](user-stories.md#us-17-manage-user-roles-and-access--must-m8) | FR-18 |
+| Hospital admin | UC13 Manage users & roles | [US-17](user-stories.md#us-17-manage-user-roles-and-access--must-m8) | FR-18 (enforcement only in MVP; no management screen — ADR-0010) |
+| Registration / service-point staff, admin, executive | UC16 Log in to the console | [US-22](user-stories.md#us-22-log-in-to-the-staff-console--must-m8--added-by-adr-0010) | FR-18 |
 | Hospital executive | UC14 View bottleneck & wait-time dashboard | [US-18](user-stories.md#us-18-view-bottlenecks-and-average-wait-time--should-s7) | FR-22 |
 | System (HIS integration) | UC15 Sync visit/service state with HIS | [US-07](user-stories.md#us-07-develop-without-a-production-his--must-supports-m3m7), [US-08](user-stories.md#us-08-replace-mock-his-with-a-real-adapter--non-functional-maintainability) | FR-09, FR-10 |

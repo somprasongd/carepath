@@ -74,6 +74,7 @@ These come from the ADRs in `docs/adr/` and are load-bearing:
 4. Location is abstracted behind a provider interface (ADR-0004): QR is baseline, Zigbee is optional/phase 2, manual selection is fallback/debug. New location sources implement this interface rather than being special-cased.
 5. API contracts between CarePath and Mock HIS are REST/JSON, defined in version-controlled OpenAPI under `packages/contracts/openapi/` (ADR-0006). Treat that directory as the source of truth for request/response shapes — don't let handlers drift from it silently.
 6. Keep the backend a modular monolith (ADR-0001) rather than splitting into microservices; monorepo is intentional for hackathon-speed coordination.
+7. Patient identity and staff identity are **separate mechanisms** (ADR-0010): patients get an opaque session token from a verified LINE identity (`internal/session`), staff/admin get an argon2id password login returning a JWT access token plus a rotating refresh token (`internal/auth`). Neither token is accepted by the other's surface, and the two must not be merged into one table or one middleware.
 
 If a change would cross one of these boundaries, flag it and check whether it needs a new/updated ADR in `docs/adr/` before implementing.
 
