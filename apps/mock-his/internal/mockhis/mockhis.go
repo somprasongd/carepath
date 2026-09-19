@@ -333,10 +333,18 @@ func (s *Store) Transition(visitID string, sequence int, cmd TransitionCommand) 
 				break
 			}
 		}
-		if s.openSteps(v) == 0 && v.Status == VisitActive {
+	}
+	// Closing the last open step ends the visit: completing it completes the
+	// visit, cancelling it cancels the visit. Both are upstream HIS facts,
+	// reported as visit.updated events.
+	if (cmd.To == StepCompleted || cmd.To == StepCancelled) &&
+		s.openSteps(v) == 0 && v.Status == VisitActive {
+		if cmd.To == StepCompleted {
 			v.Status = VisitCompleted
-			s.append(EventVisitUpdated, v, map[string]any{"status": v.Status})
+		} else {
+			v.Status = VisitCancelled
 		}
+		s.append(EventVisitUpdated, v, map[string]any{"status": v.Status})
 	}
 	return step, nil
 }
@@ -349,6 +357,38 @@ func (s *Store) openSteps(v *Visit) int {
 		}
 	}
 	return n
+}
+
+// CancelVisit cancels an ACTIVE visit outright: every open step is cancelled
+// (canonical service.cancelled each) and the visit itself becomes CANCELLED
+// (canonical visit.updated). Cancelling an already-CANCELLED visit is a no-op;
+// a COMPLETED visit cannot be cancelled.
+func (s *Store) CancelVisit(visitID string) (Visit, *Error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	v, ok := s.visits[visitID]
+	if !ok {
+		return Visit{}, &Error{Kind: ErrNotFound, Msg: "visit not found"}
+	}
+	switch v.Status {
+	case VisitCancelled:
+		return *copyVisit(v), nil
+	case VisitCompleted:
+		return Visit{}, &Error{Kind: ErrConflict, Msg: "visit is COMPLETED and cannot be cancelled"}
+	}
+
+	for i := range v.Steps {
+		if v.Steps[i].Status != StepCompleted && v.Steps[i].Status != StepCancelled {
+			v.Steps[i].Status = StepCancelled
+			s.append(EventServiceCancelled, v, map[string]any{
+				"sequence": v.Steps[i].Sequence, "serviceCode": v.Steps[i].ServiceCode,
+			})
+		}
+	}
+	v.Status = VisitCancelled
+	s.append(EventVisitUpdated, v, map[string]any{"status": v.Status})
+	return *copyVisit(v), nil
 }
 
 // EventServiceType maps a target step status to its service.* event type.
