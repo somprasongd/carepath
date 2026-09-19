@@ -17,9 +17,9 @@ import { Route as PatientJourneyRouteImport } from './routes/patient/journey'
 import { Route as PatientNavigateRouteImport } from './routes/patient/navigate'
 import { Route as StaffFloorPlanRouteImport } from './routes/staff/floor-plan'
 import { Route as StaffOverviewRouteImport } from './routes/staff/overview'
+import { Route as StaffPathwayTemplatesRouteImport } from './routes/staff/pathway-templates'
 import { Route as StaffPatientsRouteImport } from './routes/staff/patients'
 import { Route as StaffQueueRouteImport } from './routes/staff/queue'
-import { Route as StaffRegisterRouteImport } from './routes/staff/register'
 import { Route as StaffServicePointsRouteImport } from './routes/staff/service-points'
 
 const IndexRoute = IndexRouteImport.update({
@@ -62,6 +62,11 @@ const StaffOverviewRoute = StaffOverviewRouteImport.update({
   path: '/staff/overview',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StaffPathwayTemplatesRoute = StaffPathwayTemplatesRouteImport.update({
+  id: '/staff/pathway-templates',
+  path: '/staff/pathway-templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StaffPatientsRoute = StaffPatientsRouteImport.update({
   id: '/staff/patients',
   path: '/staff/patients',
@@ -70,11 +75,6 @@ const StaffPatientsRoute = StaffPatientsRouteImport.update({
 const StaffQueueRoute = StaffQueueRouteImport.update({
   id: '/staff/queue',
   path: '/staff/queue',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const StaffRegisterRoute = StaffRegisterRouteImport.update({
-  id: '/staff/register',
-  path: '/staff/register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StaffServicePointsRoute = StaffServicePointsRouteImport.update({
@@ -92,9 +92,9 @@ export interface FileRoutesByFullPath {
   '/patient/navigate': typeof PatientNavigateRoute
   '/staff/floor-plan': typeof StaffFloorPlanRoute
   '/staff/overview': typeof StaffOverviewRoute
+  '/staff/pathway-templates': typeof StaffPathwayTemplatesRoute
   '/staff/patients': typeof StaffPatientsRoute
   '/staff/queue': typeof StaffQueueRoute
-  '/staff/register': typeof StaffRegisterRoute
   '/staff/service-points': typeof StaffServicePointsRoute
 }
 export interface FileRoutesByTo {
@@ -106,9 +106,9 @@ export interface FileRoutesByTo {
   '/patient/navigate': typeof PatientNavigateRoute
   '/staff/floor-plan': typeof StaffFloorPlanRoute
   '/staff/overview': typeof StaffOverviewRoute
+  '/staff/pathway-templates': typeof StaffPathwayTemplatesRoute
   '/staff/patients': typeof StaffPatientsRoute
   '/staff/queue': typeof StaffQueueRoute
-  '/staff/register': typeof StaffRegisterRoute
   '/staff/service-points': typeof StaffServicePointsRoute
 }
 export interface FileRoutesById {
@@ -121,9 +121,9 @@ export interface FileRoutesById {
   '/patient/navigate': typeof PatientNavigateRoute
   '/staff/floor-plan': typeof StaffFloorPlanRoute
   '/staff/overview': typeof StaffOverviewRoute
+  '/staff/pathway-templates': typeof StaffPathwayTemplatesRoute
   '/staff/patients': typeof StaffPatientsRoute
   '/staff/queue': typeof StaffQueueRoute
-  '/staff/register': typeof StaffRegisterRoute
   '/staff/service-points': typeof StaffServicePointsRoute
 }
 export interface FileRouteTypes {
@@ -137,9 +137,9 @@ export interface FileRouteTypes {
     | '/patient/navigate'
     | '/staff/floor-plan'
     | '/staff/overview'
+    | '/staff/pathway-templates'
     | '/staff/patients'
     | '/staff/queue'
-    | '/staff/register'
     | '/staff/service-points'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -151,9 +151,9 @@ export interface FileRouteTypes {
     | '/patient/navigate'
     | '/staff/floor-plan'
     | '/staff/overview'
+    | '/staff/pathway-templates'
     | '/staff/patients'
     | '/staff/queue'
-    | '/staff/register'
     | '/staff/service-points'
   id:
     | '__root__'
@@ -165,9 +165,9 @@ export interface FileRouteTypes {
     | '/patient/navigate'
     | '/staff/floor-plan'
     | '/staff/overview'
+    | '/staff/pathway-templates'
     | '/staff/patients'
     | '/staff/queue'
-    | '/staff/register'
     | '/staff/service-points'
   fileRoutesById: FileRoutesById
 }
@@ -178,9 +178,9 @@ export interface RootRouteChildren {
   PatientRoute: typeof PatientRouteWithChildren
   StaffFloorPlanRoute: typeof StaffFloorPlanRoute
   StaffOverviewRoute: typeof StaffOverviewRoute
+  StaffPathwayTemplatesRoute: typeof StaffPathwayTemplatesRoute
   StaffPatientsRoute: typeof StaffPatientsRoute
   StaffQueueRoute: typeof StaffQueueRoute
-  StaffRegisterRoute: typeof StaffRegisterRoute
   StaffServicePointsRoute: typeof StaffServicePointsRoute
 }
 
@@ -242,6 +242,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StaffOverviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/staff/pathway-templates': {
+      id: '/staff/pathway-templates'
+      path: '/staff/pathway-templates'
+      fullPath: '/staff/pathway-templates'
+      preLoaderRoute: typeof StaffPathwayTemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/staff/patients': {
       id: '/staff/patients'
       path: '/staff/patients'
@@ -254,13 +261,6 @@ declare module '@tanstack/react-router' {
       path: '/staff/queue'
       fullPath: '/staff/queue'
       preLoaderRoute: typeof StaffQueueRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/staff/register': {
-      id: '/staff/register'
-      path: '/staff/register'
-      fullPath: '/staff/register'
-      preLoaderRoute: typeof StaffRegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/staff/service-points': {
@@ -293,9 +293,9 @@ const rootRouteChildren: RootRouteChildren = {
   PatientRoute: PatientRouteWithChildren,
   StaffFloorPlanRoute: StaffFloorPlanRoute,
   StaffOverviewRoute: StaffOverviewRoute,
+  StaffPathwayTemplatesRoute: StaffPathwayTemplatesRoute,
   StaffPatientsRoute: StaffPatientsRoute,
   StaffQueueRoute: StaffQueueRoute,
-  StaffRegisterRoute: StaffRegisterRoute,
   StaffServicePointsRoute: StaffServicePointsRoute,
 }
 export const routeTree = rootRouteImport

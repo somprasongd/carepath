@@ -52,9 +52,9 @@ When Zigbee is enabled, incoming observations can update the normalized current 
 
 An administrator can create, edit, and version Care Pathway Templates, each composed of an ordered list of steps with before/after prerequisite constraints between steps.
 
-## FR-14 Patient registration — *Must (M3)*
+## FR-14 Pathway-template service-code checklist — *Must (M3)*
 
-Registration/screening staff can register a patient's visit for the day and assign a Pathway Template. CarePath auto-generates that patient's ordered `VisitStep` list from the template.
+Registration/screening staff can select a Care Pathway Template and see its ordered service-code checklist, to enter into the HIS when opening the patient's visit there. Per ADR-0008 the HIS is the sole system of record for visit opening and service ordering — CarePath does not create the visit or write its steps; the projected `VisitStep` list appears only once the HIS reports the corresponding `service.requested` events.
 
 ## FR-15 Service-point staff console — *Must (M7)*
 

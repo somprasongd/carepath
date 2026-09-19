@@ -20,7 +20,7 @@ Full narrative: [Product Requirements](../requirements/product-requirements.md).
 | Actor | Role in the system |
 |---|---|
 | Patient / relative | Views their own visit journey, gets routed to the next step, receives queue notifications; a relative can follow progress via a shared link |
-| Registration / screening staff | Registers a patient's visit for the day and assigns a Care Pathway Template |
+| Registration / screening staff | Picks a Care Pathway Template and reads off its service-code checklist to enter into the HIS when opening the patient's visit there |
 | Service-point staff | Calls the queue, updates step status, inserts unplanned steps |
 | Hospital admin | Maintains hospital map data, service-point mapping, pathway templates, and user/role access |
 | Hospital executive | Views wait-time and bottleneck reporting across service points |
@@ -34,7 +34,7 @@ Full detail and current build status: [MVP Scope](../requirements/mvp-scope.md).
 |---|---|---|---|
 | M1 | Hospital map data: buildings, floors, places/service points, connecting routes | Must | [FR-05](../requirements/functional-requirements.md), [FR-11](../requirements/functional-requirements.md) |
 | M2 | Care Pathway Template management | Must | [FR-13](../requirements/functional-requirements.md) |
-| M3 | Patient registration + auto-generated visit steps from template | Must | [FR-14](../requirements/functional-requirements.md) |
+| M3 | Pathway-template service-code checklist for registration staff | Must | [FR-14](../requirements/functional-requirements.md) |
 | M4 | Patient journey screen (steps, status, what's next) | Must | [FR-03](../requirements/functional-requirements.md) |
 | M5 | Step-by-step navigation instructions with distance/time | Must | [FR-04](../requirements/functional-requirements.md), [FR-08](../requirements/functional-requirements.md) |
 | M6 | Shortest-route calculation from graph data (no hardcoded routes) | Must | [FR-07](../requirements/functional-requirements.md) |
@@ -71,7 +71,7 @@ Full detail: [Functional Requirements](../requirements/functional-requirements.m
 | FR-11 | Staff can configure buildings/floors/places/service points and their mappings |
 | FR-12 | Zigbee observations can update location without touching journey-domain code |
 | FR-13 | Admin creates/edits/versions Care Pathway Templates with step ordering and prerequisites |
-| FR-14 | Registration staff registers a visit and assigns a template; visit steps auto-generate |
+| FR-14 | Registration staff picks a pathway template and sees its service-code checklist for the HIS; HIS remains sole system of record for visit opening (ADR-0008) |
 | FR-15 | Service-point staff call the queue and update step status |
 | FR-16 | Staff insert an unplanned step without breaking prerequisite ordering |
 | FR-17 | Display queue length and estimated wait time per service point |
@@ -118,7 +118,7 @@ Full stories with acceptance rationale: [User Stories](../requirements/user-stor
 | US-10 | Patient | be notified when my queue is near | I can rest elsewhere without missing my turn | Should (S6) |
 | US-11 | Patient | switch the app to English | I can understand my journey as a foreign patient | Should (S4) |
 | US-12 | Relative | follow the patient's current step via a shared link | I can arrive to pick them up on time | Could (C2) |
-| US-13 | Registration staff | register a visit and assign a pathway template | visit steps auto-generate for that patient | Must (M3) |
+| US-13 | Registration staff | pick a pathway template and see its service-code checklist | I enter the correct codes into the HIS when opening the visit | Must (M3) |
 | US-14 | Service-point staff | call the queue and mark a step complete | the patient auto-advances to the next step | Must (M7) |
 | US-15 | Service-point staff | send a patient to an extra unplanned step | the visit plan matches reality without breaking ordering | Must (M7) |
 | US-05 | Hospital admin | map a logical service (e.g. LAB) to a physical place | workflow changes are independent of floor-plan design | Must (M1) |
@@ -154,7 +154,7 @@ flowchart LR
         UC5(["Get queue-proximity notification"])
         UC6(["Switch language / accessibility mode"])
         UC7(["Track visit progress<br/>via shared link"])
-        UC8(["Register visit &amp;<br/>assign pathway template"])
+        UC8(["View pathway-template<br/>service-code checklist"])
         UC9(["Call queue /<br/>update step status"])
         UC10(["Insert unplanned step"])
         UC11(["Manage hospital map &amp;<br/>service-point mapping"])
@@ -181,13 +181,12 @@ flowchart LR
 
     UC3 -. include .-> UC4
     UC2 -. include .-> UC15
-    UC8 -. include .-> UC15
     UC9 -. include .-> UC15
     UC10 -. include .-> UC15
     UC15 --> HIS
 ```
 
-Authentication and role-based access (FR-18) is a precondition of every staff/admin/executive use case (UC8–UC14) and is omitted as an edge to keep the diagram readable.
+Authentication and role-based access (FR-18) is a precondition of every staff/admin/executive use case (UC8–UC14) and is omitted as an edge to keep the diagram readable. UC8 has no edge into UC15: per ADR-0008 the HIS opens the visit and orders services itself, so CarePath only reads the resulting events rather than sending a command.
 
 ## 1.8 Key design constraints (from the brief and ADRs)
 

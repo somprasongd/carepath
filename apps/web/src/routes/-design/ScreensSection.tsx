@@ -2,7 +2,7 @@ import { NavigateScreen } from '../patient/-NavigateScreen'
 import { LoginScreen } from '../-LoginScreen'
 import { Overview } from '../staff/-Overview'
 import { Queue } from '../staff/-Queue'
-import { Register } from '../staff/-Register'
+import { PathwayTemplates } from '../staff/-PathwayTemplates'
 import { ServicePoints } from '../staff/-ServicePoints'
 import { ReferenceJourney } from './ReferenceJourney'
 import { ScreenFrame, Section, SubHead } from './CatalogueParts'
@@ -22,10 +22,11 @@ export function ScreensSection() {
           ใน <code>src/routes/</code> — เลื่อนภายในกรอบได้ และกดเมนูของเจ้าหน้าที่ได้ (เมนูจะพาไปที่ URL
           จริง) หน้าเจ้าหน้าที่เป็นคอมโพเนนต์เดียว ปรับเองตามความกว้างของกรอบด้วย container query —
           ไม่ใช่สองหน้าที่แยกกัน ต่อจากนั้นคือ 3 หน้าจอที่ปิดช่องว่างใน{' '}
-          <code>docs/deliverables/03-prototype-wireframe.md</code> §3.3 (เข้าสู่ระบบ, ลงทะเบียน,
+          <code>docs/deliverables/03-prototype-wireframe.md</code> §3.3 (เข้าสู่ระบบ, แผนการดูแล,
           เรียกคิว) — ออกแบบไว้ก่อนใน canvas เดียวกัน แล้วนำมาสร้างเป็นคอมโพเนนต์จริงที่นี่ ปรับตาม
           ความกว้างของกรอบด้วย container query เหมือนหน้าเจ้าหน้าที่ชุดเดิม จึงมีทั้งเวอร์ชันมือถือและ
-          เดสก์ท็อป
+          เดสก์ท็อป หน้า "แผนการดูแล" เปลี่ยนบทบาทไปจากดีไซน์เดิมใน canvas — ดูเหตุผลใน
+          §3.3
         </>
       }
     >
@@ -62,29 +63,29 @@ export function ScreensSection() {
       </div>
 
       <SubHead>
-        เจ้าหน้าที่ · เข้าสู่ระบบ, ลงทะเบียน, เรียกคิว · มือถือ (FR-13, FR-14, FR-15, FR-16, FR-18)
+        เจ้าหน้าที่ · เข้าสู่ระบบ, แผนการดูแล, เรียกคิว · มือถือ (FR-13, FR-14, FR-15, FR-16, FR-18)
       </SubHead>
       <div className="ds-frames">
         <ScreenFrame title="เข้าสู่ระบบ · เลือกบทบาท" {...MOBILE}>
           <LoginScreen onSignIn={() => {}} />
         </ScreenFrame>
-        <ScreenFrame title="ลงทะเบียนผู้ป่วย" {...MOBILE}>
-          <Register />
+        <ScreenFrame title="แผนการดูแล (Pathway Template)" {...MOBILE}>
+          <PathwayTemplates />
         </ScreenFrame>
         <ScreenFrame title="เรียกคิว" {...MOBILE}>
           <Queue />
         </ScreenFrame>
       </div>
 
-      <SubHead>เจ้าหน้าที่ · เข้าสู่ระบบ, ลงทะเบียน, เรียกคิว · เดสก์ท็อป</SubHead>
+      <SubHead>เจ้าหน้าที่ · เข้าสู่ระบบ, แผนการดูแล, เรียกคิว · เดสก์ท็อป</SubHead>
       <div className="ds-frames">
         <ScreenFrame title="เข้าสู่ระบบ · เลือกบทบาท" {...DESKTOP}>
           <LoginScreen onSignIn={() => {}} />
         </ScreenFrame>
       </div>
       <div className="ds-frames mt-6">
-        <ScreenFrame title="ลงทะเบียนผู้ป่วย" {...DESKTOP}>
-          <Register />
+        <ScreenFrame title="แผนการดูแล (Pathway Template)" {...DESKTOP}>
+          <PathwayTemplates />
         </ScreenFrame>
       </div>
       <div className="ds-frames mt-6">

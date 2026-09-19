@@ -194,8 +194,8 @@ export const staffRoleOptions: StaffRoleOption[] = [
   {
     id: 'registration',
     label: 'เจ้าหน้าที่ลงทะเบียน',
-    scope: 'เปิด visit ของวันนี้ และกำหนดแผนการดูแลให้ผู้ป่วย',
-    landing: '/staff/register',
+    scope: 'ดูรายการรหัสบริการตามแผนการดูแล เพื่อกรอกเข้า HIS ตอนเปิด visit',
+    landing: '/staff/pathway-templates',
     story: 'US-13',
   },
   {
@@ -221,7 +221,13 @@ export const staffRoleOptions: StaffRoleOption[] = [
   },
 ]
 
-/* ── Registration · pathway templates (FR-13, FR-14) ──────────────────── */
+/*
+ * ── Pathway templates (FR-13, FR-14) ────────────────────────────────────
+ * Per ADR-0008 the HIS opens the visit and orders services itself — these
+ * are reference checklists staff read off (or copy) into the HIS, not data
+ * CarePath sends anywhere. Every step's `code` is a real service code, since
+ * it's meant to be typed into the HIS's own service-code field verbatim.
+ */
 
 export type TemplateStep = { title: string; code: string }
 
@@ -252,7 +258,6 @@ export const pathwayTemplates: PathwayTemplate[] = [
     steps: [
       { title: 'ลงทะเบียน', code: 'REG-01' },
       { title: 'เจาะเลือด', code: 'LAB-01' },
-      { title: 'รอผลแล็บ', code: 'LAB-WAIT' },
       { title: 'ตรวจที่ห้องตรวจ OPD', code: 'OPD-EXAM-01' },
       { title: 'การเงิน', code: 'CASHIER-01' },
       { title: 'รับยา', code: 'PHARMACY-01' },
@@ -271,15 +276,6 @@ export const pathwayTemplates: PathwayTemplate[] = [
     ],
   },
 ]
-
-/** What the HIS returns for a looked-up HN — CarePath never stores this. */
-export const patientLookup = {
-  hn: '0012345',
-  name: 'นายสมชาย ใจดี',
-  age: '58 ปี',
-  coverage: 'สิทธิหลักประกันสุขภาพถ้วนหน้า',
-  appointment: 'คลินิกอายุรกรรม · 09:30 น.',
-}
 
 /* ── Service point · queue console (FR-15, FR-16) ─────────────────────── */
 
