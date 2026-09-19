@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/api/client'
 import type { Journey, JourneyStep } from './queries'
-import { thaiStepTitle, toJourneySteps, visitLoadErrorMessage } from './journey'
+import {
+  journeyProgress,
+  journeyProgressLabel,
+  thaiStepTitle,
+  toJourneySteps,
+  visitLoadErrorMessage,
+  visitOutcome,
+} from './journey'
 
 function step(overrides: Partial<JourneyStep>): JourneyStep {
   return {
@@ -129,6 +136,63 @@ describe('thaiStepTitle', () => {
     // outside the schema's StepKind union, exercising the fallback for a
     // kind the client's type does not yet know about.
     expect(thaiStepTitle({ kind: 'UNKNOWN', clinicCode: null, round: null })).toBe('UNKNOWN')
+  })
+})
+
+describe('journeyProgress', () => {
+  it('counts completed steps over the whole plan', () => {
+    // Factory shape: registration done, lab READY, clinic pending.
+    expect(journeyProgress(journey())).toEqual({ done: 1, total: 3 })
+  })
+
+  it('keeps cancelled steps in the total — the rail still recaps them', () => {
+    const j = journey({
+      steps: [
+        step({ stepKey: 'REGISTRATION', kind: 'REGISTRATION', status: 'COMPLETED' }),
+        step({ stepKey: 'XRAY:1', kind: 'XRAY', status: 'CANCELLED' }),
+        step({ stepKey: 'CASHIER', kind: 'CASHIER', status: 'PENDING' }),
+      ],
+      actionable: [],
+      recommended: null,
+    })
+    expect(journeyProgress(j)).toEqual({ done: 1, total: 3 })
+  })
+
+  it('is full when every step is completed', () => {
+    const j = journey({
+      steps: [step({ stepKey: 'REGISTRATION', kind: 'REGISTRATION', status: 'COMPLETED' })],
+      actionable: [],
+      recommended: null,
+      completed: true,
+      status: 'COMPLETED',
+    })
+    expect(journeyProgress(j)).toEqual({ done: 1, total: 1 })
+  })
+})
+
+describe('journeyProgressLabel', () => {
+  it('composes the plain-Thai progress line', () => {
+    expect(journeyProgressLabel(journey())).toBe('ความคืบหน้า · เสร็จแล้ว 1 จาก 3 ขั้นตอน')
+  })
+})
+
+describe('visitOutcome', () => {
+  it('maps the contract finished signal to completed', () => {
+    expect(
+      visitOutcome(journey({ completed: true, status: 'COMPLETED', actionable: [], recommended: null })),
+    ).toBe('completed')
+  })
+
+  it('maps a cancelled visit status to cancelled even with steps unfinished', () => {
+    expect(visitOutcome(journey({ status: 'CANCELLED' }))).toBe('cancelled')
+  })
+
+  it('prefers cancelled if both signals are ever set', () => {
+    expect(visitOutcome(journey({ status: 'CANCELLED', completed: true }))).toBe('cancelled')
+  })
+
+  it('returns null while the visit is still walking', () => {
+    expect(visitOutcome(journey())).toBeNull()
   })
 })
 

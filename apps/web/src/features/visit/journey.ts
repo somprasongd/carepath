@@ -83,6 +83,37 @@ function stepMeta(step: JourneyStep, state: JourneyStepState): string {
 }
 
 /**
+ * Journey progress for the patient home screen (#34): how many steps are
+ * finished. Cancelled steps stay in `total` — they are part of the plan the
+ * rail recaps ("ยกเลิกแล้ว"), so 2 done of 5 with one cancelled still reads
+ * honestly against the rail.
+ */
+export function journeyProgress(journey: Journey): { done: number; total: number } {
+  const done = journey.steps.filter((s) => s.status === 'COMPLETED').length
+  return { done, total: journey.steps.length }
+}
+
+/** The progress line under the screen lead, in plain Thai. */
+export function journeyProgressLabel(journey: Journey): string {
+  const { done, total } = journeyProgress(journey)
+  return `ความคืบหน้า · เสร็จแล้ว ${done} จาก ${total} ขั้นตอน`
+}
+
+/**
+ * How the visit ended for the patient home screen (#34). `completed` is the
+ * contract's unambiguous finished signal (actionable empty, recommended
+ * null); CANCELLED only exists on `status`. A visit can be neither — still
+ * walking between steps.
+ */
+export type VisitOutcome = 'completed' | 'cancelled' | null
+
+export function visitOutcome(journey: Journey): VisitOutcome {
+  if (journey.status === 'CANCELLED') return 'cancelled'
+  if (journey.completed) return 'completed'
+  return null
+}
+
+/**
  * Load-failure phrasing for the patient, keyed off the HTTP status — the raw
  * error detail (English, internal) stays in the console, never on screen.
  */

@@ -21,6 +21,9 @@ import {
   toJourneySteps,
   useJourney,
   visitLoadErrorMessage,
+  visitOutcome,
+  journeyProgressLabel,
+  VisitOutcomeCard,
 } from '@/features/visit'
 
 /**
@@ -79,19 +82,25 @@ export function JourneyScreen({
 
   const recommended = journey?.recommended
   const nextTitle = recommended ? thaiStepTitle(recommended) : undefined
+  const outcome = journey ? visitOutcome(journey) : null
+  // No route to offer once the visit ended — the projection may still carry
+  // actionable steps for a CANCELLED visit, so the CTA is gated on the
+  // outcome, not on `recommended` alone.
+  const next =
+    !outcome && recommended && nextTitle
+      ? {
+          value: `${nextTitle} · ${recommended.servicePoint?.name ?? ''}`.trim(),
+          cta: `นำทางไป${nextTitle}`,
+        }
+      : null
 
   return (
     <JourneyShell
       visitRef={journey?.visitId ?? visitId}
       steps={journey ? toJourneySteps(journey) : []}
-      next={
-        recommended && nextTitle
-          ? {
-              value: `${nextTitle} · ${recommended.servicePoint?.name ?? ''}`.trim(),
-              cta: `นำทางไป${nextTitle}`,
-            }
-          : null
-      }
+      next={next}
+      progress={journey ? journeyProgressLabel(journey) : undefined}
+      notice={outcome ? <VisitOutcomeCard outcome={outcome} /> : undefined}
       onNavigate={onNavigate}
       displayName={identity?.displayName}
     />
@@ -102,6 +111,8 @@ export function JourneyShell({
   visitRef,
   steps,
   next,
+  progress,
+  notice,
   onNavigate,
   displayName,
   children,
@@ -110,6 +121,10 @@ export function JourneyShell({
   steps: JourneyStep[]
   /** The sticky CTA; null when nothing is actionable (visit finished). */
   next: { value: string; cta: string } | null
+  /** Progress line under the lead, e.g. "ความคืบหน้า · เสร็จแล้ว 2 จาก 5 ขั้นตอน". */
+  progress?: string
+  /** End-of-visit summary card above the rail; absent mid-visit. */
+  notice?: ReactNode
   onNavigate?: () => void
   /** LINE display name, when signed in via LIFF; omitted on /design's static reference. */
   displayName?: string
@@ -126,7 +141,9 @@ export function JourneyShell({
           ติดตามขั้นตอนของคุณ แล้วไปยังจุดบริการถัดไปได้จากปุ่มด้านล่าง
         </Lead>
         {displayName && <Meta className="-mt-5 mb-7">เข้าสู่ระบบด้วยไลน์ · {displayName}</Meta>}
+        {progress && <Meta className="-mt-5 mb-7">{progress}</Meta>}
 
+        {notice}
         {children ?? <JourneyRail steps={steps} />}
       </ScreenBody>
 
