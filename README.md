@@ -535,11 +535,25 @@ make web        # :5173
 
 ### เดินดูระบบด้วย demo visit
 
-ระบบมาพร้อม visit ตัวอย่าง `VISIT-001` (สมชาย ใจดี · appointment · คลินิก MED · มี order LAB "CBC" ก่อนมาถึง) ซึ่ง planner จะแปลงเป็น: `REG` (เสร็จแล้ว) → `LAB` → `CLINIC:MED` → `CASHIER`
+ระบบมาพร้อม visit ตัวอย่าง 2 แบบ ซึ่ง seed ฝังอยู่ใน Mock HIS (รันใหม่ทุกครั้งที่ restart ได้ผลเหมือนเดิมเสมอ):
+
+| Seed | ผู้ป่วย | สถานะตอน boot | แผนที่ planner สรุปให้ |
+|---|---|---|---|
+| `VISIT-001` | สมชาย ใจดี (`PATIENT-DEMO-001`) · appointment | มี order LAB "CBC" สั่งก่อนมาถึง | `REG` (เสร็จแล้ว) → `LAB` → `CLINIC:MED` → `CASHIER` |
+| `VISIT-002` | สมหญิง รักษ์ดี (`PATIENT-DEMO-002`) · walk-in | หมอสั่ง X-ray ระหว่างตรวจแล้ว (order `ORD-002`) | `REG` (เสร็จแล้ว) → `CLINIC:MED` → `XRAY` → … |
+
+**`VISIT-002` คือ demo happy path เต็มรูปแบบ** — ขั้นที่เหลือจะถูกเติมเข้ามาเองเมื่อเดินเรื่องผ่าน [Mock HIS console](http://localhost:8090/console) (หรือ demo API):
+
+1. เจ้าหน้าที่กด "เริ่ม" ขั้นพบแพทย์จากคอนโซลเจ้าหน้าที่ CarePath → planner เติมขั้น "กลับมาพบแพทย์" (`CLINIC:MED:2`) เข้าแผนทันที
+2. รับซองฟิล์ม: กด performed + resulted สำหรับ `ORD-002` ที่ console → ขั้นเอกซเรย์เสร็จ ขั้นกลับมาพบแพทย์พร้อมทันที
+3. แพทย์จ่ายยา: วาง order `DRUG` จากคลินิก MED → ขั้นรับยา (`PHARMACY`) ปรากฏท้ายแผน
+4. ปิด encounter ของ MED → ขั้นชำระเงิน (`CASHIER`) พร้อม เก็บเงินเสร็จ → ขั้นรับยาพร้อม จบการเยี่ยม
+
+identifier ทั้งหมดคงที่ทุกครั้งที่ reset (`VISIT-002` / `PATIENT-DEMO-002` / `ORD-002` / ลำดับ order ถัดไปคือ `ORD-003`) จึงใช้เขียน E2E และ demo script ได้
 
 ```bash
 # 1. ดูเส้นทางที่ CarePath คำนวณให้
-curl -s localhost:8080/api/v1/journeys/VISIT-001 | jq
+curl -s localhost:8080/api/v1/journeys/VISIT-002 | jq
 
 # 2. จำลองว่าแพทย์สั่งตรวจเพิ่มระหว่างตรวจ (จาก Mock HIS)
 curl -s -X POST localhost:8090/api/v1/demo/visits/VISIT-001/orders \
@@ -554,6 +568,16 @@ curl -s localhost:8080/api/v1/journeys/VISIT-001 | jq '.steps[] | {stepKey, stat
 หน้า **Mock HIS console** (http://localhost:8090/console) ทำแบบเดียวกันได้ผ่าน UI: เปิด visit, สั่ง order, กด performed / resulted, ปิด encounter, ปิด visit
 
 ฝั่งผู้ป่วยเปิดที่ http://localhost:5173/patient/journey (เปลี่ยน visit ด้วย `?visit=<visitId>`) และฝั่งเจ้าหน้าที่ที่ http://localhost:5173/staff/patients
+
+### Reset ข้อมูล demo ให้เหมือนเดิมทุกครั้ง
+
+```bash
+docker compose down -v && docker compose up --build -d
+```
+
+`down -v` ลบ volume ของ Postgres ทิ้ง พอ `up` ใหม่ migration จะรันและ seed service points/floor/navigation graph ใหม่ทั้งหมด ส่วน Mock HIS เก็บข้อมูลใน memory จึงกลับมาเป็น seed เดิมเสมอ
+
+**ข้อควรระวัง:** การ restart ตัว Mock HIS อย่างเดียว *ไม่ใช่* การ reset — event id จะเริ่มนับที่ `EVT-000001` ใหม่ แต่ cursor ของ CarePath ingest ยังจำตำแหน่งเดิมใน Postgres ไว้ ทำให้ seed events ถูกข้ามไป ต้อง reset ฐานข้อมูลพร้อมกันเสมอ (ใช้คำสั่งด้านบน)
 
 ---
 
