@@ -197,6 +197,76 @@
                 }
             }
         },
+        "/api/v1/service-points": {
+            "get": {
+                "description": "Active service points with their resolved place and floor — the service → destination mapping patients navigate by and staff see in the console.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "service-points"
+                ],
+                "summary": "List service points",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/servicepoint.ServicePoint"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/service-points/{code}": {
+            "get": {
+                "description": "One active service point (e.g. code LAB) with its resolved place and floor — the destination lookup for a care step's service code.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "service-points"
+                ],
+                "summary": "Get a service point by code",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Service code (e.g. REGISTRATION, DOCTOR, LAB, XRAY, PHARMACY)",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/servicepoint.ServicePoint"
+                        }
+                    },
+                    "404": {
+                        "description": "service point not found",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/visits/{visitId}": {
             "get": {
                 "description": "Returns the HIS visit enriched with the next actionable step and its service point.",
@@ -339,6 +409,55 @@
                 }
             }
         },
+        "hospitalmap.Floor": {
+            "type": "object",
+            "properties": {
+                "buildingId": {
+                    "type": "string"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "levelOrder": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "hospitalmap.Place": {
+            "type": "object",
+            "properties": {
+                "entryNodeId": {
+                    "type": "string"
+                },
+                "floor": {
+                    "$ref": "#/definitions/hospitalmap.Floor"
+                },
+                "floorId": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "x": {
+                    "type": "number"
+                },
+                "y": {
+                    "type": "number"
+                }
+            }
+        },
         "httpx.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -438,6 +557,9 @@
                 },
                 "name": {
                     "type": "string"
+                },
+                "place": {
+                    "$ref": "#/definitions/hospitalmap.Place"
                 },
                 "placeId": {
                     "type": "string"

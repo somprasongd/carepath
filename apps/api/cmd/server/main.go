@@ -16,6 +16,8 @@ import (
 	"carepath/apps/api/internal/his/httpclient"
 	"carepath/apps/api/internal/his/ingest"
 	ingestpostgres "carepath/apps/api/internal/his/ingest/postgres"
+	"carepath/apps/api/internal/hospitalmap"
+	hospitalmappostgres "carepath/apps/api/internal/hospitalmap/postgres"
 	"carepath/apps/api/internal/identity"
 	"carepath/apps/api/internal/identity/line"
 	"carepath/apps/api/internal/journey"
@@ -60,7 +62,8 @@ func run(ctx context.Context, log *slog.Logger) error {
 	defer database.Close()
 
 	hisClient := httpclient.New(envOrDefault("HIS_BASE_URL", "http://localhost:8090"), nil)
-	servicePoints := servicepoint.NewService(servicepointpostgres.New(database))
+	hospitalMap := hospitalmap.NewService(hospitalmappostgres.New(database))
+	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), hospitalMap)
 	visits := visit.NewService(hisClient, servicePoints, database)
 
 	// Inbound HIS boundary (#21): poll the canonical event feed and keep the
@@ -119,6 +122,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	visit.NewHandler(visits).Register(app.Group("/api/v1"))
 	session.NewHandler(sessions).Register(app.Group("/api/v1"))
 	journey.NewHandler(journeys).Register(app.Group("/api/v1"))
+	servicepoint.NewHandler(servicePoints).Register(app.Group("/api/v1"))
 
 	return app.Listen(":" + envOrDefault("PORT", "8080"))
 }
