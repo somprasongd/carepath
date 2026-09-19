@@ -83,6 +83,7 @@ apps/api/
     ├── navigation/         # walkable graph read model: NavNode/NavEdge (ADR-0002)
     │   └── postgres/
     └── location/           # location provider port + canonical observations (ADR-0004)
+        ├── qr/             # QR provider: scanned place URLs → entry nodes
         ├── manual/         # manual-selection provider (fallback/debug)
         ├── mock/           # scripted provider for tests
         └── postgres/       # observation store (latest per visit)

@@ -95,6 +95,44 @@ definitions:
       to:
         type: string
     type: object
+  location.Observation:
+    properties:
+      confidence:
+        type: number
+      floorId:
+        type: string
+      nodeId:
+        type: string
+      observedAt:
+        type: string
+      source:
+        $ref: '#/definitions/location.Source'
+      visitId:
+        type: string
+      zone:
+        type: string
+    type: object
+  location.Source:
+    enum:
+    - QR
+    - ZIGBEE
+    - MANUAL
+    type: string
+    x-enum-comments:
+      SourceManual: 'fallback/debug: a human-picked node'
+      SourceQR: 'MVP baseline: a scanned CarePath QR code'
+      SourceZigbee: 'phase 2: positioning service over Zigbee tags'
+    x-enum-varnames:
+    - SourceQR
+    - SourceZigbee
+    - SourceManual
+  location.reportRequestBody:
+    properties:
+      raw:
+        type: string
+      source:
+        type: string
+    type: object
   main.HealthResponse:
     properties:
       service:
@@ -264,6 +302,72 @@ paths:
       summary: Close a clinic round
       tags:
       - journeys
+  /api/v1/journeys/{visitId}/location:
+    get:
+      description: The latest recorded location observation of the visit (QR scan,
+        Zigbee fix, manual pick) — the canonical start point for routing.
+      parameters:
+      - description: Visit ID
+        in: path
+        name: visitId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/location.Observation'
+        "404":
+          description: no location recorded for this visit yet
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Get the visit's current location
+      tags:
+      - location
+    post:
+      consumes:
+      - application/json
+      description: Records a location fix for the visit and makes it the current location.
+        The raw payload is the scanned string (a CarePath location QR carries a place
+        reference only — never patient data); the server resolves it through the matching
+        provider to a canonical navigation node and returns the recorded observation.
+      parameters:
+      - description: Visit ID
+        in: path
+        name: visitId
+        required: true
+        type: string
+      - description: 'Scanned fix: source (e.g. QR) and raw payload'
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/location.reportRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/location.Observation'
+        "400":
+          description: invalid body, unknown source, or a fix that does not resolve
+            to a known location
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Report a scanned location fix
+      tags:
+      - location
   /api/v1/journeys/{visitId}/steps/{stepKey}/transition:
     post:
       consumes:

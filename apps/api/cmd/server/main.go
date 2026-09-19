@@ -22,6 +22,12 @@ import (
 	"carepath/apps/api/internal/identity/line"
 	"carepath/apps/api/internal/journey"
 	journeypostgres "carepath/apps/api/internal/journey/postgres"
+	"carepath/apps/api/internal/location"
+	"carepath/apps/api/internal/location/manual"
+	locationpostgres "carepath/apps/api/internal/location/postgres"
+	"carepath/apps/api/internal/location/qr"
+	"carepath/apps/api/internal/navigation"
+	navigationpostgres "carepath/apps/api/internal/navigation/postgres"
 	"carepath/apps/api/internal/platform/db"
 	"carepath/apps/api/internal/platform/logger"
 	"carepath/apps/api/internal/servicepoint"
@@ -63,6 +69,16 @@ func run(ctx context.Context, log *slog.Logger) error {
 	hisClient := httpclient.New(envOrDefault("HIS_BASE_URL", "http://localhost:8090"), nil)
 	hospitalMap := hospitalmap.NewService(hospitalmappostgres.New(database))
 	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), hospitalMap)
+
+	// Current location (#32): scanned QR fixes (and manual picks, the
+	// fallback/debug source) resolve through their provider onto a canonical
+	// navigation node and become the visit's routing start point.
+	navigationGraph := navigation.NewService(navigationpostgres.New(database))
+	locations, err := location.NewService(locationpostgres.New(database), navigationGraph,
+		qr.New(hospitalMap), manual.New())
+	if err != nil {
+		return err
+	}
 
 	// Inbound HIS boundary (#21): poll the canonical event feed and keep the
 	// journey projection in sync with the system of record.
@@ -120,6 +136,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	session.NewHandler(sessions).Register(app.Group("/api/v1"))
 	journey.NewHandler(journeys).Register(app.Group("/api/v1"))
 	servicepoint.NewHandler(servicePoints).Register(app.Group("/api/v1"))
+	location.NewHandler(locations).Register(app.Group("/api/v1"))
 
 	return app.Listen(":" + envOrDefault("PORT", "8080"))
 }

@@ -314,6 +314,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/journeys/{visitId}/location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The visit's current location — the latest recorded location observation (QR scan today; Zigbee or manual later). This is the canonical start point for routing. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    visitId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Current location */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LocationObservation"];
+                    };
+                };
+                /** @description No location recorded for this visit yet */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** @description Report a scanned location fix for the visit and record it as the current location. The raw payload is the scanned string — a CarePath location QR carries a place reference only, never patient data; the server resolves it to a canonical navigation node via the source's provider (ADR-0004). */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    visitId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LocationReportRequest"];
+                };
+            };
+            responses: {
+                /** @description The recorded observation, now the current location */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LocationObservation"];
+                    };
+                };
+                /** @description Invalid body, unknown source, or a fix that does not resolve to a known location */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/service-points": {
         parameters: {
             query?: never;
@@ -618,6 +700,26 @@ export interface components {
             identity: components["schemas"]["Identity"];
             /** Format: date-time */
             expiresAt: string;
+        };
+        /** @description The normalized current-location result every provider resolves onto (ADR-0004). nodeId is the canonical navigation node ("<floorId>/<localId>"); zone and confidence are optional — exact sources such as QR leave them unset. */
+        LocationObservation: {
+            visitId: string;
+            nodeId: string;
+            floorId: string;
+            /** @description Positioning zone from the navigation graph, e.g. PUBLIC, OPD. */
+            zone?: string | null;
+            /** @description Which provider produced the fix — QR, ZIGBEE, or MANUAL. */
+            source: string;
+            /** @description 0..1 for probabilistic sources (Zigbee); null for exact ones. */
+            confidence?: number | null;
+            /** Format: date-time */
+            observedAt: string;
+        };
+        /** @description One scanned fix. raw is the payload exactly as scanned — opaque to the client; the server's provider resolves it. */
+        LocationReportRequest: {
+            /** @description Provider source to resolve through, e.g. QR. */
+            source: string;
+            raw: string;
         };
     };
     responses: never;
