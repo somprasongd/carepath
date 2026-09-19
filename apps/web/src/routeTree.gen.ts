@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DesignRouteImport } from './routes/design'
+import { Route as PatientRouteImport } from './routes/patient'
 import { Route as PatientJourneyRouteImport } from './routes/patient/journey'
 import { Route as PatientNavigateRouteImport } from './routes/patient/navigate'
 import { Route as StaffFloorPlanRouteImport } from './routes/staff/floor-plan'
@@ -28,15 +29,20 @@ const DesignRoute = DesignRouteImport.update({
   path: '/design',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PatientJourneyRoute = PatientJourneyRouteImport.update({
-  id: '/patient/journey',
-  path: '/patient/journey',
+const PatientRoute = PatientRouteImport.update({
+  id: '/patient',
+  path: '/patient',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PatientJourneyRoute = PatientJourneyRouteImport.update({
+  id: '/journey',
+  path: '/journey',
+  getParentRoute: () => PatientRoute,
+} as any)
 const PatientNavigateRoute = PatientNavigateRouteImport.update({
-  id: '/patient/navigate',
-  path: '/patient/navigate',
-  getParentRoute: () => rootRouteImport,
+  id: '/navigate',
+  path: '/navigate',
+  getParentRoute: () => PatientRoute,
 } as any)
 const StaffFloorPlanRoute = StaffFloorPlanRouteImport.update({
   id: '/staff/floor-plan',
@@ -62,6 +68,7 @@ const StaffServicePointsRoute = StaffServicePointsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/design': typeof DesignRoute
+  '/patient': typeof PatientRouteWithChildren
   '/patient/journey': typeof PatientJourneyRoute
   '/patient/navigate': typeof PatientNavigateRoute
   '/staff/floor-plan': typeof StaffFloorPlanRoute
@@ -72,6 +79,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/design': typeof DesignRoute
+  '/patient': typeof PatientRouteWithChildren
   '/patient/journey': typeof PatientJourneyRoute
   '/patient/navigate': typeof PatientNavigateRoute
   '/staff/floor-plan': typeof StaffFloorPlanRoute
@@ -83,6 +91,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/design': typeof DesignRoute
+  '/patient': typeof PatientRouteWithChildren
   '/patient/journey': typeof PatientJourneyRoute
   '/patient/navigate': typeof PatientNavigateRoute
   '/staff/floor-plan': typeof StaffFloorPlanRoute
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/design'
+    | '/patient'
     | '/patient/journey'
     | '/patient/navigate'
     | '/staff/floor-plan'
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/design'
+    | '/patient'
     | '/patient/journey'
     | '/patient/navigate'
     | '/staff/floor-plan'
@@ -115,6 +126,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/design'
+    | '/patient'
     | '/patient/journey'
     | '/patient/navigate'
     | '/staff/floor-plan'
@@ -126,8 +138,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DesignRoute: typeof DesignRoute
-  PatientJourneyRoute: typeof PatientJourneyRoute
-  PatientNavigateRoute: typeof PatientNavigateRoute
+  PatientRoute: typeof PatientRouteWithChildren
   StaffFloorPlanRoute: typeof StaffFloorPlanRoute
   StaffOverviewRoute: typeof StaffOverviewRoute
   StaffPatientsRoute: typeof StaffPatientsRoute
@@ -150,19 +161,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DesignRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/patient': {
+      id: '/patient'
+      path: '/patient'
+      fullPath: '/patient'
+      preLoaderRoute: typeof PatientRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/patient/journey': {
       id: '/patient/journey'
-      path: '/patient/journey'
+      path: '/journey'
       fullPath: '/patient/journey'
       preLoaderRoute: typeof PatientJourneyRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof PatientRoute
     }
     '/patient/navigate': {
       id: '/patient/navigate'
-      path: '/patient/navigate'
+      path: '/navigate'
       fullPath: '/patient/navigate'
       preLoaderRoute: typeof PatientNavigateRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof PatientRoute
     }
     '/staff/floor-plan': {
       id: '/staff/floor-plan'
@@ -195,11 +213,23 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface PatientRouteChildren {
+  PatientJourneyRoute: typeof PatientJourneyRoute
+  PatientNavigateRoute: typeof PatientNavigateRoute
+}
+
+const PatientRouteChildren: PatientRouteChildren = {
+  PatientJourneyRoute: PatientJourneyRoute,
+  PatientNavigateRoute: PatientNavigateRoute,
+}
+
+const PatientRouteWithChildren =
+  PatientRoute._addFileChildren(PatientRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DesignRoute: DesignRoute,
-  PatientJourneyRoute: PatientJourneyRoute,
-  PatientNavigateRoute: PatientNavigateRoute,
+  PatientRoute: PatientRouteWithChildren,
   StaffFloorPlanRoute: StaffFloorPlanRoute,
   StaffOverviewRoute: StaffOverviewRoute,
   StaffPatientsRoute: StaffPatientsRoute,
