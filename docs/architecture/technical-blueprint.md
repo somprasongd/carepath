@@ -47,12 +47,13 @@ This section is the canonical description of the `apps/api` internal structure. 
 Planned module list — a module gets a package when it has real features, never as an empty skeleton:
 
 ```text
-identity       (implemented, incl. identity/line verifier)
+identity       (implemented — Verifier port; LINE ID-token verification adapter)
 journey        (implemented — CarePath-owned journey plan derived from HIS facts, ADR-0008 amended by ADR-0009; superseded and removed the visit module)
 servicepoint   (implemented)
+session        (implemented — patient sessions bound to visits)
 hospitalmap    (implemented, #24)
-navigation     (planned)
-location       (planned)
+navigation     (implemented)
+location       (implemented — provider port + canonical observations, ADR-0004)
 notification   (planned)
 integration    (implemented as internal/his, incl. the his/ingest event-feed poller)
 ```
@@ -71,9 +72,20 @@ apps/api/
     │       └── postgres/   # durable feed cursor (checkpoint)
     ├── servicepoint/       # domain type + Repo port + Service
     │   └── postgres/       # pgx adapter implementing the Repo port
-    ├── visit/              # domain types + Service + HTTP handler (live HIS read view)
-    └── journey/            # journey projection (derived state, eventId-idempotent apply)
-        └── postgres/       # pgx adapter implementing the Repo port
+    ├── journey/            # journey plan derived from HIS facts (ADR-0009); the pure planner lives here too
+    │   └── postgres/       # pgx adapter implementing the Repo port
+    ├── identity/           # Verifier port for patient login
+    │   └── line/           # LINE ID-token verification (JWKS)
+    ├── session/            # patient sessions bound to visits (+ HTTP handler)
+    │   └── postgres/
+    ├── hospitalmap/        # buildings/floors/places/zones read model
+    │   └── postgres/
+    ├── navigation/         # walkable graph read model: NavNode/NavEdge (ADR-0002)
+    │   └── postgres/
+    └── location/           # location provider port + canonical observations (ADR-0004)
+        ├── manual/         # manual-selection provider (fallback/debug)
+        ├── mock/           # scripted provider for tests
+        └── postgres/       # observation store (latest per visit)
 ```
 
 Internal shape per module — flat layer files in one package, subpackages only for adapters:
@@ -93,8 +105,8 @@ Error model: modules expose domain error variables built with `apperr.New(kind, 
 ## Core runtime chain
 
 ```text
-Visit
-  -> VisitStep / Journey
+Visit facts (clinics, orders, encounters)
+  -> Journey plan (ADR-0009)
   -> ServicePoint
   -> Place
   -> NavigationNode

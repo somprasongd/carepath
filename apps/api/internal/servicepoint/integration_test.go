@@ -43,11 +43,11 @@ func TestSeededMappingsResolveFloorAndPosition(t *testing.T) {
 		wantFloorID   string
 		wantEntryNode string
 	}{
-		{code: "REGISTRATION", wantPlaceID: "REG-01", wantFloorID: "I-1301", wantEntryNode: "node-reception"},
-		{code: "DOCTOR", wantPlaceID: "OPD-NS-01", wantFloorID: "I-1301", wantEntryNode: "node-opd-ns"},
-		{code: "XRAY", wantPlaceID: "XRAY-01", wantFloorID: "I-1301", wantEntryNode: "node-xray"},
-		{code: "PHARMACY", wantPlaceID: "PHARMACY-01", wantFloorID: "I-1301", wantEntryNode: "node-pharmacy"},
-		{code: "LAB", wantPlaceID: "LAB-01", wantFloorID: "I-1302", wantEntryNode: "node-blood-collection"},
+		{code: "REGISTRATION", wantPlaceID: "REG-01", wantFloorID: "I-1301", wantEntryNode: "I-1301/node-reception"},
+		{code: "DOCTOR", wantPlaceID: "OPD-NS-01", wantFloorID: "I-1301", wantEntryNode: "I-1301/node-opd-ns"},
+		{code: "XRAY", wantPlaceID: "XRAY-01", wantFloorID: "I-1301", wantEntryNode: "I-1301/node-xray"},
+		{code: "PHARMACY", wantPlaceID: "PHARMACY-01", wantFloorID: "I-1301", wantEntryNode: "I-1301/node-pharmacy"},
+		{code: "LAB", wantPlaceID: "LAB-01", wantFloorID: "I-1302", wantEntryNode: "I-1302/node-blood-collection"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.code, func(t *testing.T) {
