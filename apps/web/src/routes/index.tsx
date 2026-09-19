@@ -1,10 +1,12 @@
-import { App } from '@/App'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 /**
- * The one screen that talks to the real API today — a smoke test for the
- * CarePath ↔ Mock HIS round trip. features/visit replaces it at step 4.
+ * The product's entry point is the patient journey (the LINE LIFF view);
+ * the staff console lives under /staff and the component catalogue under
+ * /design.
  */
 export const Route = createFileRoute('/')({
-  component: App,
+  beforeLoad: () => {
+    throw redirect({ to: '/patient/journey' })
+  },
 })

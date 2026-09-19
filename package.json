@@ -6,6 +6,9 @@
   ],
   "scripts": {
     "dev:web": "npm --workspace @carepath/web run dev",
-    "build:web": "npm --workspace @carepath/web run build"
+    "build:web": "npm --workspace @carepath/web run build",
+    "lint:web": "npm --workspace @carepath/web run lint",
+    "test:web": "npm --workspace @carepath/web run test",
+    "gen:api": "npm --workspace @carepath/web run gen:api"
   }
 }

@@ -12,6 +12,9 @@ paths:
           description: Healthy
   /api/v1/visits/{visitId}:
     get:
+      description: >
+        Normalized visit view: the HIS visit enriched with the first READY
+        step and its configured service point, if any.
       parameters:
         - in: path
           name: visitId
@@ -23,13 +26,22 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/VisitView'
         '404':
           description: Visit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '502':
           description: Upstream HIS error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/visits/{visitId}/next:
     get:
+      description: The next actionable (READY) step, resolved to its service point.
       parameters:
         - in: path
           name: visitId
@@ -38,8 +50,25 @@ paths:
       responses:
         '200':
           description: Next actionable step
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NextStep'
+        '404':
+          description: No next actionable step, or visit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Upstream HIS error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/navigation/route:
     get:
+      description: Not implemented yet — reserved for the navigation module.
       parameters:
         - in: query
           name: from
@@ -52,3 +81,63 @@ paths:
       responses:
         '200':
           description: Navigation route
+components:
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    VisitStep:
+      type: object
+      description: A care step as reported by the HIS.
+      required: [sequence, serviceCode, status]
+      properties:
+        sequence: { type: integer }
+        serviceCode: { type: string }
+        status:
+          type: string
+          description: HIS step status, e.g. COMPLETED, READY, PENDING.
+    Visit:
+      type: object
+      description: A visit as reported by the HIS.
+      required: [visitId, patientRef, status, steps]
+      properties:
+        visitId: { type: string }
+        patientRef: { type: string }
+        status:
+          type: string
+          description: HIS visit status, e.g. ACTIVE.
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/VisitStep' }
+    ServicePoint:
+      type: object
+      description: Links a service code to a physical Place in the hospital map.
+      required: [id, code, name, placeId]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        placeId: { type: string }
+    NextStep:
+      type: object
+      description: The first READY step of a visit, resolved to its service point
+        when one is configured for the step's service code.
+      required: [sequence, status]
+      properties:
+        sequence: { type: integer }
+        status: { type: string }
+        servicePoint: { $ref: '#/components/schemas/ServicePoint' }
+    VisitView:
+      type: object
+      description: The Visit fields plus the resolved next step.
+      required: [visitId, patientRef, status, steps]
+      properties:
+        visitId: { type: string }
+        patientRef: { type: string }
+        status: { type: string }
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/VisitStep' }
+        next: { $ref: '#/components/schemas/NextStep' }

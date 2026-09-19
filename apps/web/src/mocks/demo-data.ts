@@ -1,8 +1,10 @@
 /**
- * Static stand-in data for the reference screens shown on /design.
+ * Static stand-in data for the reference screens shown on /design and the
+ * staff console, whose API endpoints do not exist yet.
  *
- * It is shaped like what the API will return (visit → next step → service
- * point → place), but it is illustration only — no screen here calls the API.
+ * The patient journey/navigate screens no longer read this — they render the
+ * live visit from features/visit (only their schematic floor plan is still
+ * here, until /api/v1/navigation/route is implemented).
  */
 
 import type { JourneyStep, MapRoom, RouteStatus, Zone } from '../design-system'

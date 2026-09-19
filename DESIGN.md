@@ -208,6 +208,20 @@ Personality: calm, legible, procedural — closer to airport wayfinding
 signage than to a consumer health app. Warm but not soft; dense information
 reads like a departmental directory board, not a dashboard SaaS kit.
 
+## Token pipeline
+
+This file is the human spec, not the machine-readable source. Tokens live in
+the Tailwind v4 CSS-first theme — the `:root`, `@theme` and `@theme inline`
+blocks of `apps/web/src/styles/index.css` — and reach components as Tailwind
+utilities plus the shadcn/ui semantic names mapped in the same file. There is
+no `tailwind.config.js` and no separate tokens package:
+
+DESIGN.md (this spec) → `@theme` in `src/styles/index.css` → Tailwind utilities + shadcn/ui components
+
+To change a token, edit the `@theme` block (and the floor-plan SVGs together
+with it, for zone colours) — the YAML front matter above is a descriptive
+summary kept in sync by hand, not something the build reads.
+
 ## Colors
 
 The palette is lifted, value-for-value, from the `:root` custom properties

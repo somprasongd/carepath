@@ -59,5 +59,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Lint
+        run: npm run lint:web
+
+      - name: Test
+        run: npm run test:web
+
       - name: Build
         run: npm run build:web
