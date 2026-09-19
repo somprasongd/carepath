@@ -1,8 +1,9 @@
 // Package journey_test hosts the end-to-end check of the inbound HIS
-// boundary (#21 AC4): a fake HIS speaking the canonical HTTP contract, the
-// real httpclient adapter, the ingest poller with its postgres checkpoint,
-// and the journey projection backed by postgres — everything but the process
-// boundary. Requires DATABASE_URL (see repo-root Makefile migrate-up).
+// boundary (#21 AC4, amended by ADR-0009): a fake HIS speaking the canonical
+// HTTP contract, the real httpclient adapter, the ingest poller with its
+// postgres checkpoint, and the journey plan backed by postgres — everything
+// but the process boundary. Requires DATABASE_URL (see repo-root Makefile
+// migrate-up).
 package journey_test
 
 import (
@@ -12,10 +13,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strconv"
-	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"carepath/apps/api/internal/his"
 	"carepath/apps/api/internal/his/httpclient"
@@ -58,41 +58,6 @@ func (f *fakeHIS) handler(t *testing.T) http.Handler {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/visits/VISIT-E2E":
 			_ = json.NewEncoder(w).Encode(f.visit)
-		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/v1/visits/VISIT-E2E/steps/") && strings.HasSuffix(r.URL.Path, "/transition"):
-			var cmd his.TransitionCommand
-			if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil || cmd.CommandID == "" || cmd.To == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid command"})
-				return
-			}
-			sequence, _ := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/visits/VISIT-E2E/steps/"), "/transition"))
-			for i := range f.visit.Steps {
-				if f.visit.Steps[i].Sequence != sequence {
-					continue
-				}
-				switch {
-				case f.visit.Steps[i].Status == cmd.To:
-					// transition to current status: no-op success (contract)
-				case f.visit.Steps[i].Status == "COMPLETED" || f.visit.Steps[i].Status == "CANCELLED":
-					w.WriteHeader(http.StatusConflict)
-					_ = json.NewEncoder(w).Encode(map[string]string{"error": "step is terminal"})
-					return
-				default:
-					f.visit.Steps[i].Status = cmd.To
-					if cmd.To == "COMPLETED" {
-						for j := range f.visit.Steps {
-							if f.visit.Steps[j].Status == "PENDING" {
-								f.visit.Steps[j].Status = "READY"
-								break
-							}
-						}
-					}
-				}
-				_ = json.NewEncoder(w).Encode(f.visit.Steps[i])
-				return
-			}
-			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "step not found"})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/events":
 			after := r.URL.Query().Get("after")
 			page := his.EventPage{}
@@ -112,21 +77,21 @@ func (f *fakeHIS) handler(t *testing.T) http.Handler {
 	})
 }
 
+var e2eOpenedAt = time.Date(2026, 9, 19, 9, 0, 0, 0, time.UTC)
+
 func e2eVisit() his.Visit {
 	return his.Visit{
-		VisitID:    "VISIT-E2E",
-		PatientRef: "PAT-E2E",
-		Status:     "ACTIVE",
-		Steps: []his.VisitStep{
-			{Sequence: 1, ServiceCode: "REGISTRATION", Status: "COMPLETED"},
-			{Sequence: 2, ServiceCode: "LAB", Status: "READY"},
-			{Sequence: 3, ServiceCode: "PHARMACY", Status: "PENDING"},
-			{Sequence: 4, ServiceCode: "MYSTERY", Status: "PENDING"},
+		VisitID: "VISIT-E2E", PatientRef: "PAT-E2E", PatientName: "ทดสอบ E2E",
+		VisitType: his.VisitTypeAppointment, Status: his.VisitActive,
+		Clinics: []his.Clinic{{Code: "MED"}}, OpenedAt: e2eOpenedAt,
+		Orders: []his.Order{
+			{OrderRef: "ORD-E2E-1", OrderType: his.OrderTypeLab, OrderedByClinic: "MED",
+				OrderedAt: e2eOpenedAt.Add(-time.Hour), Status: his.OrderPlaced},
 		},
 	}
 }
 
-func TestIngestToProjectionEndToEnd(t *testing.T) {
+func TestIngestToPlanEndToEnd(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("DATABASE_URL not set; skipping integration test (run make up / migrate-up first)")
@@ -147,12 +112,12 @@ func TestIngestToProjectionEndToEnd(t *testing.T) {
 	}
 	exec(`DELETE FROM carepath.journey_visit WHERE visit_id = 'VISIT-E2E'`)
 	exec(`DELETE FROM carepath.his_applied_event WHERE visit_id = 'VISIT-E2E'`)
+	exec(`DELETE FROM carepath.journey_command_audit WHERE visit_id = 'VISIT-E2E'`)
 	exec(`UPDATE carepath.his_ingest_state SET last_event_id = '' WHERE singleton`)
 
 	upstream := &fakeHIS{visit: e2eVisit()}
 	upstream.append(his.Event{
 		EventID: "EVT-000001", VisitID: "VISIT-E2E", PatientRef: "PAT-E2E", Type: his.EventVisitOpened,
-		Payload: map[string]any{"status": "ACTIVE"},
 	})
 	server := httptest.NewServer(upstream.handler(t))
 	defer server.Close()
@@ -164,7 +129,8 @@ func TestIngestToProjectionEndToEnd(t *testing.T) {
 	poller := ingest.New(hisClient, journeys, ingestpostgres.New(database),
 		slog.New(slog.NewTextHandler(&discard{}, &slog.HandlerOptions{Level: slog.LevelError})))
 
-	// First poll: the seed event projects the whole journey.
+	// First poll: the seed fact plans the whole visit — a pre-visit lab
+	// before the clinic, per ADR-0009.
 	if n, err := poller.PollOnce(ctx); err != nil || n != 1 {
 		t.Fatalf("first poll = (%d, %v), want (1, nil)", n, err)
 	}
@@ -172,18 +138,19 @@ func TestIngestToProjectionEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetVisit: %v", err)
 	}
-	if got.Status != "ACTIVE" || len(got.Steps) != 4 {
-		t.Fatalf("projected = %+v, want ACTIVE with 4 steps", got)
+	if got.Status != his.VisitActive {
+		t.Fatalf("projected status = %s, want ACTIVE", got.Status)
 	}
-	if got.Steps[1].ServicePointID == nil || *got.Steps[1].ServicePointID != "SP-LAB" {
-		t.Fatalf("LAB binding = %v, want seeded SP-LAB", got.Steps[1].ServicePointID)
+	lab := findStep(t, got.Steps, "LAB:1")
+	if lab.ServicePointID == nil || *lab.ServicePointID != "SP-ORDERTYPE-LAB" {
+		t.Fatalf("lab binding = %v, want the seeded SP-ORDERTYPE-LAB (ORDERTYPE:LAB)", lab.ServicePointID)
 	}
-	if got.Steps[3].ServicePointID != nil {
-		t.Fatalf("MYSTERY binding = %v, want nil (unmapped is explicit)", got.Steps[3].ServicePointID)
+	clinic := findStep(t, got.Steps, "CLINIC:MED:1")
+	if clinic.Status != journey.StepPending {
+		t.Fatalf("clinic round 1 before the lab is drawn = %s, want PENDING", clinic.Status)
 	}
 
-	// #37: the staff monitor's list serves the same projection, resolved the
-	// same way as the single-journey read.
+	// #37: the staff monitor's list serves the same plan.
 	views, err := journeys.ListJourneys(ctx)
 	if err != nil {
 		t.Fatalf("ListJourneys: %v", err)
@@ -194,50 +161,34 @@ func TestIngestToProjectionEndToEnd(t *testing.T) {
 			continue
 		}
 		listed = true
-		if v.Next == nil || v.Next.Sequence != 2 || v.Next.ServiceCode != "LAB" {
-			t.Fatalf("listed VISIT-E2E next = %+v, want LAB at sequence 2", v.Next)
+		if len(v.Actionable) != 1 || v.Actionable[0].StepKey != "LAB:1" {
+			t.Fatalf("listed VISIT-E2E actionable = %+v, want just LAB:1", v.Actionable)
 		}
 	}
 	if !listed {
 		t.Fatalf("ListJourneys = %d views, want VISIT-E2E present", len(views))
 	}
 
-	// The HIS completes LAB: a canonical event drives the projection forward.
-	completed := e2eVisit()
-	completed.Steps[1].Status = "COMPLETED"
-	completed.Steps[2].Status = "READY"
-	upstream.setVisit(completed)
+	// The HIS reports the blood draw: a canonical fact drives the plan
+	// forward and the clinic becomes actionable.
+	drawn := e2eVisit()
+	performedAt := e2eOpenedAt.Add(-30 * time.Minute)
+	drawn.Orders[0].Status = his.OrderPerformed
+	drawn.Orders[0].PerformedAt = &performedAt
+	upstream.setVisit(drawn)
 	upstream.append(his.Event{
-		EventID: "EVT-000002", VisitID: "VISIT-E2E", PatientRef: "PAT-E2E",
-		Type:    his.EventServiceCompleted,
-		Payload: map[string]any{"sequence": 2, "serviceCode": "LAB"},
+		EventID: "EVT-000002", VisitID: "VISIT-E2E", PatientRef: "PAT-E2E", Type: his.EventOrderPerformed,
+		Payload: map[string]any{"orderRef": "ORD-E2E-1"},
 	})
 	if n, err := poller.PollOnce(ctx); err != nil || n != 1 {
 		t.Fatalf("second poll = (%d, %v), want (1, nil)", n, err)
 	}
-	got, _ = journeys.GetVisit(ctx, "VISIT-E2E")
-	if got.Steps[1].Status != "COMPLETED" || got.Steps[2].Status != "READY" {
-		t.Fatalf("statuses = %s/%s, want COMPLETED/READY after HIS event",
-			got.Steps[1].Status, got.Steps[2].Status)
-	}
-
-	// #18: the journey view reads the projection — ordered steps, resolved
-	// service points, and the deterministic next step after the transition.
 	view, err := journeys.GetJourney(ctx, "VISIT-E2E")
 	if err != nil {
 		t.Fatalf("GetJourney: %v", err)
 	}
-	if view.Completed || view.Current != nil {
-		t.Fatalf("completed/current = %v/%+v, want false/nil mid-journey", view.Completed, view.Current)
-	}
-	if view.Next == nil || view.Next.Sequence != 3 || view.Next.ServiceCode != "PHARMACY" {
-		t.Fatalf("next = %+v, want PHARMACY at sequence 3", view.Next)
-	}
-	if view.Next.ServicePoint == nil || view.Next.ServicePoint.ID != "SP-PHARMACY" {
-		t.Fatalf("next service point = %+v, want seeded SP-PHARMACY", view.Next.ServicePoint)
-	}
-	if view.Steps[3].ServicePointID != nil || view.Steps[3].ServicePoint != nil {
-		t.Fatalf("unmapped MYSTERY step = %+v, want nil binding", view.Steps[3])
+	if len(view.Actionable) != 1 || view.Actionable[0].StepKey != "CLINIC:MED:1" {
+		t.Fatalf("actionable after lab performed = %+v, want just CLINIC:MED:1", view.Actionable)
 	}
 
 	// Duplicate delivery (cursor rewound): the eventId check answers it and
@@ -247,32 +198,28 @@ func TestIngestToProjectionEndToEnd(t *testing.T) {
 		t.Fatalf("duplicate-delivery poll: %v", err)
 	}
 	got, _ = journeys.GetVisit(ctx, "VISIT-E2E")
-	if len(got.Steps) != 4 || got.Steps[1].Status != "COMPLETED" {
-		t.Fatalf("after duplicate delivery = %d steps, status %s; want 4 steps, no change",
-			len(got.Steps), got.Steps[1].Status)
+	if lab := findStep(t, got.Steps, "LAB:1"); lab.Status != journey.StepCompleted {
+		t.Fatalf("after duplicate delivery lab status = %s, want COMPLETED unchanged", lab.Status)
 	}
 
-	// #19: a transition command goes through the real HTTP adapter to the
-	// HIS, the projection refreshes synchronously, next is recomputed, and
-	// the command lands in the audit table.
-	view, err = journeys.TransitionStep(ctx, "VISIT-E2E", 3,
-		his.TransitionCommand{CommandID: "E2E-CMD-1", To: "STARTED"}, "e2e-test")
+	// #19 (amended by ADR-0009): a staff transition is applied locally
+	// through the real HTTP-backed journey service, the plan refreshes
+	// synchronously, and the command lands in the audit table.
+	view, err = journeys.TransitionStep(ctx, "VISIT-E2E", "CLINIC:MED:1",
+		journey.TransitionCommand{CommandID: "E2E-CMD-1", To: journey.CommandToStarted}, "e2e-test")
 	if err != nil {
 		t.Fatalf("TransitionStep STARTED: %v", err)
 	}
-	if view.Current == nil || view.Current.Sequence != 3 || view.Current.Status != "STARTED" {
-		t.Fatalf("current after STARTED = %+v, want PHARMACY STARTED", view.Current)
+	if s := findStep(t, toSteps(view.Steps), "CLINIC:MED:1"); s.Status != journey.StepStarted {
+		t.Fatalf("clinic after STARTED = %s, want STARTED", s.Status)
 	}
-	view, err = journeys.TransitionStep(ctx, "VISIT-E2E", 3,
-		his.TransitionCommand{CommandID: "E2E-CMD-2", To: "COMPLETED"}, "e2e-test")
+	view, err = journeys.TransitionStep(ctx, "VISIT-E2E", "CLINIC:MED:1",
+		journey.TransitionCommand{CommandID: "E2E-CMD-2", To: journey.CommandToCompleted}, "e2e-test")
 	if err != nil {
 		t.Fatalf("TransitionStep COMPLETED: %v", err)
 	}
-	if view.Completed || view.Current != nil {
-		t.Fatalf("completed/current after COMPLETED = %v/%+v, want false/nil mid-journey", view.Completed, view.Current)
-	}
-	if view.Next == nil || view.Next.Sequence != 4 || view.Next.Status != "READY" {
-		t.Fatalf("next after COMPLETED = %+v, want MYSTERY READY at sequence 4", view.Next)
+	if len(view.Actionable) != 1 || view.Actionable[0].StepKey != "CASHIER" {
+		t.Fatalf("actionable after clinic completed = %+v, want just CASHIER", view.Actionable)
 	}
 	var audited int
 	if err := database.Querier(ctx).QueryRow(ctx,
@@ -283,7 +230,25 @@ func TestIngestToProjectionEndToEnd(t *testing.T) {
 	if audited != 2 {
 		t.Fatalf("audited commands = %d, want 2", audited)
 	}
-	exec(`DELETE FROM carepath.journey_command_audit WHERE visit_id = 'VISIT-E2E'`)
+}
+
+func findStep(t *testing.T, steps []journey.Step, key string) journey.Step {
+	t.Helper()
+	for _, s := range steps {
+		if s.StepKey == key {
+			return s
+		}
+	}
+	t.Fatalf("step %q not found in %+v", key, steps)
+	return journey.Step{}
+}
+
+func toSteps(views []journey.StepView) []journey.Step {
+	out := make([]journey.Step, len(views))
+	for i, v := range views {
+		out[i] = journey.Step{StepKey: v.StepKey, Status: v.Status}
+	}
+	return out
 }
 
 type discard struct{}

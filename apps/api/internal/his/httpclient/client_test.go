@@ -21,9 +21,14 @@ func TestGetVisit(t *testing.T) {
 		wantErrors bool
 	}{
 		{
-			name:      "decodes visit",
-			status:    http.StatusOK,
-			body:      `{"visitId":"VISIT-001","patientRef":"PAT-001","status":"ACTIVE","steps":[{"sequence":1,"serviceCode":"LAB","status":"READY"}]}`,
+			name:   "decodes visit",
+			status: http.StatusOK,
+			body: `{"visitId":"VISIT-001","patientRef":"PAT-001","patientName":"สมชาย",` +
+				`"visitType":"APPOINTMENT","status":"ACTIVE",` +
+				`"clinics":[{"code":"MED"}],` +
+				`"orders":[{"orderRef":"ORD-1","orderType":"LAB","orderName":"CBC",` +
+				`"orderedByClinic":"MED","orderedAt":"2026-09-19T08:00:00+07:00","status":"PLACED"}],` +
+				`"openedAt":"2026-09-19T09:00:00+07:00"}`,
 			wantVisit: true,
 		},
 		{name: "not found", status: http.StatusNotFound, body: `{"error":"visit not found"}`, wantKind: apperr.KindNotFound, wantErrors: true},
@@ -48,8 +53,8 @@ func TestGetVisit(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetVisit: %v", err)
 			}
-			if !tt.wantVisit || visit.VisitID != "VISIT-001" || len(visit.Steps) != 1 {
-				t.Fatalf("visit = %+v, want decoded VISIT-001 with 1 step", visit)
+			if !tt.wantVisit || visit.VisitID != "VISIT-001" || len(visit.Clinics) != 1 || len(visit.Orders) != 1 {
+				t.Fatalf("visit = %+v, want decoded VISIT-001 with 1 clinic and 1 order", visit)
 			}
 		})
 	}
@@ -71,8 +76,8 @@ func TestEvents(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(his.EventPage{
 			Events: []his.Event{{
 				EventID: "EVT-000003", VisitID: "VISIT-001", PatientRef: "PAT-001",
-				Type:    his.EventServiceCompleted,
-				Payload: map[string]any{"sequence": float64(4), "serviceCode": "LAB"},
+				Type:    his.EventOrderPerformed,
+				Payload: map[string]any{"orderRef": "ORD-1"},
 			}},
 			NextAfter: "EVT-000003",
 		})
@@ -86,8 +91,8 @@ func TestEvents(t *testing.T) {
 	if len(page.Events) != 1 || page.Events[0].EventID != "EVT-000003" || page.NextAfter != "EVT-000003" {
 		t.Fatalf("page = %+v, want one event and cursor EVT-000003", page)
 	}
-	if page.Events[0].Payload["serviceCode"] != "LAB" {
-		t.Fatalf("payload = %+v, want decoded serviceCode LAB", page.Events[0].Payload)
+	if page.Events[0].Payload["orderRef"] != "ORD-1" {
+		t.Fatalf("payload = %+v, want decoded orderRef ORD-1", page.Events[0].Payload)
 	}
 }
 
@@ -100,63 +105,5 @@ func TestEventsError(t *testing.T) {
 	_, err := New(server.URL, server.Client()).Events(context.Background(), "", 0)
 	if err == nil || apperr.KindOf(err) != apperr.KindUpstream {
 		t.Fatalf("error = %v, want KindUpstream", err)
-	}
-}
-
-func TestTransitionStep(t *testing.T) {
-	tests := []struct {
-		name     string
-		status   int
-		body     string
-		wantStep bool
-		wantKind apperr.Kind
-		wantMsg  string
-	}{
-		{
-			name:     "decodes resulting step",
-			status:   http.StatusOK,
-			body:     `{"sequence":2,"serviceCode":"LAB","status":"STARTED"}`,
-			wantStep: true,
-		},
-		{name: "unknown target", status: http.StatusBadRequest, body: `{"error":"unknown target status \"PAUSED\""}`, wantKind: apperr.KindInvalid, wantMsg: `unknown target status "PAUSED"`},
-		{name: "visit not found", status: http.StatusNotFound, body: `{"error":"visit not found"}`, wantKind: apperr.KindNotFound, wantMsg: "visit not found"},
-		{name: "illegal transition", status: http.StatusConflict, body: `{"error":"step 1 is COMPLETED and cannot transition to STARTED"}`, wantKind: apperr.KindConflict, wantMsg: "step 1 is COMPLETED and cannot transition to STARTED"},
-		{name: "upstream error", status: http.StatusInternalServerError, body: `{"error":"boom"}`, wantKind: apperr.KindUpstream},
-		{name: "error without message", status: http.StatusConflict, body: `{}`, wantKind: apperr.KindConflict, wantMsg: "HIS rejected the command"},
-		{name: "malformed success body", status: http.StatusOK, body: `{`, wantKind: apperr.KindUpstream},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodPost || r.URL.Path != "/api/v1/visits/VISIT-001/steps/2/transition" {
-					t.Errorf("request = %s %s, want POST /api/v1/visits/VISIT-001/steps/2/transition", r.Method, r.URL.Path)
-				}
-				var cmd his.TransitionCommand
-				if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil || cmd.CommandID != "CMD-1" || cmd.To != "STARTED" {
-					t.Errorf("command body = %+v (err %v), want commandId CMD-1 to STARTED", cmd, err)
-				}
-				w.WriteHeader(tt.status)
-				_, _ = w.Write([]byte(tt.body))
-			}))
-			defer server.Close()
-
-			step, err := New(server.URL, server.Client()).TransitionStep(context.Background(), "VISIT-001", 2,
-				his.TransitionCommand{CommandID: "CMD-1", To: "STARTED"})
-			if tt.wantStep {
-				if err != nil {
-					t.Fatalf("TransitionStep: %v", err)
-				}
-				if step.Sequence != 2 || step.ServiceCode != "LAB" || step.Status != "STARTED" {
-					t.Fatalf("step = %+v, want decoded LAB step", step)
-				}
-				return
-			}
-			if err == nil || apperr.KindOf(err) != tt.wantKind {
-				t.Fatalf("error = %v, want kind %v", err, tt.wantKind)
-			}
-			if tt.wantMsg != "" && err.Error() != tt.wantMsg {
-				t.Fatalf("message = %q, want %q", err.Error(), tt.wantMsg)
-			}
-		})
 	}
 }

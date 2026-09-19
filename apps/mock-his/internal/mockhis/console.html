@@ -19,6 +19,7 @@
   main { display: grid; grid-template-columns: 300px 1fr 340px; gap: 14px; padding: 14px 20px; align-items: start; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
   .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  .panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin: 14px 0 6px; }
   .visit { padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; cursor: pointer; }
   .visit:hover { background: var(--chip); }
   .visit.sel { border-color: var(--accent); background: #eaf2fd; }
@@ -28,9 +29,9 @@
   .b-ACTIVE { background: #dcfce7; color: var(--ok); }
   .b-COMPLETED { background: #e2e8f0; color: var(--muted); }
   .b-CANCELLED { background: #fee2e2; color: var(--bad); }
-  .b-READY { background: #dbeafe; color: var(--accent); }
-  .b-PENDING { background: var(--chip); color: var(--muted); }
-  .b-STARTED { background: #fef3c7; color: var(--warn); }
+  .b-PLACED { background: var(--chip); color: var(--muted); }
+  .b-PERFORMED { background: #fef3c7; color: var(--warn); }
+  .b-RESULTED { background: #dbeafe; color: var(--accent); }
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; font-size: 12px; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line); }
   td { padding: 7px 6px; border-bottom: 1px solid var(--line); }
@@ -44,9 +45,9 @@
   button:disabled { opacity: .4; cursor: default; }
   form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   input, select { border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; font: inherit; }
-  input { flex: 1; min-width: 110px; }
+  input { flex: 1; min-width: 90px; }
   .picker-row { display: flex; gap: 6px; width: 100%; }
-  .picker-row select { flex: 1; }
+  .picker-row select, .picker-row input { flex: 1; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
   .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--chip); border: 1px solid var(--line); border-radius: 999px; padding: 2px 6px 2px 10px; font-size: 12px; font-weight: 600; }
   .chip button { border: none; background: none; padding: 0 4px; font-size: 13px; color: var(--muted); cursor: pointer; }
@@ -56,22 +57,26 @@
   .qr { text-align: center; }
   .qr img { display: block; width: 132px; height: 132px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
   .empty { color: var(--muted); padding: 12px 0; text-align: center; }
+  .clinics { display: flex; flex-wrap: wrap; gap: 8px; }
+  .clinic { display: flex; align-items: center; gap: 8px; background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
+  .clinic .code { font-weight: 700; }
   #events { list-style: none; margin: 0; padding: 0; font-size: 12px; max-height: 70vh; overflow: auto; }
   #events li { display: flex; gap: 8px; padding: 5px 2px; border-bottom: 1px dashed var(--line); }
   #events .eid { color: var(--muted); min-width: 84px; }
   #events .typ { font-weight: 600; min-width: 140px; }
   #events .typ.visit { color: var(--accent); }
-  #events .typ.service { color: var(--ok); }
+  #events .typ.order { color: var(--ok); }
+  #events .typ.encounter { color: var(--warn); }
   #events .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #toast { position: fixed; bottom: 16px; right: 16px; background: #10233c; color: #fff; border-radius: 8px; padding: 9px 14px; font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 420px; }
   #toast.show { opacity: .96; }
-  .actions { display: flex; gap: 6px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 </style>
 </head>
 <body>
 <header>
   <h1>Mock HIS Console</h1>
-  <span>drives the fake HIS for demos &mdash; every action surfaces as canonical events on the feed</span>
+  <span>drives the fake HIS for demos &mdash; every action surfaces as canonical facts on the feed (ADR-0009)</span>
   <span class="live" id="clock"></span>
 </header>
 
@@ -80,15 +85,27 @@
     <h2>Visits</h2>
     <div id="visits"><div class="empty">loading&hellip;</div></div>
     <form id="create-form">
-      <input id="new-patient" placeholder="patientRef (optional)">
+      <select id="new-visit-type" aria-label="Visit type">
+        <option value="APPOINTMENT">APPOINTMENT</option>
+        <option value="WALKIN">WALKIN</option>
+      </select>
+      <input id="new-patient-ref" placeholder="HN (optional)">
+      <input id="new-patient-name" placeholder="patient name (optional)">
       <div class="picker-row">
-        <select id="new-code-select" aria-label="Service to add"></select>
-        <button type="button" id="add-code">Add</button>
+        <input id="new-clinic-code" placeholder="clinic code, e.g. MED">
+        <button type="button" id="add-clinic">Add clinic</button>
       </div>
-      <div id="chosen-codes" class="chips"></div>
+      <div id="chosen-clinics" class="chips"></div>
+      <h3>Pre-visit orders (optional)</h3>
+      <div class="picker-row">
+        <select id="new-order-type" aria-label="Order type"></select>
+        <input id="new-order-name" placeholder="order name, e.g. CBC">
+        <button type="button" id="add-order">Add order</button>
+      </div>
+      <div id="chosen-orders" class="chips"></div>
       <button class="primary" type="submit">New visit</button>
     </form>
-    <div class="hint">No services picked = the standard 5-step flow.</div>
+    <div class="hint">Pre-visit orders are attributed to the first clinic added.</div>
   </section>
 
   <section class="panel" id="detail-panel">
@@ -106,15 +123,15 @@
 
 <script>
 "use strict";
-// Pickable service codes — selection instead of free text so demo operators
-// cannot typo a code (REGISTRATION/SCREENING/DOCTOR/LAB/PHARMACY/XRAY map to
-// service points in CarePath; CT projects unmapped).
-const SERVICE_CATALOG = ["REGISTRATION", "SCREENING", "DOCTOR", "LAB", "PHARMACY", "XRAY", "CT"];
+// Order types are a strict enum shared with the contract — a select instead
+// of free text so demo operators cannot typo one (ADR-0009).
+const ORDER_TYPES = ["LAB", "XRAY", "EKG", "US", "DRUG"];
 
 let selectedVisit = null;
 let lastVisitsJSON = "";
 let lastDetailJSON = "";
-let chosenCodes = [];
+let chosenClinics = [];
+let chosenOrders = [];
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -152,38 +169,57 @@ function renderVisits(visits) {
   box.replaceChildren(...visits.map((v) => {
     const row = document.createElement("div");
     row.className = "visit" + (v.visitId === selectedVisit ? " sel" : "");
+    const clinicCodes = v.clinics.map((c) => c.code).join(", ");
     row.innerHTML =
       '<div class="id">' + v.visitId + ' <span class="badge b-' + v.status + '">' + v.status + "</span></div>" +
-      '<div class="sub">' + v.patientRef + " &middot; " + v.steps.length + " steps</div>";
+      '<div class="sub">' + v.patientRef + " &middot; " + clinicCodes + "</div>";
     row.onclick = () => { selectedVisit = v.visitId; lastVisitsJSON = ""; refresh(true); };
     return row;
   }));
 }
 
-function stepRow(step) {
+function orderRow(visit, order) {
   const tr = document.createElement("tr");
-  const open = step.status !== "COMPLETED" && step.status !== "CANCELLED";
   const actions = document.createElement("div");
   actions.className = "actions";
-  if (open) {
-    const start = document.createElement("button");
-    start.textContent = "Start";
-    start.disabled = step.status !== "READY" && step.status !== "PENDING";
-    start.onclick = () => transition(step, "STARTED");
-    const done = document.createElement("button");
-    done.className = "primary";
-    done.textContent = "Complete";
-    done.onclick = () => transition(step, "COMPLETED");
-    actions.append(start, done);
+  if (order.status === "PLACED" || order.status === "PERFORMED") {
+    if (order.status === "PLACED") {
+      const perform = document.createElement("button");
+      perform.textContent = "Performed";
+      perform.onclick = () => orderAction(order.orderRef, "performed");
+      actions.appendChild(perform);
+    }
+    if (order.status === "PERFORMED") {
+      const result = document.createElement("button");
+      result.className = "primary";
+      result.textContent = "Resulted";
+      result.onclick = () => orderAction(order.orderRef, "resulted");
+      actions.appendChild(result);
+    }
+    const cancel = document.createElement("button");
+    cancel.className = "danger";
+    cancel.textContent = "Cancel";
+    cancel.onclick = () => orderAction(order.orderRef, "cancel");
+    actions.appendChild(cancel);
   }
   tr.innerHTML =
-    "<td>" + step.sequence + "</td>" +
-    '<td><span class="code">' + step.serviceCode + "</span></td>" +
-    '<td><span class="badge b-' + step.status + '">' + step.status + "</span></td>";
+    '<td><span class="code">' + order.orderType + "</span></td>" +
+    "<td>" + order.orderName + "</td>" +
+    "<td>" + order.orderedByClinic + "</td>" +
+    '<td><span class="badge b-' + order.status + '">' + order.status + "</span></td>";
   const td = document.createElement("td");
   td.appendChild(actions);
   tr.appendChild(td);
   return tr;
+}
+
+async function orderAction(orderRef, action) {
+  try {
+    await api("POST", "/api/v1/demo/orders/" + encodeURIComponent(orderRef) + "/" + action, {});
+    toast(orderRef + " → " + action);
+    lastDetailJSON = "";
+    refresh(true);
+  } catch (err) { toast("Order action failed: " + err.message, true); }
 }
 
 function renderDetail(visit) {
@@ -192,11 +228,6 @@ function renderDetail(visit) {
   lastDetailJSON = json;
 
   const box = $("#detail");
-  // Preserve what the operator is typing across a data-driven rebuild.
-  const prev = document.querySelector("#order-code");
-  const prevValue = prev ? prev.value : "";
-  const hadFocus = prev && document.activeElement === prev;
-
   if (!visit) { box.innerHTML = '<div class="empty">visit not found</div>'; return; }
   box.replaceChildren();
 
@@ -206,14 +237,28 @@ function renderDetail(visit) {
   info.innerHTML =
     "<div style=\"font-weight:600;font-size:16px\">" + visit.visitId +
     ' <span class="badge b-' + visit.status + '">' + visit.status + "</span></div>" +
-    '<div class="hint">' + visit.patientRef + "</div>";
+    '<div class="hint">' + visit.patientRef + (visit.patientName ? " &middot; " + visit.patientName : "") +
+    " &middot; " + visit.visitType + "</div>";
   if (visit.status === "ACTIVE") {
+    const btnRow = document.createElement("div");
+    btnRow.className = "actions";
+    btnRow.style.marginTop = "8px";
+    const complete = document.createElement("button");
+    complete.className = "primary";
+    complete.textContent = "Complete visit";
+    complete.onclick = async () => {
+      try {
+        await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/complete", {});
+        toast(visit.visitId + " completed");
+        lastDetailJSON = "";
+        refresh(true);
+      } catch (err) { toast("Complete failed: " + err.message, true); }
+    };
     const cancel = document.createElement("button");
     cancel.className = "danger";
     cancel.textContent = "Cancel visit";
-    cancel.style.marginTop = "8px";
     cancel.onclick = async () => {
-      if (!window.confirm("Cancel " + visit.visitId + "? Every open step will be cancelled.")) return;
+      if (!window.confirm("Cancel " + visit.visitId + "? Every open order will be cancelled.")) return;
       try {
         await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/cancel", {});
         toast(visit.visitId + " cancelled");
@@ -221,7 +266,8 @@ function renderDetail(visit) {
         refresh(true);
       } catch (err) { toast("Cancel failed: " + err.message, true); }
     };
-    info.appendChild(cancel);
+    btnRow.append(complete, cancel);
+    info.appendChild(btnRow);
   }
   const qr = document.createElement("div");
   qr.className = "qr";
@@ -232,56 +278,112 @@ function renderDetail(visit) {
   head.append(info, qr);
   box.appendChild(head);
 
-  const table = document.createElement("table");
-  const thead = document.createElement("thead");
-  thead.innerHTML = "<tr><th>#</th><th>Service</th><th>Status</th><th></th></tr>";
-  table.appendChild(thead);
-  const tbody = document.createElement("tbody");
-  visit.steps.forEach((s) => tbody.appendChild(stepRow(s)));
-  table.appendChild(tbody);
-  box.appendChild(table);
-
-  const form = document.createElement("form");
-  form.id = "order-form";
-  const picker = document.createElement("div");
-  picker.className = "picker-row";
-  const select = document.createElement("select");
-  select.id = "order-code";
-  select.setAttribute("aria-label", "Service to order");
-  SERVICE_CATALOG.forEach((code) => {
-    const opt = document.createElement("option");
-    opt.value = code;
-    opt.textContent = code;
-    select.appendChild(opt);
+  box.appendChild(document.createElement("h3")).textContent = "Clinics";
+  const clinics = document.createElement("div");
+  clinics.className = "clinics";
+  visit.clinics.forEach((c) => {
+    const chip = document.createElement("div");
+    chip.className = "clinic";
+    chip.innerHTML = '<span class="code">' + c.code + "</span>";
+    if (visit.status === "ACTIVE") {
+      const done = document.createElement("button");
+      done.textContent = "Complete encounter";
+      done.onclick = async () => {
+        try {
+          await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/clinics/" + encodeURIComponent(c.code) + "/complete-encounter", {});
+          toast(c.code + " encounter completed");
+          lastDetailJSON = "";
+          refresh(true);
+        } catch (err) { toast("Complete encounter failed: " + err.message, true); }
+      };
+      chip.appendChild(done);
+    }
+    clinics.appendChild(chip);
   });
-  const btn = document.createElement("button");
-  btn.className = "primary";
-  btn.type = "submit";
-  btn.textContent = "Add order";
-  picker.append(select, btn);
-  form.appendChild(picker);
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const step = await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/orders", { serviceCode: select.value });
-      toast("Order added: " + step.serviceCode + " (step " + step.sequence + ")");
-      lastDetailJSON = "";
-      refresh(true);
-    } catch (err) { toast("Add order failed: " + err.message, true); }
-  };
-  box.appendChild(form);
+  box.appendChild(clinics);
+  if (visit.status === "ACTIVE") {
+    const addClinicForm = document.createElement("form");
+    const row = document.createElement("div");
+    row.className = "picker-row";
+    const input = document.createElement("input");
+    input.placeholder = "clinic code, e.g. SURG";
+    const btn = document.createElement("button");
+    btn.type = "submit";
+    btn.textContent = "Add clinic";
+    row.append(input, btn);
+    addClinicForm.appendChild(row);
+    addClinicForm.onsubmit = async (e) => {
+      e.preventDefault();
+      if (!input.value.trim()) return;
+      try {
+        await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/clinics", { clinicCode: input.value.trim() });
+        toast("Clinic " + input.value.trim() + " added");
+        lastDetailJSON = "";
+        refresh(true);
+      } catch (err) { toast("Add clinic failed: " + err.message, true); }
+    };
+    box.appendChild(addClinicForm);
+  }
 
-  select.value = prevValue || SERVICE_CATALOG[0];
-  if (hadFocus) select.focus();
-}
+  box.appendChild(document.createElement("h3")).textContent = "Orders";
+  if (!visit.orders.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "no orders yet";
+    box.appendChild(empty);
+  } else {
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    thead.innerHTML = "<tr><th>Type</th><th>Name</th><th>By clinic</th><th>Status</th><th></th></tr>";
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    visit.orders.forEach((o) => tbody.appendChild(orderRow(visit, o)));
+    table.appendChild(tbody);
+    box.appendChild(table);
+  }
 
-async function transition(step, to) {
-  try {
-    await api("POST", "/api/v1/visits/" + selectedVisit + "/steps/" + step.sequence + "/transition",
-      { commandId: crypto.randomUUID(), to });
-    toast(step.serviceCode + " \u2192 " + to);
-    refresh(true);
-  } catch (err) { toast("Transition failed: " + err.message, true); }
+  if (visit.status === "ACTIVE") {
+    const form = document.createElement("form");
+    const picker = document.createElement("div");
+    picker.className = "picker-row";
+    const typeSelect = document.createElement("select");
+    typeSelect.setAttribute("aria-label", "Order type");
+    ORDER_TYPES.forEach((t) => {
+      const opt = document.createElement("option");
+      opt.value = t;
+      opt.textContent = t;
+      typeSelect.appendChild(opt);
+    });
+    const nameInput = document.createElement("input");
+    nameInput.placeholder = "order name, e.g. CBC";
+    const clinicSelect = document.createElement("select");
+    clinicSelect.setAttribute("aria-label", "Ordered by clinic");
+    visit.clinics.forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = c.code;
+      opt.textContent = c.code;
+      clinicSelect.appendChild(opt);
+    });
+    const btn = document.createElement("button");
+    btn.className = "primary";
+    btn.type = "submit";
+    btn.textContent = "Place order";
+    picker.append(typeSelect, nameInput, clinicSelect, btn);
+    form.appendChild(picker);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      if (!nameInput.value.trim()) { toast("order name is required", true); return; }
+      try {
+        await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/orders", {
+          orderType: typeSelect.value, orderName: nameInput.value.trim(), orderedByClinic: clinicSelect.value,
+        });
+        toast("Order placed: " + typeSelect.value);
+        lastDetailJSON = "";
+        refresh(true);
+      } catch (err) { toast("Place order failed: " + err.message, true); }
+    };
+    box.appendChild(form);
+  }
 }
 
 function renderEvents(events) {
@@ -290,55 +392,84 @@ function renderEvents(events) {
   list.replaceChildren(...events.map((e) => {
     const li = document.createElement("li");
     const kind = e.type.split(".")[0];
+    const detail = (e.payload && (e.payload.orderType || e.payload.clinicCode)) || "";
     li.innerHTML =
       '<span class="eid">' + e.eventId + "</span>" +
       '<span class="typ ' + kind + '">' + e.type + "</span>" +
-      '<span class="who">' + e.visitId + (e.payload && e.payload.serviceCode ? " &middot; " + e.payload.serviceCode : "") + "</span>";
+      '<span class="who">' + e.visitId + (detail ? " &middot; " + detail : "") + "</span>";
     return li;
   }));
 }
 
-function renderChips() {
-  const box = $("#chosen-codes");
-  box.replaceChildren(...chosenCodes.map((code) => {
+function renderChipList(box, items, labelOf, onRemove) {
+  box.replaceChildren(...items.map((item, i) => {
     const chip = document.createElement("span");
     chip.className = "chip";
-    chip.textContent = code;
+    chip.textContent = labelOf(item);
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.setAttribute("aria-label", "Remove " + code);
-    remove.textContent = "\u00d7";
-    remove.onclick = () => {
-      chosenCodes = chosenCodes.filter((c) => c !== code);
-      renderChips();
-    };
+    remove.setAttribute("aria-label", "Remove " + labelOf(item));
+    remove.textContent = "×";
+    remove.onclick = () => onRemove(i);
     chip.appendChild(remove);
     return chip;
   }));
 }
 
-$("#add-code").onclick = () => {
-  const code = $("#new-code-select").value;
-  if (chosenCodes.includes(code)) {
-    toast(code + " is already in the list");
-    return;
-  }
-  chosenCodes.push(code);
-  renderChips();
+function renderChosenClinics() {
+  renderChipList($("#chosen-clinics"), chosenClinics, (c) => c.clinicCode, (i) => {
+    chosenClinics.splice(i, 1);
+    renderChosenClinics();
+  });
+}
+
+function renderChosenOrders() {
+  renderChipList($("#chosen-orders"), chosenOrders, (o) => o.orderType + " " + o.orderName, (i) => {
+    chosenOrders.splice(i, 1);
+    renderChosenOrders();
+  });
+}
+
+$("#add-clinic").onclick = () => {
+  const code = $("#new-clinic-code").value.trim();
+  if (!code) return;
+  if (chosenClinics.some((c) => c.clinicCode === code)) { toast(code + " is already in the list"); return; }
+  chosenClinics.push({ clinicCode: code });
+  $("#new-clinic-code").value = "";
+  renderChosenClinics();
+};
+
+$("#add-order").onclick = () => {
+  const orderType = $("#new-order-type").value;
+  const orderName = $("#new-order-name").value.trim();
+  if (!orderName) { toast("order name is required", true); return; }
+  if (!chosenClinics.length) { toast("add a clinic first", true); return; }
+  chosenOrders.push({ orderType, orderName, orderedByClinic: chosenClinics[0].clinicCode });
+  $("#new-order-name").value = "";
+  renderChosenOrders();
 };
 
 $("#create-form").onsubmit = async (e) => {
   e.preventDefault();
-  const body = {};
-  const patient = $("#new-patient").value.trim();
-  if (patient) body.patientRef = patient;
-  if (chosenCodes.length) body.serviceCodes = chosenCodes;
+  if (!chosenClinics.length) { toast("add at least one clinic", true); return; }
+  const body = {
+    visitType: $("#new-visit-type").value,
+    clinics: chosenClinics,
+  };
+  const patientRef = $("#new-patient-ref").value.trim();
+  const patientName = $("#new-patient-name").value.trim();
+  if (patientRef) body.patientRef = patientRef;
+  if (patientName) body.patientName = patientName;
+  if (chosenOrders.length) body.orders = chosenOrders;
   try {
     const visit = await api("POST", "/api/v1/demo/visits", body);
-    toast("Created " + visit.visitId + " (" + visit.steps.length + " steps)");
-    $("#new-patient").value = "";
-    chosenCodes = [];
-    renderChips();
+    toast("Created " + visit.visitId);
+    $("#new-patient-ref").value = "";
+    $("#new-patient-name").value = "";
+    chosenClinics = [];
+    chosenOrders = [];
+    renderChosenClinics();
+    renderChosenOrders();
     selectedVisit = visit.visitId;
     lastVisitsJSON = "";
     refresh(true);
@@ -370,13 +501,14 @@ async function refresh(force) {
 
 tick();
 setInterval(tick, 1000);
-$("#new-code-select").replaceChildren(...SERVICE_CATALOG.map((code) => {
+$("#new-order-type").replaceChildren(...ORDER_TYPES.map((t) => {
   const opt = document.createElement("option");
-  opt.value = code;
-  opt.textContent = code;
+  opt.value = t;
+  opt.textContent = t;
   return opt;
 }));
-renderChips();
+renderChosenClinics();
+renderChosenOrders();
 refresh();
 setInterval(refresh, 2000);
 </script>

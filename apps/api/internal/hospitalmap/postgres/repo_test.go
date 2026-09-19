@@ -39,8 +39,8 @@ func TestGetPlace(t *testing.T) {
 	if place.X == nil || *place.X != 150 || place.Y == nil || *place.Y != 190 {
 		t.Fatalf("GetPlace(REG-01) coordinates = (%v, %v), want (150, 190)", place.X, place.Y)
 	}
-	if place.EntryNodeID == nil || *place.EntryNodeID != "node-reception" {
-		t.Fatalf("GetPlace(REG-01) entry node = %v, want node-reception", place.EntryNodeID)
+	if place.EntryNodeID == nil || *place.EntryNodeID != "I-1301/node-reception" {
+		t.Fatalf("GetPlace(REG-01) entry node = %v, want I-1301/node-reception", place.EntryNodeID)
 	}
 
 	// The lab is the blood-collection room on the upper floor (#23).

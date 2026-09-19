@@ -9,8 +9,6 @@ declare module '@tanstack/react-query' {
   }
 }
 
-export type VisitView = components['schemas']['VisitView']
-export type NextStep = components['schemas']['NextStep']
 export type Journey = components['schemas']['Journey']
 export type JourneyStep = components['schemas']['JourneyStep']
 
@@ -19,19 +17,6 @@ export type JourneyStep = components['schemas']['JourneyStep']
  * Mock HIS. Override per session with ?visit=<id> on the patient routes.
  */
 export const DEFAULT_VISIT_ID = 'VISIT-001'
-
-export function visitQueryOptions(visitId: string) {
-  return queryOptions({
-    queryKey: ['visit', visitId] as const,
-    queryFn: () =>
-      apiGet<VisitView>(`/api/v1/visits/${encodeURIComponent(visitId)}`),
-    staleTime: 30_000,
-  })
-}
-
-export function useVisit(visitId: string) {
-  return useQuery(visitQueryOptions(visitId))
-}
 
 /**
  * Staff visit monitor (#37): every projected journey, freshest sync first —
@@ -49,7 +34,10 @@ export function useStaffVisits() {
   return useQuery(staffVisitsQueryOptions())
 }
 
-/** The projected journey of one visit — the staff detail view. */
+/**
+ * The journey plan CarePath derived for one visit (ADR-0009) — the patient
+ * screens' single data source and the staff detail view.
+ */
 export function journeyQueryOptions(visitId: string) {
   return queryOptions({
     queryKey: ['journey', visitId] as const,
@@ -63,26 +51,47 @@ export function useJourney(visitId: string) {
   return useQuery(journeyQueryOptions(visitId))
 }
 
-/** The statuses the staff controls can command (#38) — both HIS-legal forwards. */
+/** The statuses the staff controls can command (#38). */
 export type StepTargetStatus = Extract<
   components['schemas']['TransitionRequest']['to'],
   'STARTED' | 'COMPLETED'
 >
 
 /**
- * Staff step controls (#38): transition one step via the application API —
- * never the DB — tagging the audit trail with source "staff-web". The HIS
- * remains the system of record; the 200 body is the refreshed journey, so
- * the detail cache is written directly and the list just needs invalidating.
+ * Staff step controls (#38): transition one step via the application API,
+ * addressed by its stable stepKey (ADR-0009 — sequence can change on a
+ * replan), tagging the audit trail with source "staff-web". CarePath owns
+ * step status directly; the 200 body is the refreshed journey, so the detail
+ * cache is written directly and the list just needs invalidating.
  */
 export function useTransitionStep(visitId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (input: { sequence: number; to: StepTargetStatus }) =>
+    mutationFn: (input: { stepKey: string; to: StepTargetStatus }) =>
       apiPost<Journey>(
-        `/api/v1/journeys/${encodeURIComponent(visitId)}/steps/${input.sequence}/transition`,
+        `/api/v1/journeys/${encodeURIComponent(visitId)}/steps/${encodeURIComponent(input.stepKey)}/transition`,
         { to: input.to, source: 'staff-web' },
+      ),
+    onSuccess: (journey) => {
+      queryClient.setQueryData(journeyQueryOptions(visitId).queryKey, journey)
+      void queryClient.invalidateQueries({ queryKey: ['staff', 'visits'] })
+    },
+  })
+}
+
+/**
+ * Staff override (ADR-0009 §4): confirm a clinic round is finished without
+ * waiting for the HIS's encounter.completed fact.
+ */
+export function useCloseRound(visitId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (clinicCode: string) =>
+      apiPost<Journey>(
+        `/api/v1/journeys/${encodeURIComponent(visitId)}/clinics/${encodeURIComponent(clinicCode)}/close-round`,
+        {},
       ),
     onSuccess: (journey) => {
       queryClient.setQueryData(journeyQueryOptions(visitId).queryKey, journey)

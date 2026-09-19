@@ -2,8 +2,8 @@ package journey
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"sort"
 
 	"github.com/google/uuid"
 
@@ -16,27 +16,31 @@ import (
 
 // Service is the only entry point other modules may call.
 type Service interface {
-	// ApplyHISEvent projects one canonical HIS event onto the journey. The
-	// visit snapshot is re-read from the HIS and upserted, so the projection
-	// never guesses state the event payload does not carry. Duplicate
-	// delivery is a no-op: an eventId already applied never re-projects and
-	// never duplicates a step (#21 AC2).
+	// ApplyHISEvent projects one canonical HIS fact onto the journey plan.
+	// The visit snapshot is re-read from the HIS and the plan recomputed
+	// (ADR-0009), so the projection never guesses state the fact does not
+	// carry. Duplicate delivery is a no-op: an eventId already applied never
+	// re-projects.
 	ApplyHISEvent(ctx context.Context, event his.Event) error
 	// GetVisit returns the projected journey for reading.
 	GetVisit(ctx context.Context, visitID string) (Visit, error)
-	// GetJourney returns the patient-facing view of the projection: steps
-	// ordered by sequence, each resolved to its service point, with the
-	// deterministic current (first STARTED) and next (first READY) step.
+	// GetJourney returns the patient/staff-facing view of the plan: steps in
+	// display order, each resolved to its service point, with every
+	// currently-actionable step and CarePath's recommendation among them.
 	GetJourney(ctx context.Context, visitID string) (View, error)
 	// ListJourneys returns the projected journey of every visit for the
-	// staff visit monitor (#37), freshest sync first, with the same
-	// per-visit resolution as GetJourney.
+	// staff visit monitor (#37), freshest sync first.
 	ListJourneys(ctx context.Context) ([]View, error)
-	// TransitionStep forwards one step-status command to the HIS (the system
-	// of record per ADR-0008 §2), then re-projects the visit synchronously
-	// and records the command in the audit log. The returned view carries the
-	// recalculated next step immediately.
-	TransitionStep(ctx context.Context, visitID string, sequence int, cmd his.TransitionCommand, source string) (View, error)
+	// TransitionStep applies a staff command to one step's status directly
+	// (ADR-0009 §1 — CarePath owns step status; this is never forwarded to
+	// the HIS), then recomputes the plan so downstream steps' gates react
+	// immediately, and records the command in the audit log.
+	TransitionStep(ctx context.Context, visitID, stepKey string, cmd TransitionCommand, source string) (View, error)
+	// CloseRound is the staff override (ADR-0009 §4): confirms the visit's
+	// latest round at clinicCode is finished, dropping any not-yet-started
+	// inferred return, without waiting for (or in place of) the HIS's
+	// encounter.completed fact.
+	CloseRound(ctx context.Context, visitID, clinicCode string) (View, error)
 }
 
 type service struct {
@@ -72,8 +76,8 @@ func (s *service) ApplyHISEvent(ctx context.Context, event his.Event) error {
 	if err != nil {
 		if apperr.KindOf(err) == apperr.KindNotFound {
 			// The HIS no longer knows this visit (or not yet). There is
-			// nothing to project; record the event as applied so the feed
-			// can advance instead of retrying forever.
+			// nothing to project; record the fact as applied so the feed can
+			// advance instead of retrying forever.
 			log := logger.FromContext(ctx)
 			log.Warn("event for unknown visit; marking applied without projection",
 				"event_id", event.EventID, "visit_id", event.VisitID, "type", event.Type)
@@ -92,17 +96,28 @@ func (s *service) ApplyHISEvent(ctx context.Context, event his.Event) error {
 		if applied {
 			return nil
 		}
-		visit, err := s.project(ctx, snapshot)
-		if err != nil {
+
+		existing, err := s.repo.GetVisit(ctx, event.VisitID)
+		if err != nil && !errors.Is(err, ErrNotFound) {
 			return err
 		}
-		if err := s.repo.UpsertVisit(ctx, visit); err != nil {
+
+		if event.Type == his.EventEncounterCompleted {
+			if clinicCode, _ := event.Payload["clinicCode"].(string); clinicCode != "" {
+				if _, err := s.closeLatestRoundIn(ctx, event.VisitID, clinicCode, existing); err != nil {
+					return err
+				}
+			}
+		}
+
+		visit, err := s.replanFromPrior(ctx, event.VisitID, snapshot, existing)
+		if err != nil {
 			return err
 		}
 		if err := s.repo.MarkEventApplied(ctx, event.EventID, event.VisitID); err != nil {
 			return err
 		}
-		logger.FromContext(ctx).Debug("journey projected",
+		logger.FromContext(ctx).Debug("journey replanned",
 			"event_id", event.EventID,
 			"visit_id", visit.VisitID,
 			"type", event.Type,
@@ -144,8 +159,6 @@ func (s *service) ListJourneys(ctx context.Context) ([]View, error) {
 		if err != nil {
 			return err
 		}
-		// One service-point read feeds every row — the bindings are the
-		// same catalog the single-journey read resolves against.
 		points, err := s.servicePoints.List(ctx)
 		if err != nil {
 			return err
@@ -162,9 +175,9 @@ func (s *service) ListJourneys(ctx context.Context) ([]View, error) {
 	return views, nil
 }
 
-func (s *service) TransitionStep(ctx context.Context, visitID string, sequence int, cmd his.TransitionCommand, source string) (View, error) {
+func (s *service) TransitionStep(ctx context.Context, visitID, stepKey string, cmd TransitionCommand, source string) (View, error) {
 	switch cmd.To {
-	case his.CommandToStarted, his.CommandToCompleted, his.CommandToCancelled:
+	case CommandToStarted, CommandToCompleted, CommandToCancelled:
 	default:
 		return View{}, apperr.New(apperr.KindInvalid, fmt.Sprintf("unknown target status %q", cmd.To))
 	}
@@ -175,124 +188,169 @@ func (s *service) TransitionStep(ctx context.Context, visitID string, sequence i
 		source = "unknown"
 	}
 
-	// The HIS owns transition legality and never joins database transactions
-	// (ADR-0007/0008): send the command first, then read the resulting state.
-	step, err := s.his.TransitionStep(ctx, visitID, sequence, cmd)
-	if err != nil {
-		return View{}, err
-	}
+	// The HIS is external and never joins a database transaction (ADR-0007);
+	// the fresh snapshot the replan uses is read up front.
 	snapshot, err := s.his.GetVisit(ctx, visitID)
 	if err != nil {
 		return View{}, err
 	}
 
 	err = s.tx.WithinTransaction(ctx, func(ctx context.Context) error {
-		visit, err := s.project(ctx, snapshot)
+		existing, err := s.repo.GetVisit(ctx, visitID)
 		if err != nil {
 			return err
 		}
-		if err := s.repo.UpsertVisit(ctx, visit); err != nil {
+		idx := indexOfStep(existing.Steps, stepKey)
+		if idx < 0 {
+			return apperr.New(apperr.KindNotFound, fmt.Sprintf("step %q not found", stepKey))
+		}
+		current := existing.Steps[idx].Status
+		if current != cmd.To {
+			switch {
+			case current == StepCompleted || current == StepCancelled:
+				return apperr.New(apperr.KindConflict,
+					fmt.Sprintf("step %s is %s and cannot transition to %s", stepKey, current, cmd.To))
+			case cmd.To == CommandToStarted && current != StepReady:
+				return apperr.New(apperr.KindConflict,
+					fmt.Sprintf("step %s is %s and cannot transition to STARTED", stepKey, current))
+			}
+			existing.Steps[idx].Status = cmd.To
+		}
+
+		if _, err := s.replanFromPrior(ctx, visitID, snapshot, existing); err != nil {
 			return err
 		}
 		return s.repo.InsertCommandAudit(ctx, CommandAudit{
-			CommandID: cmd.CommandID,
-			VisitID:   visitID,
-			Sequence:  sequence,
-			ToStatus:  step.Status,
-			Source:    source,
+			CommandID: cmd.CommandID, VisitID: visitID, StepKey: stepKey, ToStatus: cmd.To, Source: source,
 		})
 	})
 	if err != nil {
 		return View{}, err
 	}
 	logger.FromContext(ctx).Info("step transitioned",
-		"command_id", cmd.CommandID,
-		"visit_id", visitID,
-		"sequence", sequence,
-		"to", step.Status,
-		"source", source,
+		"command_id", cmd.CommandID, "visit_id", visitID, "step_key", stepKey, "to", cmd.To, "source", source,
 	)
 	return s.GetJourney(ctx, visitID)
 }
 
-// assembleView resolves service points for the projection's stored bindings
-// and derives current/next. Resolution is deterministic: steps are ordered by
-// sequence, current is the first STARTED step, next the first READY one. The
-// caller fetches the service points and runs this inside the transaction so
-// both reads share it.
-func assembleView(visit Visit, points []servicepoint.ServicePoint) View {
-	byID := make(map[string]servicepoint.ServicePoint, len(points))
-	for _, sp := range points {
-		byID[sp.ID] = sp
+func (s *service) CloseRound(ctx context.Context, visitID, clinicCode string) (View, error) {
+	snapshot, err := s.his.GetVisit(ctx, visitID)
+	if err != nil {
+		return View{}, err
 	}
 
-	steps := make([]StepView, len(visit.Steps))
-	for i, step := range visit.Steps {
-		steps[i] = StepView{
-			Sequence:       step.Sequence,
-			ServiceCode:    step.ServiceCode,
-			Status:         step.Status,
-			ServicePointID: step.ServicePointID,
+	err = s.tx.WithinTransaction(ctx, func(ctx context.Context) error {
+		existing, err := s.repo.GetVisit(ctx, visitID)
+		if err != nil {
+			return err
 		}
-		if step.ServicePointID != nil {
-			if sp, ok := byID[*step.ServicePointID]; ok {
-				steps[i].ServicePoint = &sp
-			}
+		found, err := s.closeLatestRoundIn(ctx, visitID, clinicCode, existing)
+		if err != nil {
+			return err
 		}
-	}
-	sort.Slice(steps, func(a, b int) bool { return steps[a].Sequence < steps[b].Sequence })
-
-	view := View{
-		VisitID:    visit.VisitID,
-		PatientRef: visit.PatientRef,
-		Status:     visit.Status,
-		Completed:  visit.Status == statusVisitCompleted,
-		Steps:      steps,
-		SyncedAt:   visit.SyncedAt,
-	}
-	for i := range steps {
-		switch {
-		case view.Current == nil && steps[i].Status == statusStepStarted:
-			view.Current = &steps[i]
-		case view.Next == nil && steps[i].Status == statusStepReady:
-			view.Next = &steps[i]
+		if !found {
+			return ErrNoOpenRound
 		}
+		_, err = s.replanFromPrior(ctx, visitID, snapshot, existing)
+		return err
+	})
+	if err != nil {
+		return View{}, err
 	}
-	return view
+	return s.GetJourney(ctx, visitID)
 }
 
-// project resolves each step's service-point binding. A step whose service
-// code has no configured service point is kept with a nil binding and a warn
-// log — the journey stays usable and the gap is explicit (#21 AC3). It must
-// be called with the transaction-bound ctx so lookups join the projection
-// write.
-func (s *service) project(ctx context.Context, snapshot his.Visit) (Visit, error) {
-	log := logger.FromContext(ctx)
-	visit := Visit{
-		VisitID:    snapshot.VisitID,
-		PatientRef: snapshot.PatientRef,
-		Status:     snapshot.Status,
-	}
-	for _, step := range snapshot.Steps {
-		projected := Step{
-			Sequence:    step.Sequence,
-			ServiceCode: step.ServiceCode,
-			Status:      step.Status,
+// closeLatestRoundIn resolves the round CLINIC step "in encounter" for
+// clinicCode in the given (already-loaded) visit and records it closed.
+// Preferring the highest STARTED round over a merely-inferred, not-yet-begun
+// next round matters: a mid-encounter order tentatively creates that next
+// round (WAITING/READY) before the patient ever returns, and closing must
+// target the round the doctor is actually finishing, not that placeholder —
+// dropping it is a side effect of closing the right one (ADR-0009 §4),
+// handled by Plan. Falls back to the highest round overall when none is
+// STARTED. Reports false when the visit has no round at that clinic yet.
+func (s *service) closeLatestRoundIn(ctx context.Context, visitID, clinicCode string, existing Visit) (bool, error) {
+	latestKey, latestRound := "", 0
+	startedKey, startedRound := "", 0
+	for _, st := range existing.Steps {
+		if st.Kind != KindClinic || st.ClinicCode == nil || *st.ClinicCode != clinicCode || st.Round == nil {
+			continue
 		}
-		sp, err := s.servicePoints.GetByCode(ctx, step.ServiceCode)
+		if *st.Round > latestRound {
+			latestRound, latestKey = *st.Round, st.StepKey
+		}
+		if st.Status == StepStarted && *st.Round > startedRound {
+			startedRound, startedKey = *st.Round, st.StepKey
+		}
+	}
+	key := startedKey
+	if key == "" {
+		key = latestKey
+	}
+	if key == "" {
+		return false, nil
+	}
+	if err := s.repo.CloseRound(ctx, visitID, key); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// replan recomputes the plan from the visit's currently-stored steps.
+func (s *service) replan(ctx context.Context, visitID string, snapshot his.Visit) (Visit, error) {
+	existing, err := s.repo.GetVisit(ctx, visitID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return Visit{}, err
+	}
+	return s.replanFromPrior(ctx, visitID, snapshot, existing)
+}
+
+// replanFromPrior recomputes the plan against an already-loaded prior visit
+// (letting a caller apply a direct status write to it first, e.g.
+// TransitionStep), resolves service points, and persists the result. Must be
+// called with the transaction-bound ctx.
+func (s *service) replanFromPrior(ctx context.Context, visitID string, snapshot his.Visit, existing Visit) (Visit, error) {
+	prior := make(map[string]string, len(existing.Steps))
+	for _, st := range existing.Steps {
+		prior[st.StepKey] = st.Status
+	}
+	closed, err := s.repo.ClosedRounds(ctx, visitID)
+	if err != nil {
+		return Visit{}, err
+	}
+
+	steps := Plan(snapshot, prior, closed)
+	visit := Visit{
+		VisitID: snapshot.VisitID, PatientRef: snapshot.PatientRef, PatientName: snapshot.PatientName,
+		Status: snapshot.Status, Steps: steps,
+	}
+
+	log := logger.FromContext(ctx)
+	for i := range visit.Steps {
+		code := bindingKey(visit.Steps[i])
+		sp, err := s.servicePoints.GetByCode(ctx, code)
 		switch {
 		case err == nil:
-			projected.ServicePointID = &sp.ID
+			visit.Steps[i].ServicePointID = &sp.ID
 		case apperr.KindOf(err) == apperr.KindNotFound:
-			log.Warn("unmapped service code in projected step",
-				"visit_id", snapshot.VisitID,
-				"sequence", step.Sequence,
-				"service_code", step.ServiceCode,
-			)
+			log.Warn("unmapped step binding",
+				"visit_id", visitID, "step_key", visit.Steps[i].StepKey, "binding", code)
 		default:
 			return Visit{}, err
 		}
-		visit.Steps = append(visit.Steps, projected)
+	}
+
+	if err := s.repo.UpsertVisit(ctx, visit); err != nil {
+		return Visit{}, err
 	}
 	return visit, nil
+}
+
+func indexOfStep(steps []Step, stepKey string) int {
+	for i, s := range steps {
+		if s.StepKey == stepKey {
+			return i
+		}
+	}
+	return -1
 }

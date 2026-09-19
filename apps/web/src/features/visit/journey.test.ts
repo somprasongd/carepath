@@ -1,107 +1,134 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/api/client'
-import type { VisitView } from './queries'
-import { serviceCodeOf, thaiStepTitle, toJourneySteps, visitLoadErrorMessage } from './journey'
+import type { Journey, JourneyStep } from './queries'
+import { thaiStepTitle, toJourneySteps, visitLoadErrorMessage } from './journey'
 
-/** Mirrors the VISIT-001 shape Mock HIS serves — steps + resolved next. */
-function visitView(overrides: Partial<VisitView> = {}): VisitView {
+function step(overrides: Partial<JourneyStep>): JourneyStep {
+  return {
+    stepKey: 'STEP', sequence: 1, kind: 'REGISTRATION', status: 'PENDING',
+    clinicCode: null, round: null, orderRefs: [], servicePointId: null,
+    ...overrides,
+  }
+}
+
+/** Mirrors the ADR-0009 shape Mock HIS/CarePath serve: registration done,
+ * lab actionable, clinic pending behind it. */
+function journey(overrides: Partial<Journey> = {}): Journey {
+  const steps: JourneyStep[] = overrides.steps ?? [
+    step({ stepKey: 'REGISTRATION', sequence: 1, kind: 'REGISTRATION', status: 'COMPLETED' }),
+    step({
+      stepKey: 'LAB:1', sequence: 2, kind: 'LAB', status: 'READY', orderRefs: ['ORD-1'],
+      servicePointId: 'SP-LAB',
+      servicePoint: { id: 'SP-LAB', code: 'ORDERTYPE:LAB', name: 'Laboratory', placeId: 'LAB-01' },
+    }),
+    step({ stepKey: 'CLINIC:MED:1', sequence: 3, kind: 'CLINIC', clinicCode: 'MED', round: 1, status: 'PENDING' }),
+  ]
+  const actionable = steps.filter((s) => s.status === 'READY')
   return {
     visitId: 'VISIT-001',
     patientRef: 'PATIENT-DEMO-001',
     status: 'ACTIVE',
-    steps: [
-      { sequence: 1, serviceCode: 'REGISTRATION', status: 'COMPLETED' },
-      { sequence: 2, serviceCode: 'SCREENING', status: 'COMPLETED' },
-      { sequence: 3, serviceCode: 'DOCTOR', status: 'COMPLETED' },
-      { sequence: 4, serviceCode: 'LAB', status: 'READY' },
-      { sequence: 5, serviceCode: 'PHARMACY', status: 'PENDING' },
-    ],
-    next: {
-      sequence: 4,
-      status: 'READY',
-      servicePoint: { id: 'SP-LAB', code: 'LAB', name: 'Laboratory', placeId: 'LAB-01' },
-    },
+    completed: false,
+    steps,
+    actionable,
+    recommended: actionable[0] ?? null,
+    syncedAt: '2026-09-19T02:00:00Z',
     ...overrides,
   }
 }
 
 describe('toJourneySteps', () => {
-  it('marks completed steps done, the READY step current, and the step after it next', () => {
-    const steps = toJourneySteps(visitView())
+  it('marks completed steps done, the recommended READY step current, and other actionable steps next', () => {
+    const j = journey()
+    j.steps.push(
+      step({
+        stepKey: 'XRAY:1', sequence: 4, kind: 'XRAY', status: 'READY',
+      }),
+    )
+    j.actionable = j.steps.filter((s) => s.status === 'READY')
+    j.recommended = j.actionable[0]
 
-    expect(steps.map((s) => s.state)).toEqual([
-      'done',
-      'done',
-      'done',
-      'current',
-      'next',
-    ])
+    const rail = toJourneySteps(j)
+    expect(rail.map((s) => s.state)).toEqual(['done', 'current', 'pending', 'next'])
   })
 
-  it('translates service codes to plain-Thai titles', () => {
-    const steps = toJourneySteps(visitView())
-
-    expect(steps.map((s) => s.title)).toEqual([
-      'ลงทะเบียน',
-      'คัดกรอง',
-      'พบแพทย์',
-      'เจาะเลือด',
-      'รับยา',
-    ])
+  it('marks a STARTED step current even when it is not the recommended one', () => {
+    const j = journey({
+      steps: [
+        step({ stepKey: 'REGISTRATION', sequence: 1, kind: 'REGISTRATION', status: 'COMPLETED' }),
+        step({ stepKey: 'CLINIC:MED:1', sequence: 2, kind: 'CLINIC', clinicCode: 'MED', round: 1, status: 'STARTED' }),
+      ],
+      actionable: [],
+      recommended: null,
+    })
+    expect(toJourneySteps(j).map((s) => s.state)).toEqual(['done', 'current'])
   })
 
-  it('carries the service point place into the current step meta', () => {
-    const current = toJourneySteps(visitView()).find((s) => s.state === 'current')
+  it('translates step kinds to plain-Thai titles', () => {
+    const titles = toJourneySteps(journey()).map((s) => s.title)
+    expect(titles).toEqual(['ลงทะเบียน', 'เจาะเลือด', 'พบแพทย์ · อายุรกรรม'])
+  })
 
+  it('carries the service point place into the actionable step meta', () => {
+    const current = toJourneySteps(journey()).find((s) => s.state === 'current')
     expect(current?.meta).toBe('Laboratory · LAB-01')
   })
 
   it('falls back to a ready-to-serve meta when the step has no service point', () => {
-    const view = visitView({ next: { sequence: 4, status: 'READY' } })
-    const current = toJourneySteps(view).find((s) => s.state === 'current')
+    const j = journey({
+      steps: [step({ stepKey: 'LAB:1', kind: 'LAB', status: 'READY' })],
+      actionable: [step({ stepKey: 'LAB:1', kind: 'LAB', status: 'READY' })],
+      recommended: step({ stepKey: 'LAB:1', kind: 'LAB', status: 'READY' }),
+    })
+    expect(toJourneySteps(j)[0].meta).toBe('พร้อมให้บริการ')
+  })
 
-    expect(current?.meta).toBe('พร้อมให้บริการ')
+  it('shows a waiting meta for a step gated on a pending result', () => {
+    const j = journey({
+      steps: [step({ stepKey: 'CLINIC:MED:2', kind: 'CLINIC', clinicCode: 'MED', round: 2, status: 'WAITING' })],
+      actionable: [],
+      recommended: null,
+    })
+    expect(toJourneySteps(j)[0].meta).toBe('รอผลตรวจ')
   })
 
   it('shows no current or next emphasis when the visit has no actionable step', () => {
-    const view = visitView({
+    const j = journey({
       steps: [
-        { sequence: 1, serviceCode: 'REGISTRATION', status: 'COMPLETED' },
-        { sequence: 2, serviceCode: 'PHARMACY', status: 'COMPLETED' },
+        step({ stepKey: 'REGISTRATION', kind: 'REGISTRATION', status: 'COMPLETED' }),
+        step({ stepKey: 'CASHIER', kind: 'CASHIER', status: 'PENDING' }),
       ],
-      next: undefined,
+      actionable: [],
+      recommended: null,
     })
-
-    expect(toJourneySteps(view).map((s) => s.state)).toEqual(['done', 'done'])
+    expect(toJourneySteps(j).map((s) => s.state)).toEqual(['done', 'pending'])
   })
 
-  it('keeps an unknown HIS service code readable instead of hiding the step', () => {
-    const view = visitView({
-      steps: [
-        { sequence: 1, serviceCode: 'MYSTERY', status: 'READY' },
-      ],
-      next: { sequence: 1, status: 'READY' },
+  it('labels a return-to-clinic round with the round-2 phrasing', () => {
+    const j = journey({
+      steps: [step({ stepKey: 'CLINIC:MED:2', kind: 'CLINIC', clinicCode: 'MED', round: 2, status: 'READY' })],
+      actionable: [step({ stepKey: 'CLINIC:MED:2', kind: 'CLINIC', clinicCode: 'MED', round: 2, status: 'READY' })],
+      recommended: step({ stepKey: 'CLINIC:MED:2', kind: 'CLINIC', clinicCode: 'MED', round: 2, status: 'READY' }),
     })
+    expect(toJourneySteps(j)[0].title).toBe('กลับไปพบแพทย์ · อายุรกรรม')
+  })
 
-    const [step] = toJourneySteps(view)
-    expect(step.title).toBe('MYSTERY')
-    expect(step.state).toBe('current')
+  it('keeps an unknown clinic code readable instead of hiding the step', () => {
+    const j = journey({
+      steps: [step({ stepKey: 'CLINIC:PED:1', kind: 'CLINIC', clinicCode: 'PED', round: 1, status: 'READY' })],
+      actionable: [step({ stepKey: 'CLINIC:PED:1', kind: 'CLINIC', clinicCode: 'PED', round: 1, status: 'READY' })],
+      recommended: step({ stepKey: 'CLINIC:PED:1', kind: 'CLINIC', clinicCode: 'PED', round: 1, status: 'READY' }),
+    })
+    expect(toJourneySteps(j)[0].title).toBe('พบแพทย์ · PED')
   })
 })
 
 describe('thaiStepTitle', () => {
-  it('falls back to the raw code for unmapped services', () => {
-    expect(thaiStepTitle('UNKNOWN-SERVICE')).toBe('UNKNOWN-SERVICE')
-  })
-})
-
-describe('serviceCodeOf', () => {
-  it('resolves the code behind a NextStep sequence', () => {
-    expect(serviceCodeOf(visitView(), 4)).toBe('LAB')
-  })
-
-  it('returns an empty string for an unknown sequence', () => {
-    expect(serviceCodeOf(visitView(), 99)).toBe('')
+  it('falls back to the raw kind for an unmapped kind', () => {
+    // A plain object, not the `step()` factory: `kind` here is intentionally
+    // outside the schema's StepKind union, exercising the fallback for a
+    // kind the client's type does not yet know about.
+    expect(thaiStepTitle({ kind: 'UNKNOWN', clinicCode: null, round: null })).toBe('UNKNOWN')
   })
 })
 

@@ -17,10 +17,9 @@ import {
   type JourneyStep,
 } from '@/design-system'
 import {
-  serviceCodeOf,
   thaiStepTitle,
   toJourneySteps,
-  useVisit,
+  useJourney,
   visitLoadErrorMessage,
 } from '@/features/visit'
 
@@ -39,7 +38,7 @@ export function JourneyScreen({
   onNavigate?: () => void
 }) {
   const { identity } = useAuth()
-  const { data: visit, isPending, isError, error, refetch } = useVisit(visitId)
+  const { data: journey, isPending, isError, error, refetch } = useJourney(visitId)
 
   // Early returns keep `children` undefined in the success path so the shell
   // falls back to the rail — a `false` fragment child would suppress it.
@@ -78,17 +77,17 @@ export function JourneyScreen({
     )
   }
 
-  const next = visit?.next
-  const nextTitle = visit && next ? thaiStepTitle(serviceCodeOf(visit, next.sequence)) : undefined
+  const recommended = journey?.recommended
+  const nextTitle = recommended ? thaiStepTitle(recommended) : undefined
 
   return (
     <JourneyShell
-      visitRef={visit?.visitId ?? visitId}
-      steps={visit ? toJourneySteps(visit) : []}
+      visitRef={journey?.visitId ?? visitId}
+      steps={journey ? toJourneySteps(journey) : []}
       next={
-        next && nextTitle
+        recommended && nextTitle
           ? {
-              value: `${nextTitle} · ${next.servicePoint?.name ?? next.servicePoint?.code ?? ''}`.trim(),
+              value: `${nextTitle} · ${recommended.servicePoint?.name ?? ''}`.trim(),
               cta: `นำทางไป${nextTitle}`,
             }
           : null

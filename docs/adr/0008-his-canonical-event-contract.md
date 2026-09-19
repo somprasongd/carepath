@@ -1,7 +1,14 @@
 # ADR-0008: Canonical HIS Event/Command Contract
 
-- Status: Accepted
+- Status: Accepted — superseded in part by [ADR-0009](0009-carepath-owns-journey-plan.md)
 - Date: 2026-09-19
+
+> **Amended by ADR-0009.** The canonical envelope, `eventId`/`commandId`
+> idempotency, the REST transport, and the vendor-neutral adapter boundary
+> still hold. What no longer holds: the HIS does not own the ordered step list
+> or step status (§2), the `service.*` step-level events are replaced by
+> visit/order/encounter facts (§1), and CarePath no longer sends step-status
+> commands to the HIS. Read ADR-0009 first.
 
 ## Context
 
