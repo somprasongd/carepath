@@ -1,7 +1,14 @@
 openapi: 3.1.0
 info:
   title: CarePath Mock HIS API
-  version: 0.1.0
+  version: 0.2.0
+  description: >
+    Canonical HIS↔CarePath integration contract (ADR-0008). The Mock HIS
+    implements it for development and demo; a real HIS adapter maps its own
+    transport/payload onto the same canonical events and commands, so
+    journey-domain code never depends on a vendor-specific shape (ADR-0005).
+    The HIS is the system of record for visit and step status: CarePath reads
+    snapshots and sends transition commands, it never writes HIS-owned state.
 servers:
   - url: http://localhost:8090
 paths:
@@ -12,6 +19,7 @@ paths:
           description: Healthy
   /api/v1/visits/{visitId}:
     get:
+      description: Current visit snapshot, the pull read CarePath renders the journey from.
       parameters:
         - in: path
           name: visitId
@@ -26,22 +34,166 @@ paths:
                 $ref: '#/components/schemas/Visit'
         '404':
           description: Visit not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/visits/{visitId}/steps/{sequence}/transition:
+    post:
+      description: >
+        Command (CarePath→HIS): transition one service step's status. This is
+        the only way step status changes. Idempotent: replaying a commandId the
+        HIS already applied, or transitioning to the step's current status, is
+        a no-op that returns the current step.
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: sequence
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransitionCommand'
+      responses:
+        '200':
+          description: The step after applying the command (or the unchanged step for a no-op)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitStep'
+        '400':
+          description: Invalid body or unknown target status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Visit or step not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Illegal transition (e.g. from a terminal status)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/events:
+    get:
+      description: >
+        Append-only feed of canonical HIS events, oldest first. Cursor with
+        `after` (exclusive): pass the last received eventId, read `nextAfter`
+        from the response. For audit/replay and a future push transport; the
+        MVP journey reads snapshots, it does not require this feed.
+      parameters:
+        - in: query
+          name: after
+          required: false
+          schema: { type: string }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, default: 50, maximum: 200 }
+      responses:
+        '200':
+          description: Events strictly after the cursor, oldest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventPage'
 components:
   schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    VisitStatus:
+      type: string
+      description: Canonical visit status; vendor codes are translated inside the HIS adapter.
+      enum: [ACTIVE, COMPLETED, CANCELLED]
+    StepStatus:
+      type: string
+      description: Canonical step status; vendor codes are translated inside the HIS adapter.
+      enum: [PENDING, READY, STARTED, COMPLETED, CANCELLED]
+    EventType:
+      type: string
+      enum: [visit.opened, visit.updated, service.requested, service.started, service.completed, service.cancelled]
     VisitStep:
       type: object
       required: [sequence, serviceCode, status]
       properties:
         sequence: { type: integer }
-        serviceCode: { type: string }
-        status: { type: string }
+        serviceCode:
+          type: string
+          description: External service code in HIS vocabulary (e.g. LAB); CarePath maps it to a service point.
+        status: { $ref: '#/components/schemas/StepStatus' }
     Visit:
       type: object
       required: [visitId, patientRef, status, steps]
       properties:
-        visitId: { type: string }
-        patientRef: { type: string }
-        status: { type: string }
+        visitId:
+          type: string
+          description: HIS-assigned external visit id.
+        patientRef:
+          type: string
+          description: Opaque external patient reference; carries no PHI beyond the reference itself.
+        status: { $ref: '#/components/schemas/VisitStatus' }
         steps:
           type: array
           items: { $ref: '#/components/schemas/VisitStep' }
+    TransitionCommand:
+      type: object
+      required: [commandId, to]
+      properties:
+        commandId:
+          type: string
+          format: uuid
+          description: Caller-assigned idempotency key; the HIS deduplicates retries of the same commandId.
+        to:
+          type: string
+          description: Target step status.
+          enum: [STARTED, COMPLETED, CANCELLED]
+    HISEvent:
+      type: object
+      description: >
+        Canonical event envelope (ADR-0008). Transport-agnostic: today it is
+        served by the pull feed below, later a webhook or message adapter can
+        deliver the same envelope.
+      required: [eventId, occurredAt, visitId, patientRef, type, payload]
+      properties:
+        eventId:
+          type: string
+          description: HIS-assigned unique event id; the idempotency key for consumers.
+        occurredAt: { type: string, format: date-time }
+        visitId: { type: string }
+        patientRef: { type: string }
+        type: { $ref: '#/components/schemas/EventType' }
+        payload:
+          type: object
+          description: >
+            Typed per event. service.* events carry the affected step;
+            visit.* events carry the visit status. orderRef is reserved for
+            upstream order references and may be absent.
+          properties:
+            sequence: { type: integer }
+            serviceCode: { type: string }
+            orderRef: { type: string }
+            status: { $ref: '#/components/schemas/VisitStatus' }
+    EventPage:
+      type: object
+      required: [events, nextAfter]
+      properties:
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/HISEvent' }
+        nextAfter:
+          type: string
+          description: Cursor for the next page (the last eventId returned); empty when there are no more events.
