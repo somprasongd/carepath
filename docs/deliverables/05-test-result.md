@@ -46,3 +46,10 @@ Plus 16 manual/live test cases below (API calls against the running services, an
 - Everything **currently built** (visit lookup, next-step resolution, error handling, the patient journey screen) works correctly, including under adversarial input (TC-06) and dependency failure (TC-05).
 - The one real defect found (TC-05, an information-disclosure/usability gap) was fixed in the same pass, with a regression test added so it can't silently reappear.
 - The two scenario-level failures (TC-15, TC-16) aren't bugs — they're the brief's own acceptance scenarios failing because the underlying Must-Have modules (pathway templates, registration, queue, navigation, i18n) aren't implemented yet, consistent with the gaps already flagged in [deliverable 1](01-requirement-specification.md) and [deliverable 3](03-prototype-wireframe.md). Closing M2/M3/M7 is what turns TC-15/TC-16 from fail to pass.
+
+## Update note (post-ADR-0009)
+
+This table is left as the historical record of the pass actually executed at the time — not rewritten — but two entries now point at surfaces that no longer exist in that shape, so a reader should not re-run them as written:
+
+- **TC-01/TC-02** exercised `GET /api/v1/visits/{visitId}` and `.../next`. Both endpoints were removed once nothing depended on them any longer (superseded by `GET /api/v1/journeys/{visitId}`'s `actionable`/`recommended` steps) — see [ADR-0009](../adr/0009-carepath-owns-journey-plan.md).
+- **TC-15**'s blocker ("no Pathway Template") no longer applies in the form written: `hospitalmap`, `journey` (now with the ADR-0009 planner), and `navigation` are all implemented (see the [technical blueprint](../architecture/technical-blueprint.md)'s module list). The scenario is close to runnable end-to-end now; what remains is wiring the staff registration screen to a live visit lookup (the `-PathwayTemplates.tsx` follow-up noted in [deliverable 3](03-prototype-wireframe.md)) rather than the modules themselves.
