@@ -9,6 +9,38 @@ definitions:
       status:
         type: string
     type: object
+  hospitalmap.Floor:
+    properties:
+      buildingId:
+        type: string
+      code:
+        type: string
+      id:
+        type: string
+      levelOrder:
+        type: integer
+      name:
+        type: string
+    type: object
+  hospitalmap.Place:
+    properties:
+      entryNodeId:
+        type: string
+      floor:
+        $ref: '#/definitions/hospitalmap.Floor'
+      floorId:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+      x:
+        type: number
+      "y":
+        type: number
+    type: object
   httpx.ErrorResponse:
     properties:
       error:
@@ -75,6 +107,8 @@ definitions:
         type: string
       name:
         type: string
+      place:
+        $ref: '#/definitions/hospitalmap.Place'
       placeId:
         type: string
     type: object
@@ -270,6 +304,54 @@ paths:
       summary: Transition one service step
       tags:
       - journeys
+  /api/v1/service-points:
+    get:
+      description: Active service points with their resolved place and floor — the
+        service → destination mapping patients navigate by and staff see in the console.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/servicepoint.ServicePoint'
+            type: array
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: List service points
+      tags:
+      - service-points
+  /api/v1/service-points/{code}:
+    get:
+      description: One active service point (e.g. code LAB) with its resolved place
+        and floor — the destination lookup for a care step's service code.
+      parameters:
+      - description: Service code (e.g. REGISTRATION, DOCTOR, LAB, XRAY, PHARMACY)
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/servicepoint.ServicePoint'
+        "404":
+          description: service point not found
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Get a service point by code
+      tags:
+      - service-points
   /api/v1/visits/{visitId}:
     get:
       description: Returns the HIS visit enriched with the next actionable step and

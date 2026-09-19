@@ -378,6 +378,107 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/service-points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Active service points with their resolved place and floor (#24): the service → destination mapping patients navigate by and staff see in the console. Read-only — mapping changes go through seed migrations for the MVP (FR-11). */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description All active service points, ordered by code */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ServicePoint"][];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/service-points/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One active service point by its service code (e.g. LAB), with the resolved place and floor — the destination lookup for a care step's service code (#24). */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    code: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The service point */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ServicePoint"];
+                    };
+                };
+                /** @description No active service point for this code */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/navigation/route": {
         parameters: {
             query?: never;
@@ -437,12 +538,36 @@ export interface components {
             status: string;
             steps: components["schemas"]["VisitStep"][];
         };
-        /** @description Links a service code to a physical Place in the hospital map. */
+        /** @description Links a service code to a physical Place in the hospital map. Place is the resolved destination (place + floor); null when the place is not in the map yet — the same explicit unmapped state as a null servicePoint on a journey step (#24). */
         ServicePoint: {
             id: string;
             code: string;
             name: string;
             placeId: string;
+            place?: components["schemas"]["Place"] | null;
+        };
+        /** @description A physical place on a floor plan, keyed by the stable SVG place id that also keys the navigation graphs in packages/floorplans. x/y are floor-local SVG units of the place's entry node; entryNodeId references that node in the floor graph (a plain string until the graph model lands in */
+        Place: {
+            id: string;
+            floorId: string;
+            name: string;
+            /**
+             * @description Place category from the hospital map.
+             * @enum {string}
+             */
+            type: "ROOM" | "COUNTER" | "WAITING_AREA" | "RESTROOM" | "ELEVATOR" | "STAIRWAY" | "RAMP" | "ENTRANCE" | "AMENITY";
+            x?: number;
+            y?: number;
+            entryNodeId?: string;
+            floor: components["schemas"]["Floor"];
+        };
+        /** @description One floor of a building, identified by the floor-plan id (e.g. I-1301). */
+        Floor: {
+            id: string;
+            buildingId: string;
+            code: string;
+            name: string;
+            levelOrder: number;
         };
         /** @description The first READY step of a visit, resolved to its service point when one is configured for the step's service code. */
         NextStep: {

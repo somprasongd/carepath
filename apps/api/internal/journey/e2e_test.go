@@ -21,6 +21,8 @@ import (
 	"carepath/apps/api/internal/his/httpclient"
 	"carepath/apps/api/internal/his/ingest"
 	ingestpostgres "carepath/apps/api/internal/his/ingest/postgres"
+	"carepath/apps/api/internal/hospitalmap"
+	hospitalmappostgres "carepath/apps/api/internal/hospitalmap/postgres"
 	"carepath/apps/api/internal/journey"
 	journeypostgres "carepath/apps/api/internal/journey/postgres"
 	"carepath/apps/api/internal/platform/db"
@@ -156,7 +158,8 @@ func TestIngestToProjectionEndToEnd(t *testing.T) {
 	defer server.Close()
 
 	hisClient := httpclient.New(server.URL, server.Client())
-	servicePoints := servicepoint.NewService(servicepointpostgres.New(database))
+	hospitalMap := hospitalmap.NewService(hospitalmappostgres.New(database))
+	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), hospitalMap)
 	journeys := journey.NewService(hisClient, servicePoints, journeypostgres.New(database), database)
 	poller := ingest.New(hisClient, journeys, ingestpostgres.New(database),
 		slog.New(slog.NewTextHandler(&discard{}, &slog.HandlerOptions{Level: slog.LevelError})))

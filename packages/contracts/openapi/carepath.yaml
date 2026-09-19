@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.3.0
+  version: 0.4.1
 servers:
   - url: http://localhost:8080
 paths:
@@ -203,6 +203,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/service-points:
+    get:
+      description: >
+        Active service points with their resolved place and floor (#24): the
+        service → destination mapping patients navigate by and staff see in
+        the console. Read-only — mapping changes go through seed migrations
+        for the MVP (FR-11).
+      responses:
+        '200':
+          description: All active service points, ordered by code
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ServicePoint' }
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/service-points/{code}:
+    get:
+      description: >
+        One active service point by its service code (e.g. LAB), with the
+        resolved place and floor — the destination lookup for a care step's
+        service code (#24).
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The service point
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePoint'
+        '404':
+          description: No active service point for this code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/navigation/route:
     get:
       description: Not implemented yet — reserved for the navigation module.
@@ -256,12 +307,50 @@ components:
     ServicePoint:
       type: object
       description: Links a service code to a physical Place in the hospital map.
+        Place is the resolved destination (place + floor); null when the place
+        is not in the map yet — the same explicit unmapped state as a null
+        servicePoint on a journey step (#24).
       required: [id, code, name, placeId]
       properties:
         id: { type: string }
         code: { type: string }
         name: { type: string }
         placeId: { type: string }
+        place:
+          allOf:
+            - $ref: '#/components/schemas/Place'
+          nullable: true
+    Place:
+      type: object
+      description: A physical place on a floor plan, keyed by the stable SVG
+        place id that also keys the navigation graphs in packages/floorplans.
+        x/y are floor-local SVG units of the place's entry node; entryNodeId
+        references that node in the floor graph (a plain string until the
+        graph model lands in #26).
+      required: [id, floorId, name, type, floor]
+      properties:
+        id: { type: string }
+        floorId: { type: string }
+        name: { type: string }
+        type:
+          type: string
+          description: Place category from the hospital map.
+          enum: [ROOM, COUNTER, WAITING_AREA, RESTROOM, ELEVATOR, STAIRWAY, RAMP, ENTRANCE, AMENITY]
+        x: { type: number }
+        y: { type: number }
+        entryNodeId: { type: string }
+        floor: { $ref: '#/components/schemas/Floor' }
+    Floor:
+      type: object
+      description: One floor of a building, identified by the floor-plan id
+        (e.g. I-1301).
+      required: [id, buildingId, code, name, levelOrder]
+      properties:
+        id: { type: string }
+        buildingId: { type: string }
+        code: { type: string }
+        name: { type: string }
+        levelOrder: { type: integer }
     NextStep:
       type: object
       description: The first READY step of a visit, resolved to its service point
