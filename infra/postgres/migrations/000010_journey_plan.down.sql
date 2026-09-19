@@ -1,6 +1,4 @@
-UPDATE carepath.service_point SET code = 'LAB' WHERE code = 'ORDERTYPE:LAB';
-UPDATE carepath.service_point SET code = 'XRAY' WHERE code = 'ORDERTYPE:XRAY';
-UPDATE carepath.service_point SET code = 'DOCTOR', name = 'OPD' WHERE code = 'CLINIC:MED';
+DELETE FROM carepath.service_point WHERE id IN ('SP-ORDERTYPE-LAB', 'SP-ORDERTYPE-XRAY', 'SP-CLINIC-MED');
 
 ALTER TABLE carepath.journey_command_audit DROP COLUMN IF EXISTS step_key;
 ALTER TABLE carepath.journey_command_audit ADD COLUMN IF NOT EXISTS sequence INT NOT NULL DEFAULT 0;

@@ -142,8 +142,8 @@ func TestIngestToPlanEndToEnd(t *testing.T) {
 		t.Fatalf("projected status = %s, want ACTIVE", got.Status)
 	}
 	lab := findStep(t, got.Steps, "LAB:1")
-	if lab.ServicePointID == nil || *lab.ServicePointID != "SP-LAB" {
-		t.Fatalf("lab binding = %v, want the seeded SP-LAB (ORDERTYPE:LAB)", lab.ServicePointID)
+	if lab.ServicePointID == nil || *lab.ServicePointID != "SP-ORDERTYPE-LAB" {
+		t.Fatalf("lab binding = %v, want the seeded SP-ORDERTYPE-LAB (ORDERTYPE:LAB)", lab.ServicePointID)
 	}
 	clinic := findStep(t, got.Steps, "CLINIC:MED:1")
 	if clinic.Status != journey.StepPending {
