@@ -62,7 +62,7 @@ npm run test:web  # vitest
 npm run gen:api   # regenerate apps/web/src/api/schema.d.ts from packages/contracts
 ```
 
-CI runs on pushes/PRs to `main` (`.github/workflows/ci.yml`): Go fmt/vet/build/test per module, plus web lint, test, and build. There are no E2E/browser tests yet — don't rely on CI alone to catch UI regressions; verify patient flows in the browser when changing screens.
+CI runs on pushes/PRs to `main` (`.github/workflows/ci.yml`): Go fmt/vet/build/test per module, plus web lint, test, and build. The API-level happy-path E2E lives in `apps/api/internal/e2e` (runs in the Go api job against CI's postgres); there are no browser/UI E2E tests — don't rely on CI alone to catch UI regressions; verify patient flows in the browser when changing screens.
 
 ## Architecture boundaries — do not violate
 
