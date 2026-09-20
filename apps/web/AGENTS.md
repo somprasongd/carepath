@@ -57,7 +57,12 @@ patients see, so a silent regression there is a UX bug, not a crash.
   the auth context and the refresh token in `localStorage` (ADR-0010); only
   `api/client.ts` reads them, attaches them, and performs the single retrying
   refresh on a 401. Never put a token in a query key, a URL, a log, or JSX.
-  Role checks in the UI hide affordances — the API is what enforces them.
+  The one URL exception is the share token's *arrival*: `/shared#<token>`
+  carries it in the fragment (browsers never send fragments to a server), it
+  is read once on mount and handed straight to `api/client.ts`'s share slot
+  (`setApiShareToken`), and it is attached to exactly one endpoint — see
+  ADR-0011. Role checks in the UI hide affordances — the API is what
+  enforces them.
 - **Demo data is scoped.** `src/mocks/demo-data.ts` feeds only `/design` and
   the staff screens (no endpoints yet). Patient screens must render live
   visit data via `features/visit`; when a staff endpoint lands, move that

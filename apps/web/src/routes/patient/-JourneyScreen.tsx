@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useAuth } from '@/auth/AuthContext'
 import {
   AppBar,
@@ -16,6 +16,7 @@ import {
   StickyActionBar,
   type JourneyStep,
 } from '@/design-system'
+import { ShareSheet } from '@/features/share'
 import {
   thaiStepTitle,
   toJourneySteps,
@@ -42,6 +43,11 @@ export function JourneyScreen({
 }) {
   const { identity } = useAuth()
   const { data: journey, isPending, isError, error, refetch } = useJourney(visitId)
+  const [shareOpen, setShareOpen] = useState(false)
+  // Sharing needs a real patient session (ADR-0011). In demo fallback — API
+  // unreachable, no token — the page stays fully usable and the button says
+  // why it is off rather than breaking anything (#90 NFR).
+  const shareReady = Boolean(identity?.sessionToken)
 
   // Early returns keep `children` undefined in the success path so the shell
   // falls back to the rail — a `false` fragment child would suppress it.
@@ -93,6 +99,9 @@ export function JourneyScreen({
           cta: `นำทางไป${nextTitle}`,
         }
       : null
+  // Nothing to follow once the visit was cancelled — the shared view would
+  // have nothing honest to say.
+  const shareable = outcome !== 'cancelled'
 
   return (
     <JourneyShell
@@ -103,7 +112,22 @@ export function JourneyScreen({
       notice={outcome ? <VisitOutcomeCard outcome={outcome} /> : undefined}
       onNavigate={onNavigate}
       displayName={identity?.displayName}
-    />
+    >
+      <JourneyRail steps={journey ? toJourneySteps(journey) : []} />
+      {shareable && (
+        <div className="mt-5 flex flex-col items-start">
+          <Button variant="ghost" onClick={() => setShareOpen(true)} disabled={!shareReady}>
+            แชร์ความคืบหน้าให้ญาติ
+          </Button>
+          {!shareReady && (
+            <Meta className="mt-1">โหมดสาธิต: ยังขอสิทธิ์แชร์ไม่สำเร็จ</Meta>
+          )}
+        </div>
+      )}
+      {shareOpen && (
+        <ShareSheet visitId={journey?.visitId ?? visitId} onClose={() => setShareOpen(false)} />
+      )}
+    </JourneyShell>
   )
 }
 
