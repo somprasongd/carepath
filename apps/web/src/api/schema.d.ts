@@ -339,7 +339,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The patient journey: the CarePath-owned plan derived from HIS facts (ADR-0009) — CarePath, not the HIS, decides which steps exist and their order. Steps are exposed by `sequence` (display order; not a stable identity — replanning may renumber) and `stepKey` (the stable identity to address a step by). A visit not yet projected (ingest lag) returns 404. */
+        /** @description The patient journey: the CarePath-owned plan derived from HIS facts (ADR-0009) — CarePath, not the HIS, decides which steps exist and their order. Steps are exposed by `sequence` (display order; not a stable identity — replanning may renumber) and `stepKey` (the stable identity to address a step by). Patient surface (#96): the patient session's identity must have claimed this visit (POST /api/v1/journeys/{visitId}/claim — naming the VN is the claim credential). A visit that is unknown, unprojected, or claimed by another identity all answer the same 404. */
         get: {
             parameters: {
                 query?: never;
@@ -360,7 +360,16 @@ export interface paths {
                         "application/json": components["schemas"]["Journey"];
                     };
                 };
-                /** @description No journey projected for this visit id */
+                /** @description Missing, malformed, or invalid patient session */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Visit unknown, not projected, or not claimed by this session — indistinguishable by design */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -382,6 +391,69 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/journeys/{visitId}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Mint visit ownership for this session's identity (#96): records that the identity behind the patient session may read this visit. Naming the VN is the credential, matching the patient front door. Idempotent — re-claiming a visit this identity already owns succeeds. This is the only way read access to a journey is granted. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    visitId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Claim recorded (or already owned by this identity) */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing, malformed, or invalid patient session */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Visit unknown or not projected — the same 404 the journey read gives */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -569,7 +641,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Patient command (ADR-0011): mint a time-limited tracking link for this visit to hand to a relative. Requires a patient session (bearerAuth). The response carries the raw token exactly once — the server stores only its sha256, so it cannot be re-read. At most 5 active links per visit; creating beyond that fails with 409 (revoke first). TTL defaults to 4h (SHARE_LINK_TTL). Note: the session is not visit-bound yet (ADR-0011 §6) — creation is gated on holding a session at all, an accepted MVP gap. */
+        /** @description Patient command (ADR-0011): mint a time-limited tracking link for this visit to hand to a relative. Requires a patient session (bearerAuth). The response carries the raw token exactly once — the server stores only its sha256, so it cannot be re-read. At most 5 active links per visit; creating beyond that fails with 409 (revoke first). TTL defaults to 4h (SHARE_LINK_TTL). Since #96 the session's identity must have claimed the visit — sharing someone else's visit answers the journey read's 404. */
         post: {
             parameters: {
                 query?: never;
@@ -599,7 +671,7 @@ export interface paths {
                         "application/json": components["schemas"]["Error"];
                     };
                 };
-                /** @description No visit found for this visit id */
+                /** @description Visit unknown, not projected, or not claimed by this session — indistinguishable by design */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -628,7 +700,7 @@ export interface paths {
                 };
             };
         };
-        /** @description Patient command (ADR-0011): revoke every active share link for this visit. Idempotent — revoking with nothing active is still 204. Requires a patient session (bearerAuth). */
+        /** @description Patient command (ADR-0011): revoke every active share link for this visit. Idempotent — revoking with nothing active is still 204. Requires a patient session (bearerAuth) whose identity has claimed the visit (#96). */
         delete: {
             parameters: {
                 query?: never;
@@ -733,7 +805,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The visit's current location — the latest recorded location observation (QR scan today; Zigbee or manual later). This is the canonical start point for routing. */
+        /** @description The visit's current location — the latest recorded location observation (QR scan today; Zigbee or manual later). This is the canonical start point for routing. Patient surface (#96) — the session's identity must have claimed the visit. */
         get: {
             parameters: {
                 query?: never;
@@ -754,7 +826,16 @@ export interface paths {
                         "application/json": components["schemas"]["LocationObservation"];
                     };
                 };
-                /** @description No location recorded for this visit yet */
+                /** @description Missing, malformed, or invalid patient session */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description No location recorded yet, or the visit is unknown / not claimed by this session */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -766,7 +847,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** @description Report a scanned location fix for the visit and record it as the current location. The raw payload is the scanned string — a CarePath location QR carries a place reference only, never patient data; the server resolves it to a canonical navigation node via the source's provider (ADR-0004). */
+        /** @description Report a scanned location fix for the visit and record it as the current location. The raw payload is the scanned string — a CarePath location QR carries a place reference only, never patient data; the server resolves it to a canonical navigation node via the source's provider (ADR-0004). Patient surface (#96) — the session's identity must have claimed the visit. */
         post: {
             parameters: {
                 query?: never;
@@ -793,6 +874,24 @@ export interface paths {
                 };
                 /** @description Invalid body, unknown source, or a fix that does not resolve to a known location */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing, malformed, or invalid patient session */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Visit unknown, not projected, or not claimed by this session — indistinguishable by design */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };

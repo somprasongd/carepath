@@ -199,6 +199,15 @@ A middleware that silently protected the journey read would break every
 patient screen, so protection is applied per route group in the composition
 root, never globally.
 
+> **Update (2026-09-20, #96):** the deferred slice landed. `GET
+> /api/v1/journeys/{visitId}`, `GET|POST /api/v1/journeys/{visitId}/location`,
+> and the share-link management routes now require a patient session whose
+> identity has *claimed* the visit (`internal/session`, table
+> `patient_visit_claim`) — the claim is minted by naming the VN, which is the
+> credential the product gives patients today. FR-18's "a patient sees only
+> their own visit data" now holds; the staff detail view reads the same data
+> from `GET /api/v1/staff/visits` instead of riding the patient surface.
+
 ### 8. Middleware
 
 ```go

@@ -1,5 +1,5 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, apiGet, apiPost } from '@/api/client'
+import { ApiError, apiGet, apiPost, apiPostNoContent } from '@/api/client'
 import type { components } from '@/api/schema'
 
 // Every queryFn here throws ApiError, so hooks can read `error.status`.
@@ -37,9 +37,33 @@ function journeyIsFinal(journey: Journey): boolean {
   return journey.status === 'CANCELLED' || journey.completed
 }
 
+// Visits this page session has already claimed. The claim (#96) is what
+// mints read access to a visit — every patient visit-scoped call goes
+// through ensureVisitClaimed first, so a QR deep-link straight into
+// /patient/navigate or a share command works without passing the journey
+// screen first.
+const claimedVisits = new Set<string>()
+
+/**
+ * Bind this session's identity to the visit (#96) before reading or
+ * commanding it. Claiming is the patient's front door made explicit: knowing
+ * the visit id (typed VN, scanned QR) is the credential. Idempotent server-
+ * side, and once per page session is enough — the Set keeps the 15s polls
+ * and parallel queries from re-firing the POST. A visit that was never
+ * projected 404s here with the same "journey not found" the read itself
+ * would give.
+ */
+export async function ensureVisitClaimed(visitId: string): Promise<void> {
+  if (claimedVisits.has(visitId)) return
+  claimedVisits.add(visitId)
+  await apiPostNoContent(`/api/v1/journeys/${encodeURIComponent(visitId)}/claim`)
+}
+
 /**
  * The journey plan CarePath derived for one visit (ADR-0009) — the patient
- * screens' single data source and the staff detail view.
+ * screens' single data source. The staff detail view used to read this too;
+ * since #96 the read is claim-guarded, so staff derives its detail from the
+ * /staff/visits list instead.
  *
  * #36 realtime via polling (the issue's MVP bar: the simplest, most stable
  * option for the hackathon). The journey refetches every 15s — matching the
@@ -52,8 +76,10 @@ function journeyIsFinal(journey: Journey): boolean {
 export function journeyQueryOptions(visitId: string) {
   return queryOptions({
     queryKey: ['journey', visitId] as const,
-    queryFn: () =>
-      apiGet<Journey>(`/api/v1/journeys/${encodeURIComponent(visitId)}`),
+    queryFn: async () => {
+      await ensureVisitClaimed(visitId)
+      return apiGet<Journey>(`/api/v1/journeys/${encodeURIComponent(visitId)}`)
+    },
     staleTime: 15_000,
     refetchInterval: (query) =>
       query.state.data && journeyIsFinal(query.state.data) ? false : 15_000,

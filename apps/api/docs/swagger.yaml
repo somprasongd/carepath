@@ -602,7 +602,9 @@ paths:
       description: 'Returns the CarePath-derived journey plan (ADR-0009): steps in
         display order, each resolved to its service point, with every currently-actionable
         step and CarePath''s recommendation among them. A completed visit is reported
-        with completed=true and no actionable steps.'
+        with completed=true and no actionable steps. Patient-surface (#96): the patient
+        session''s identity must have claimed this visit; an unclaimed or unknown
+        visit answers the same 404.'
       parameters:
       - description: Visit ID
         in: path
@@ -616,17 +618,57 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/journey.View'
+        "401":
+          description: missing or invalid patient session
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
         "404":
-          description: no journey projected for this visit
+          description: visit unknown, or not claimed by this session — indistinguishable
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
         "500":
           description: internal server error
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
       summary: Get the patient journey
       tags:
       - journeys
+  /api/v1/journeys/{visitId}/claim:
+    post:
+      description: 'Records that the identity behind the patient session owns the
+        visit (#96) — the only way read access to a journey is minted. Knowing the
+        VN is the credential, matching the product''s patient front door. Idempotent:
+        re-claiming a visit already owned by this identity succeeds. A visit that
+        was never projected answers 404, indistinguishable from the journey read''s
+        unknown-visit 404.'
+      parameters:
+      - description: Visit id
+        in: path
+        name: visitId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No content
+        "401":
+          description: missing or invalid patient session
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: visit not projected
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Claim a visit for this session's identity
+      tags:
+      - auth
   /api/v1/journeys/{visitId}/clinics/{clinicCode}/close-round:
     post:
       description: 'Staff override (ADR-0009 §4): confirms the visit''s latest round
@@ -664,8 +706,9 @@ paths:
       - journeys
   /api/v1/journeys/{visitId}/location:
     get:
-      description: The latest recorded location observation of the visit (QR scan,
-        Zigbee fix, manual pick) — the canonical start point for routing.
+      description: 'The latest recorded location observation of the visit (QR scan,
+        Zigbee fix, manual pick) — the canonical start point for routing. Patient-surface
+        (#96): the session must have claimed the visit.'
       parameters:
       - description: Visit ID
         in: path
@@ -679,24 +722,32 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/location.Observation'
+        "401":
+          description: missing or invalid patient session
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
         "404":
-          description: no location recorded for this visit yet
+          description: no location recorded yet, visit unknown, or not claimed by
+            this session
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
         "500":
           description: internal server error
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
       summary: Get the visit's current location
       tags:
       - location
     post:
       consumes:
       - application/json
-      description: Records a location fix for the visit and makes it the current location.
-        The raw payload is the scanned string (a CarePath location QR carries a place
-        reference only — never patient data); the server resolves it through the matching
-        provider to a canonical navigation node and returns the recorded observation.
+      description: 'Records a location fix for the visit and makes it the current
+        location. The raw payload is the scanned string (a CarePath location QR carries
+        a place reference only — never patient data); the server resolves it through
+        the matching provider to a canonical navigation node and returns the recorded
+        observation. Patient-surface (#96): the session must have claimed the visit.'
       parameters:
       - description: Visit ID
         in: path
@@ -721,10 +772,20 @@ paths:
             to a known location
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
+        "401":
+          description: missing or invalid patient session
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: visit unknown, or not claimed by this session — indistinguishable
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
         "500":
           description: internal server error
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
       summary: Report a scanned location fix
       tags:
       - location

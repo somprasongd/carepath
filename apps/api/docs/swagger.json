@@ -340,7 +340,12 @@
         },
         "/api/v1/journeys/{visitId}": {
             "get": {
-                "description": "Returns the CarePath-derived journey plan (ADR-0009): steps in display order, each resolved to its service point, with every currently-actionable step and CarePath's recommendation among them. A completed visit is reported with completed=true and no actionable steps.",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "Returns the CarePath-derived journey plan (ADR-0009): steps in display order, each resolved to its service point, with every currently-actionable step and CarePath's recommendation among them. A completed visit is reported with completed=true and no actionable steps. Patient-surface (#96): the patient session's identity must have claimed this visit; an unclaimed or unknown visit answers the same 404.",
                 "produces": [
                     "application/json"
                 ],
@@ -364,8 +369,60 @@
                             "$ref": "#/definitions/journey.View"
                         }
                     },
+                    "401": {
+                        "description": "missing or invalid patient session",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
                     "404": {
-                        "description": "no journey projected for this visit",
+                        "description": "visit unknown, or not claimed by this session — indistinguishable",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/journeys/{visitId}/claim": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "Records that the identity behind the patient session owns the visit (#96) — the only way read access to a journey is minted. Knowing the VN is the credential, matching the product's patient front door. Idempotent: re-claiming a visit already owned by this identity succeeds. A visit that was never projected answers 404, indistinguishable from the journey read's unknown-visit 404.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Claim a visit for this session's identity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit id",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "401": {
+                        "description": "missing or invalid patient session",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "visit not projected",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }
@@ -429,7 +486,12 @@
         },
         "/api/v1/journeys/{visitId}/location": {
             "get": {
-                "description": "The latest recorded location observation of the visit (QR scan, Zigbee fix, manual pick) — the canonical start point for routing.",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "The latest recorded location observation of the visit (QR scan, Zigbee fix, manual pick) — the canonical start point for routing. Patient-surface (#96): the session must have claimed the visit.",
                 "produces": [
                     "application/json"
                 ],
@@ -453,8 +515,14 @@
                             "$ref": "#/definitions/location.Observation"
                         }
                     },
+                    "401": {
+                        "description": "missing or invalid patient session",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
                     "404": {
-                        "description": "no location recorded for this visit yet",
+                        "description": "no location recorded yet, visit unknown, or not claimed by this session",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }
@@ -468,7 +536,12 @@
                 }
             },
             "post": {
-                "description": "Records a location fix for the visit and makes it the current location. The raw payload is the scanned string (a CarePath location QR carries a place reference only — never patient data); the server resolves it through the matching provider to a canonical navigation node and returns the recorded observation.",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "Records a location fix for the visit and makes it the current location. The raw payload is the scanned string (a CarePath location QR carries a place reference only — never patient data); the server resolves it through the matching provider to a canonical navigation node and returns the recorded observation. Patient-surface (#96): the session must have claimed the visit.",
                 "consumes": [
                     "application/json"
                 ],
@@ -506,6 +579,18 @@
                     },
                     "400": {
                         "description": "invalid body, unknown source, or a fix that does not resolve to a known location",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "missing or invalid patient session",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "visit unknown, or not claimed by this session — indistinguishable",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }

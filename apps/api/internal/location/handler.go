@@ -20,11 +20,13 @@ func NewHandler(service Service) *Handler {
 }
 
 // Register mounts the location routes under the given /api/v1 router,
-// alongside the other per-visit journey endpoints (the #43 auth guard is
-// meant to cover this group too).
-func (h *Handler) Register(router fiber.Router) {
-	router.Post("/journeys/:visitId/location", h.report)
-	router.Get("/journeys/:visitId/location", h.current)
+// alongside the other per-visit journey endpoints. The patient guard (#96)
+// requires the session to have claimed the visit — reporting or reading
+// someone else's location is the same privacy boundary as reading their
+// journey.
+func (h *Handler) Register(router fiber.Router, patientGuard fiber.Handler) {
+	router.Post("/journeys/:visitId/location", patientGuard, h.report)
+	router.Get("/journeys/:visitId/location", patientGuard, h.current)
 }
 
 // RegisterDemo mounts the demo-only simulator routes under the given
@@ -47,14 +49,17 @@ type reportRequestBody struct {
 // report godoc
 //
 //	@Summary		Report a scanned location fix
-//	@Description	Records a location fix for the visit and makes it the current location. The raw payload is the scanned string (a CarePath location QR carries a place reference only — never patient data); the server resolves it through the matching provider to a canonical navigation node and returns the recorded observation.
+//	@Description	Records a location fix for the visit and makes it the current location. The raw payload is the scanned string (a CarePath location QR carries a place reference only — never patient data); the server resolves it through the matching provider to a canonical navigation node and returns the recorded observation. Patient-surface (#96): the session must have claimed the visit.
 //	@Tags			location
-//	@Accept			json
+//	@Security		bearerAuth
+//	@Accept		json
 //	@Produce		json
 //	@Param			visitId	path	string	true	"Visit ID"
 //	@Param			body	body	location.reportRequestBody	true	"Scanned fix: source (e.g. QR) and raw payload"
 //	@Success		200	{object}	location.Observation
 //	@Failure		400	{object}	httpx.ErrorResponse	"invalid body, unknown source, or a fix that does not resolve to a known location"
+//	@Failure		401	{object}	httpx.ErrorResponse	"missing or invalid patient session"
+//	@Failure		404	{object}	httpx.ErrorResponse	"visit unknown, or not claimed by this session — indistinguishable"
 //	@Failure		500	{object}	httpx.ErrorResponse	"internal server error"
 //	@Router			/api/v1/journeys/{visitId}/location [post]
 func (h *Handler) report(c fiber.Ctx) error {
@@ -72,12 +77,14 @@ func (h *Handler) report(c fiber.Ctx) error {
 // current godoc
 //
 //	@Summary		Get the visit's current location
-//	@Description	The latest recorded location observation of the visit (QR scan, Zigbee fix, manual pick) — the canonical start point for routing.
+//	@Description	The latest recorded location observation of the visit (QR scan, Zigbee fix, manual pick) — the canonical start point for routing. Patient-surface (#96): the session must have claimed the visit.
 //	@Tags			location
+//	@Security		bearerAuth
 //	@Produce		json
 //	@Param			visitId	path	string	true	"Visit ID"
 //	@Success		200	{object}	location.Observation
-//	@Failure		404	{object}	httpx.ErrorResponse	"no location recorded for this visit yet"
+//	@Failure		401	{object}	httpx.ErrorResponse	"missing or invalid patient session"
+//	@Failure		404	{object}	httpx.ErrorResponse	"no location recorded yet, visit unknown, or not claimed by this session"
 //	@Failure		500	{object}	httpx.ErrorResponse	"internal server error"
 //	@Router			/api/v1/journeys/{visitId}/location [get]
 func (h *Handler) current(c fiber.Ctx) error {

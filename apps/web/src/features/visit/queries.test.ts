@@ -1,6 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Journey } from './queries'
-import { journeyQueryOptions, transitionStepUrl } from './queries'
+import { ensureVisitClaimed, journeyQueryOptions, transitionStepUrl } from './queries'
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+const jsonResponse = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
 
 function journey(overrides: Partial<Journey> = {}): Journey {
   return {
@@ -64,5 +74,61 @@ describe('journeyQueryOptions realtime (#36)', () => {
     expect(journeyQueryOptions('VISIT-001').queryKey).toEqual(
       journeyQueryOptions('VISIT-001').queryKey,
     )
+  })
+})
+
+describe('ensureVisitClaimed (#96 visit claim)', () => {
+  it('POSTs the claim once per visit id per page session — polls and parallel callers share it', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await Promise.all([
+      ensureVisitClaimed('VISIT-CLAIM-A'),
+      ensureVisitClaimed('VISIT-CLAIM-A'),
+    ])
+    await ensureVisitClaimed('VISIT-CLAIM-A')
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/journeys/VISIT-CLAIM-A/claim', {
+      method: 'POST',
+    })
+  })
+
+  it('claims per visit id — another visit still fires its own claim', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await ensureVisitClaimed('VISIT-CLAIM-A2')
+    await ensureVisitClaimed('VISIT-CLAIM-B2')
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('propagates the claim failure — an unprojected visit 404s like the read does', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ error: 'journey not found' }, 404)),
+    )
+
+    const failure = await ensureVisitClaimed('VISIT-CLAIM-C2').catch((e: unknown) => e)
+    expect(failure).toBeInstanceOf(Error)
+    expect((failure as { status?: number }).status).toBe(404)
+  })
+
+  it('the journey queryFn claims before it reads', async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path.endsWith('/claim')) {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      return Promise.resolve(jsonResponse(journey({ visitId: 'VISIT-CLAIM-D' })))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const queryFn = journeyQueryOptions('VISIT-CLAIM-D').queryFn as () => Promise<Journey>
+    await expect(queryFn()).resolves.toMatchObject({ visitId: 'VISIT-CLAIM-D' })
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/api/v1/journeys/VISIT-CLAIM-D/claim',
+      '/api/v1/journeys/VISIT-CLAIM-D',
+    ])
   })
 })

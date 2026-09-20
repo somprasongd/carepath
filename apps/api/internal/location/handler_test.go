@@ -43,7 +43,11 @@ func newTestApp(t *testing.T) (*fiber.App, *fakeRepo) {
 		t.Fatalf("NewService: %v", err)
 	}
 	app := fiber.New()
-	location.NewHandler(svc).Register(app.Group("/api/v1"))
+	// The patient guard is a no-op here: these tests exercise the location
+	// handlers, not the session policy — the ownership guard is pinned in
+	// internal/session/guard_test.go (#96).
+	location.NewHandler(svc).Register(app.Group("/api/v1"),
+		func(c fiber.Ctx) error { return c.Next() })
 	return app, repo
 }
 
@@ -168,7 +172,7 @@ func newDemoTestApp(t *testing.T) (*fiber.App, *fakeRepo) {
 	}
 	app := fiber.New()
 	handler := location.NewHandler(svc)
-	handler.Register(app.Group("/api/v1"))
+	handler.Register(app.Group("/api/v1"), func(c fiber.Ctx) error { return c.Next() })
 	handler.RegisterDemo(app.Group("/api/v1"))
 	return app, repo
 }

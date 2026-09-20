@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"carepath/apps/api/internal/identity"
 	"carepath/apps/api/internal/platform/apperr"
 	"carepath/apps/api/internal/platform/httpx"
 )
@@ -13,16 +14,21 @@ import (
 // Handler exposes the session module over HTTP.
 type Handler struct {
 	service Service
+	claims  ClaimRepo
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service Service, claims ClaimRepo) *Handler {
+	return &Handler{service: service, claims: claims}
 }
 
 // Register mounts the session routes under the given /api/v1 router.
 func (h *Handler) Register(router fiber.Router) {
 	router.Post("/auth/session", h.create)
 	router.Get("/auth/session", h.get)
+	// The visit claim (#96) is the bridge from a verified identity to the
+	// visits it may read — the only way ownership is minted. Session-guarded,
+	// not visit-guarded: the claim itself is the act of claiming.
+	router.Post("/journeys/:visitId/claim", RequireSession(h.service), h.claim)
 }
 
 type createRequest struct {
@@ -99,4 +105,24 @@ func (h *Handler) get(c fiber.Ctx) error {
 		ExternalID:  id.ExternalID,
 		DisplayName: id.DisplayName,
 	})
+}
+
+// claim godoc
+//
+//	@Summary		Claim a visit for this session's identity
+//	@Description	Records that the identity behind the patient session owns the visit (#96) — the only way read access to a journey is minted. Knowing the VN is the credential, matching the product's patient front door. Idempotent: re-claiming a visit already owned by this identity succeeds. A visit that was never projected answers 404, indistinguishable from the journey read's unknown-visit 404.
+//	@Tags			auth
+//	@Security		bearerAuth
+//	@Param			visitId	path	string	true	"Visit id"
+//	@Success		204	"No content"
+//	@Failure		401	{object}	httpx.ErrorResponse	"missing or invalid patient session"
+//	@Failure		404	{object}	httpx.ErrorResponse	"visit not projected"
+//	@Failure		500	{object}	httpx.ErrorResponse	"internal server error"
+//	@Router			/api/v1/journeys/{visitId}/claim [post]
+func (h *Handler) claim(c fiber.Ctx) error {
+	id, _ := c.Locals(identityLocalKey).(identity.Identity)
+	if err := h.claims.Claim(c.Context(), id, c.Params("visitId")); err != nil {
+		return httpx.Error(c, err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }

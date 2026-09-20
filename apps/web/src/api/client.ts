@@ -42,6 +42,18 @@ export async function apiDelete(path: string): Promise<void> {
   }
 }
 
+/**
+ * Body-less POST expecting no body (204 today: the visit claim, #96). Same
+ * bearer rule as apiDelete — a patient-surface command, so the session token
+ * rides it; apiPost cannot be used because it both sends and parses JSON.
+ */
+export async function apiPostNoContent(path: string): Promise<void> {
+  const response = await doFetch(path, withAuthHeader({ method: 'POST' }))
+  if (!response.ok) {
+    throw await apiErrorFrom(response)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Share token (ADR-0011 §5) — the third credential, and the only one the
 // /shared surface may carry. It arrives in the URL fragment of /shared
@@ -129,6 +141,18 @@ export function loadStaffRefreshToken(): string | null {
 export function clearStaffSession() {
   staffAccessToken = undefined
   storage()?.removeItem(STAFF_REFRESH_KEY)
+}
+
+/**
+ * Drop the in-memory staff access token while keeping the persisted refresh
+ * token — called when the staff console unmounts. Since #96 the patient
+ * surface needs its own session bearer, and the slots prefer the staff
+ * token when both are set; leaving /staff for /patient in one tab would
+ * otherwise send a staff JWT to patient routes (401). Returning to the
+ * console re-exchanges the refresh token, so the session survives the trip.
+ */
+export function releaseStaffAccessToken() {
+  staffAccessToken = undefined
 }
 
 // Called when the staff session is gone for good (refresh refused). The

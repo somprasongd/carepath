@@ -121,6 +121,10 @@ func run(ctx context.Context, log *slog.Logger) error {
 	allowDemoAuth := envOrDefault("ALLOW_DEMO_AUTH", "false") == "true"
 	sessionTTL := envDuration("SESSION_TTL", 24*time.Hour)
 	sessions := session.NewService(sessionpostgres.New(database), lineVerifier, allowDemoAuth, sessionTTL)
+	// Visit ownership (#96): the claim is the bridge from a verified identity
+	// to the visits it may read. Patient journey surfaces take this guard, so
+	// a session can only reach visits it claimed by naming the VN.
+	claims := sessionpostgres.NewClaimRepo(database)
 
 	// Staff/admin auth (ADR-0010): argon2id passwords, a stateless 15-minute
 	// JWT access token, and a rotating single-use refresh token. JWT_SECRET
@@ -167,7 +171,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 		return c.Type("html").SendString(swaggerUIPage)
 	})
 
-	session.NewHandler(sessions).Register(app.Group("/api/v1"))
+	session.NewHandler(sessions, claims).Register(app.Group("/api/v1"))
 	authHandler := auth.NewHandler(authService)
 	authHandler.Register(app.Group("/api/v1"))
 	// /auth/me sits behind the same guard as the staff surfaces: any
@@ -176,10 +180,13 @@ func run(ctx context.Context, log *slog.Logger) error {
 	// patient routes too.
 	authHandler.RegisterMe(app.Group("/api/v1"), auth.RequireRole(authService))
 	// The staff commands and the monitor read require STAFF or ADMIN; the
-	// patient journey read and every other route above stay open
-	// (ADR-0010 §7 — a blanket guard would break the patient screens).
+	// patient journey read requires the patient session and a claim on the
+	// visit (#96, the ADR-0010 leftover) — a blanket guard would still break
+	// the patient screens, so both stay per-route.
+	patientVisitGuard := session.RequirePatientVisit(sessions, claims)
 	journey.NewHandler(journeys).Register(app.Group("/api/v1"),
-		auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin))
+		auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin),
+		patientVisitGuard)
 	// Executive analytics (#86): read-only aggregates over the timeline the
 	// journey module writes (#85) — journey เขียน · analytics อ่าน. STAFF
 	// and ADMIN keep their existing reach; EXECUTIVE logins reach this
@@ -192,15 +199,16 @@ func run(ctx context.Context, log *slog.Logger) error {
 	analytics.NewHandler(analyticsService).Register(app.Group("/api/v1"),
 		auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin, auth.RoleExecutive))
 	// Relative share links (ADR-0011): the third credential kind. Creating
-	// and revoking a link takes the patient-session guard; the shared read
-	// accepts the share token itself and nothing else — cross-kind token use
-	// fails in every direction by construction.
+	// and revoking a link takes the patient visit guard (#96) — the session
+	// must own the visit it shares; the shared read accepts the share token
+	// itself and nothing else — cross-kind token use fails in every direction
+	// by construction.
 	shareTTL := envDuration("SHARE_LINK_TTL", 4*time.Hour)
 	shares := share.NewService(sharepostgres.New(database), journeys, database, shareTTL)
-	share.NewHandler(shares).Register(app.Group("/api/v1"), session.RequireSession(sessions))
+	share.NewHandler(shares).Register(app.Group("/api/v1"), patientVisitGuard)
 	servicepoint.NewHandler(servicePoints).Register(app.Group("/api/v1"))
 	locationHandler := location.NewHandler(locations)
-	locationHandler.Register(app.Group("/api/v1"))
+	locationHandler.Register(app.Group("/api/v1"), patientVisitGuard)
 	locationHandler.RegisterDemo(app.Group("/api/v1"))
 	navigation.NewHandler(navigationGraph).Register(app.Group("/api/v1"))
 

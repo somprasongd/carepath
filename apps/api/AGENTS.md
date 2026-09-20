@@ -57,7 +57,7 @@ Reference implementations: `servicepoint` (repo + service, no HTTP), `journey` (
 ## Rules — auth (ADR-0010)
 
 - Two identity kinds, two modules: `session` (patients, LINE, opaque token) and `auth` (staff/admin, password, JWT + refresh). Never make one accept the other's token, and never merge their tables.
-- Protect routes **per group in `cmd/server/main.go`** with `auth.RequireRole(...)`, never with a global `app.Use`. `GET /api/v1/journeys/{visitId}` is a patient surface and must stay open — a blanket guard breaks every patient screen.
+- Protect routes **per group in `cmd/server/main.go`** with `auth.RequireRole(...)` or `session.RequireSession`/`session.RequirePatientVisit`, never with a global `app.Use`. `GET /api/v1/journeys/{visitId}` and the other visit-scoped patient routes (`location`, `share`, the claim itself) are guarded by `session.RequirePatientVisit` since #96: a session alone is not enough, the session's identity must have claimed the visit (`POST /api/v1/journeys/{visitId}/claim`). Ownership failures reuse the journey read's 404 text so existence never leaks.
 - Read the acting user with `auth.PrincipalFromContext(ctx)`; pass it into audited commands so NFR-09's "who" is a user, not a surface string.
 - Unauthenticated → `apperr.KindUnauthorized` (401). Authenticated but wrong role → `apperr.KindForbidden` (403). Use the module's error variables; don't hand-roll a status.
 - Never log a password, a token, or an `Authorization` header — not truncated, not at debug level. Log `user_id`/`username` instead.

@@ -1,9 +1,7 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { cn } from 'cn'
 import { Button, InfoNote, Meta, PageTitle, staffTitle } from '@/design-system'
 import {
-  journeyQueryOptions,
   stepAction,
   transitionErrorText,
   useStaffVisits,
@@ -16,24 +14,23 @@ import { StaffShell } from './-StaffShell'
 
 /**
  * ผู้ป่วยวันนี้ · the staff visit monitor (#37): every projected visit on
- * the left, the selected visit's full journey on the right. Reads the
- * CarePath projection via the staff list + journey endpoints — on a phone
- * the list and the detail swap instead of sitting side by side. The per-step
- * controls (#38) command transitions through the application API.
+ * the left, the selected visit's full journey on the right. Both sides read
+ * the staff list endpoint, which returns the same per-visit shape as the
+ * single-journey read — since #96 the patient journey read takes the
+ * patient's own session, so the staff detail must not ride it (#96). On a
+ * phone the list and the detail swap instead of sitting side by side. The
+ * per-step controls (#38) command transitions through the application API.
  */
 export function Patients() {
   const visits = useStaffVisits()
   const journeys = visits.data ?? []
   const [explicitId, setExplicitId] = useState<string | null>(null)
   const selectedId = explicitId ?? journeys[0]?.visitId ?? null
+  const detail = { data: journeys.find((j) => j.visitId === selectedId) ?? null }
 
-  const detail = useQuery({
-    ...journeyQueryOptions(selectedId ?? ''),
-    enabled: selectedId !== null,
-  })
   const transition = useTransitionStep(selectedId ?? '')
 
-  const refreshing = visits.isFetching || detail.isFetching
+  const refreshing = visits.isFetching
 
   return (
     <StaffShell>
@@ -52,7 +49,6 @@ export function Patients() {
           variant="ghost"
           onClick={() => {
             void visits.refetch()
-            if (selectedId) void detail.refetch()
           }}
           disabled={refreshing}
         >
@@ -105,11 +101,6 @@ export function Patients() {
                     />
                   )}
                 />
-              ) : detail.isError ? (
-                <InfoNote>
-                  อ่าน journey ของ visit นี้ไม่สำเร็จ (สถานะ {detail.error.status})
-                  {detail.error.status === 404 ? ' — projection ยังไม่ถูกสร้าง' : ''}
-                </InfoNote>
               ) : (
                 <Meta>กำลังโหลด journey…</Meta>
               )}

@@ -1,5 +1,6 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiGet, apiPost } from '@/api/client'
+import { ensureVisitClaimed } from '@/features/visit'
 import type { components } from '@/api/schema'
 
 export type LocationObservation = components['schemas']['LocationObservation']
@@ -10,12 +11,15 @@ export type LocationObservation = components['schemas']['LocationObservation']
  * an error: the query resolves to null and the navigate screen falls back
  * to its destination-only view until a QR scan or Zigbee fix lands. The
  * short poll keeps the drawn route following location changes (#29 AC2)
- * even before the journey realtime pass (#36).
+ * even before the journey realtime pass (#36). The claim runs first (#96):
+ * an unclaimed visit would also 404, and that 404 must not be read as
+ * "no location yet".
  */
 export function currentLocationQueryOptions(visitId: string) {
   return queryOptions({
     queryKey: ['journey', visitId, 'location'] as const,
     queryFn: async () => {
+      await ensureVisitClaimed(visitId)
       try {
         return await apiGet<LocationObservation>(
           `/api/v1/journeys/${encodeURIComponent(visitId)}/location`,
@@ -49,11 +53,13 @@ export function useReportLocation(visitId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (input: { source: LocationReportSource; raw: string }) =>
-      apiPost<LocationObservation>(
+    mutationFn: async (input: { source: LocationReportSource; raw: string }) => {
+      await ensureVisitClaimed(visitId)
+      return apiPost<LocationObservation>(
         `/api/v1/journeys/${encodeURIComponent(visitId)}/location`,
         input,
-      ),
+      )
+    },
     onSuccess: (observation) => {
       queryClient.setQueryData(
         currentLocationQueryOptions(visitId).queryKey,

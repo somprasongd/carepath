@@ -89,7 +89,9 @@ Add a **third credential mechanism under explicit conditions**, in a new
    can already read the full journey. What the link adds is a *narrower*
    view for a *wider* audience, plus creation gated on a patient session.
    Binding journey reads to the owning session is separate, older work and
-   is not smuggled into this ADR.
+   is not smuggled into this ADR. *(Update 2026-09-20: that work landed as
+   #96 — the journey read now takes the patient session plus a visit claim,
+   so the risk stated here is closed.)*
 
 ## Consequences
 
@@ -114,4 +116,5 @@ Add a **third credential mechanism under explicit conditions**, in a new
 - All screens — the web side (share button, `/shared#token` page) is #90.
 - Map/navigation views and queue notifications for relatives (S6).
 - Periodic purging of expired rows (harmless; revisit if the table grows).
-- Binding `GET /api/v1/journeys/{visitId}` to the owning patient session.
+- Binding `GET /api/v1/journeys/{visitId}` to the owning patient session
+  (landed since, as #96).
