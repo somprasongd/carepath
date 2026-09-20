@@ -36,6 +36,11 @@ services:
       # Empty = same-origin: the console reads /api/v1/service-points through
       # the edge proxy alongside its own demo paths.
       CAREPATH_API_BASE_URL: ${CAREPATH_API_BASE_URL:-}
+      # Slip-QR minting (ADR-0014) runs server-side over the docker network.
+      # CAREPATH_HIS_API_KEY (same value as the api's HIS_API_KEY) switches
+      # the console QR to minted #vt= links; empty keeps the legacy ?visit=.
+      CAREPATH_API_INTERNAL_BASE_URL: ${CAREPATH_API_INTERNAL_BASE_URL:-http://api:8080}
+      CAREPATH_HIS_API_KEY: ${CAREPATH_HIS_API_KEY:-}
 
   migrate:
     image: migrate/migrate:v4.18.1
@@ -66,6 +71,15 @@ services:
       JWT_SECRET: ${JWT_SECRET:-}
       ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
       REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-168h}
+      # Visit link (ADR-0014): routes register only when HIS_API_KEY and
+      # VISIT_LINK_SECRET are both set (fail-closed). PATIENT_APP_BASE_URL
+      # has no request to derive an origin from (server-to-server mint), so
+      # prod MUST set it to the public origin or slip QRs point at
+      # localhost.
+      HIS_API_KEY: ${HIS_API_KEY:-}
+      VISIT_LINK_SECRET: ${VISIT_LINK_SECRET:-}
+      VISIT_LINK_COMPLETED_GRACE: ${VISIT_LINK_COMPLETED_GRACE:-30m}
+      PATIENT_APP_BASE_URL: ${PATIENT_APP_BASE_URL:-}
     depends_on:
       postgres:
         condition: service_healthy

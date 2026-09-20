@@ -362,6 +362,130 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/his/visits/{visitId}/patient-link": {
+            "post": {
+                "security": [
+                    {
+                        "hisApiKey": []
+                    }
+                ],
+                "description": "Returns the visit's navigation-slip link (#136): a high-entropy token behind /patient/journey#vt=… that the patient's session redeems into visit ownership. Repeat calls return the same URL (a re-print never invalidates the slip in the patient's hand); rotate=true discards it — lost slip, suspected leak — and the previous link stops redeeming. The visit's lifetime governs the link: ACTIVE is live, COMPLETED lives out VISIT_LINK_COMPLETED_GRACE, CANCELLED dies at once. Service-to-service: X-HIS-API-Key, the system's only inbound HIS→CarePath call. format=qr answers the same URL encoded as a PNG QR ready for the slip.",
+                "tags": [
+                    "his"
+                ],
+                "summary": "Mint the visit's patient link (HIS surface)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit id (VN)",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "url (JSON, default) or qr (image/png of the same URL)",
+                        "name": "format",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Discard the current token and mint a new one (default false)",
+                        "name": "rotate",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "format=qr: the link as a PNG QR",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "unknown format value",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "missing or invalid HIS API key",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "visit not projected",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/journeys/claim": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "Exchanges the slip-held link token (#136) for the visit it addresses and records the #96 claim — the identity behind the patient session becomes the visit's owner, exactly as typing a VN used to do on demo deployments. The token rides the request body, never a URL. Unknown, rotated, cancelled, past-grace, and secret-rotated tokens all answer the journey read's 404.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Redeem a visit link token for this session",
+                "parameters": [
+                    {
+                        "description": "the vt token from the slip URL's #vt= fragment",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/visitlink.redeemRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/visitlink.redeemResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "missing or invalid patient session",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "visit unknown or link not redeemable — indistinguishable",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/journeys/{visitId}": {
             "get": {
                 "security": [
@@ -421,7 +545,7 @@ const docTemplate = `{
                         "bearerAuth": []
                     }
                 ],
-                "description": "Records that the identity behind the patient session owns the visit (#96) — the only way read access to a journey is minted. Knowing the VN is the credential, matching the product's patient front door. Idempotent: re-claiming a visit already owned by this identity succeeds. A visit that was never projected answers 404, indistinguishable from the journey read's unknown-visit 404.",
+                "description": "Records that the identity behind the patient session owns the visit by naming it (#96) — demo deployments only (ALLOW_DEMO_AUTH): production mints ownership through the slip-held link token instead (POST /api/v1/journeys/claim, #136). Idempotent; a visit that was never projected answers 404, indistinguishable from the journey read's unknown-visit 404.",
                 "tags": [
                     "auth"
                 ],
@@ -2067,6 +2191,33 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "visitlink.Link": {
+            "type": "object",
+            "properties": {
+                "visitId": {
+                    "type": "string"
+                },
+                "visitUrl": {
+                    "type": "string"
+                }
+            }
+        },
+        "visitlink.redeemRequest": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "visitlink.redeemResponse": {
+            "type": "object",
+            "properties": {
+                "visitId": {
                     "type": "string"
                 }
             }

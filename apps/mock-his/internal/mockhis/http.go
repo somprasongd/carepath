@@ -2,12 +2,15 @@ package mockhis
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/skip2/go-qrcode"
@@ -36,7 +39,15 @@ func param(c fiber.Ctx, name string) string {
 // logger feeds the request-logging middleware; state changes log through the
 // request-scoped logger it stores in ctx. Store options pass through (tests
 // inject a fixed clock for deterministic event ids).
-func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string, storeOpts ...StoreOption) *fiber.App {
+//
+// carepathInternalBaseURL + carepathHISAPIKey wire the console's visit QR to
+// CarePath's link mint (#136) — the same inbound call a real HIS makes to
+// print a navigation slip. Empty key = mint not configured: the console
+// falls back to the raw ?visit= QR, which only works on ALLOW_DEMO_AUTH
+// stacks.
+func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL,
+	carepathInternalBaseURL, carepathHISAPIKey string, storeOpts ...StoreOption,
+) *fiber.App {
 	store := NewStore(storeOpts...)
 	app := fiber.New()
 	app.Use(logger.Middleware(log))
@@ -226,23 +237,91 @@ func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string, storeOp
 	})
 
 	// QR for the console detail panel — demo stand-in for the real printed
-	// navigation slip's QR: encodes the patient-view URL for this visit, so
-	// scanning it (or clicking the console link) opens the journey directly.
+	// navigation slip's QR. With the mint configured it IS the slip QR
+	// (#136): CarePath returns the token-encoded PNG, exactly what the
+	// hospital would print. Without it (local dev, no secrets), encode the
+	// raw patient-view URL — redeemable only on ALLOW_DEMO_AUTH stacks.
 	app.Get("/api/v1/demo/visits/:visitId/qrcode.png", func(c fiber.Ctx) error {
 		visitID := param(c, "visitId")
 		if _, ok := store.GetVisit(visitID); !ok {
 			return errResponse(c, http.StatusNotFound, "visit not found")
 		}
-		target := qrTarget(patientAppBaseURL, c.Get(fiber.HeaderXForwardedProto), c.Get(fiber.HeaderXForwardedHost), c.Host(), visitID)
-		png, err := qrcode.Encode(target, qrcode.Medium, 256)
+		if carepathHISAPIKey == "" {
+			target := qrTarget(patientAppBaseURL, c.Get(fiber.HeaderXForwardedProto), c.Get(fiber.HeaderXForwardedHost), c.Host(), visitID)
+			png, err := qrcode.Encode(target, qrcode.Medium, 256)
+			if err != nil {
+				return errResponse(c, http.StatusInternalServerError, "qr encode failed")
+			}
+			c.Set(fiber.HeaderContentType, "image/png")
+			return c.Send(png)
+		}
+		png, status, err := mintFromCarepath(c.Context(), carepathInternalBaseURL, carepathHISAPIKey, visitID, "qr")
 		if err != nil {
-			return errResponse(c, http.StatusInternalServerError, "qr encode failed")
+			return errResponse(c, http.StatusBadGateway, "carepath unreachable")
+		}
+		if status != http.StatusOK {
+			return errResponse(c, mintFailureStatus(status), "carepath mint: "+strconv.Itoa(status))
 		}
 		c.Set(fiber.HeaderContentType, "image/png")
 		return c.Send(png)
 	})
 
+	// The minted URL as JSON, for the console's "open patient view" link —
+	// the browser never sees the HIS key, mock-his presents it server-side.
+	app.Get("/api/v1/demo/visits/:visitId/patient-link", func(c fiber.Ctx) error {
+		visitID := param(c, "visitId")
+		if _, ok := store.GetVisit(visitID); !ok {
+			return errResponse(c, http.StatusNotFound, "visit not found")
+		}
+		if carepathHISAPIKey == "" {
+			return errResponse(c, http.StatusServiceUnavailable, "visit-link mint not configured")
+		}
+		body, status, err := mintFromCarepath(c.Context(), carepathInternalBaseURL, carepathHISAPIKey, visitID, "url")
+		if err != nil {
+			return errResponse(c, http.StatusBadGateway, "carepath unreachable")
+		}
+		if status != http.StatusOK {
+			return errResponse(c, mintFailureStatus(status), "carepath mint: "+strconv.Itoa(status))
+		}
+		c.Set(fiber.HeaderContentType, "application/json")
+		return c.Send(body)
+	})
+
 	return app
+}
+
+// mintHTTPClient bounds a console QR render by the mint's latency, not the
+// console request's.
+var mintHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
+// mintFromCarepath calls CarePath's link mint (#136) with the deployment's
+// HIS key — the same service-to-service call a real HIS makes — and returns
+// the raw body with the HTTP status CarePath answered.
+func mintFromCarepath(ctx context.Context, baseURL, key, visitID, format string) ([]byte, int, error) {
+	mintURL := strings.TrimSuffix(baseURL, "/") +
+		"/api/v1/his/visits/" + url.PathEscape(visitID) + "/patient-link?format=" + format
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, mintURL, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("X-HIS-API-Key", key)
+	resp, err := mintHTTPClient.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	return body, resp.StatusCode, err
+}
+
+// mintFailureStatus keeps the console honest about which failures are ours:
+// CarePath's journey 404 (visit not projected yet) passes through as 404,
+// anything else is a gateway problem.
+func mintFailureStatus(upstream int) int {
+	if upstream == http.StatusNotFound {
+		return http.StatusNotFound
+	}
+	return http.StatusBadGateway
 }
 
 func errResponse(c fiber.Ctx, status int, msg string) error {

@@ -1,4 +1,5 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { authMode } from '@/auth/auth-mode'
 import { ApiError, apiGet, apiPost, apiPostNoContent } from '@/api/client'
 import type { components } from '@/api/schema'
 
@@ -95,16 +96,22 @@ const claimsInFlight = new Map<string, Promise<void>>()
 
 /**
  * Bind this session's identity to the visit (#96) before reading or
- * commanding it. Claiming is the patient's front door made explicit: knowing
- * the visit id (typed VN, scanned QR) is the credential. Idempotent server-
- * side, and once per page session is enough — the Set keeps the 15s polls
- * and parallel queries from re-firing the POST. Only a claim that SUCCEEDED
- * is remembered: a failed one is retried by the next call (query retry,
- * refetch), so one transient failure can't wedge the visit's queries into
- * permanent 404s until a reload. A visit that was never projected 404s here
- * with the same "journey not found" the read itself would give.
+ * commanding it. In demo mode claiming by VN is the patient's front door —
+ * knowing the visit id (typed VN, scanned QR) is the credential. In line mode
+ * that route doesn't exist on the server (ALLOW_DEMO_AUTH off in production):
+ * the slip-link redeem (#136) is the only front door, and it has already
+ * claimed by the time a visit id reaches the URL — so this is a no-op and an
+ * un-redeemed ?visit= simply reads as the journey's not-found state.
+ * Idempotent server-side, and once per page session is enough — the Set keeps
+ * the 15s polls and parallel queries from re-firing the POST. Only a claim
+ * that SUCCEEDED is remembered: a failed one is retried by the next call
+ * (query retry, refetch), so one transient failure can't wedge the visit's
+ * queries into permanent 404s until a reload. A visit that was never
+ * projected 404s here with the same "journey not found" the read itself
+ * would give.
  */
 export async function ensureVisitClaimed(visitId: string): Promise<void> {
+  if (authMode === 'line') return
   if (claimedVisits.has(visitId)) return
   // Concurrent callers (poll + parallel queries) share one in-flight POST.
   const existing = claimsInFlight.get(visitId)
@@ -121,6 +128,19 @@ export async function ensureVisitClaimed(visitId: string): Promise<void> {
     })
   claimsInFlight.set(visitId, claim)
   await claim
+}
+
+/**
+ * Exchange the slip-held link token (#136) for the visit it addresses. The
+ * token rides the request body, never a URL; the server records the #96
+ * claim for this session's identity, so the returned visit id needs no
+ * further claim. Unknown, rotated, cancelled, and past-grace tokens all
+ * answer the same 404 — the caller decides what that screen says.
+ */
+export async function redeemVisitLinkToken(token: string): Promise<string> {
+  const response = await apiPost<{ visitId: string }>('/api/v1/journeys/claim', { token })
+  claimedVisits.add(response.visitId)
+  return response.visitId
 }
 
 /**

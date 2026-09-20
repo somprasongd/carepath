@@ -72,7 +72,7 @@ func newShareAppWithHIS(t *testing.T, database *db.DB, hisBaseURL string) *fiber
 	shares := share.NewService(sharepostgres.New(database), journeys, database, time.Hour)
 
 	app := fiber.New()
-	session.NewHandler(sessions, claims).Register(app.Group("/api/v1"))
+	session.NewHandler(sessions, claims).Register(app.Group("/api/v1"), true)
 	authHandler := auth.NewHandler(authService)
 	authHandler.Register(app.Group("/api/v1"))
 	authHandler.RegisterMe(app.Group("/api/v1"), auth.RequireRole(authService))

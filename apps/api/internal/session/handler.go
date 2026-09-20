@@ -22,13 +22,17 @@ func NewHandler(service Service, claims ClaimRepo) *Handler {
 }
 
 // Register mounts the session routes under the given /api/v1 router.
-func (h *Handler) Register(router fiber.Router) {
+// demoClaims also mounts the VN-typed claim — knowing the VN alone was the
+// patient front door in #96's MVP model, and #136 replaces it with the
+// slip-held link token everywhere except demo deployments (ALLOW_DEMO_AUTH
+// + the web's VN entry screen), so the guessable-credential door stays shut
+// in production.
+func (h *Handler) Register(router fiber.Router, demoClaims bool) {
 	router.Post("/auth/session", h.create)
 	router.Get("/auth/session", h.get)
-	// The visit claim (#96) is the bridge from a verified identity to the
-	// visits it may read — the only way ownership is minted. Session-guarded,
-	// not visit-guarded: the claim itself is the act of claiming.
-	router.Post("/journeys/:visitId/claim", RequireSession(h.service), h.claim)
+	if demoClaims {
+		router.Post("/journeys/:visitId/claim", RequireSession(h.service), h.claim)
+	}
 }
 
 type createRequest struct {
@@ -110,7 +114,7 @@ func (h *Handler) get(c fiber.Ctx) error {
 // claim godoc
 //
 //	@Summary		Claim a visit for this session's identity
-//	@Description	Records that the identity behind the patient session owns the visit (#96) — the only way read access to a journey is minted. Knowing the VN is the credential, matching the product's patient front door. Idempotent: re-claiming a visit already owned by this identity succeeds. A visit that was never projected answers 404, indistinguishable from the journey read's unknown-visit 404.
+//	@Description	Records that the identity behind the patient session owns the visit by naming it (#96) — demo deployments only (ALLOW_DEMO_AUTH): production mints ownership through the slip-held link token instead (POST /api/v1/journeys/claim, #136). Idempotent; a visit that was never projected answers 404, indistinguishable from the journey read's unknown-visit 404.
 //	@Tags			auth
 //	@Security		bearerAuth
 //	@Param			visitId	path	string	true	"Visit id"

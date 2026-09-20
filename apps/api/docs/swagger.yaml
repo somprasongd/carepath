@@ -522,6 +522,23 @@ definitions:
       title:
         type: string
     type: object
+  visitlink.Link:
+    properties:
+      visitId:
+        type: string
+      visitUrl:
+        type: string
+    type: object
+  visitlink.redeemRequest:
+    properties:
+      token:
+        type: string
+    type: object
+  visitlink.redeemResponse:
+    properties:
+      visitId:
+        type: string
+    type: object
 info:
   contact: {}
   description: |-
@@ -778,6 +795,57 @@ paths:
       summary: Simulate a Zigbee zone fix
       tags:
       - location
+  /api/v1/his/visits/{visitId}/patient-link:
+    post:
+      description: 'Returns the visit''s navigation-slip link (#136): a high-entropy
+        token behind /patient/journey#vt=… that the patient''s session redeems into
+        visit ownership. Repeat calls return the same URL (a re-print never invalidates
+        the slip in the patient''s hand); rotate=true discards it — lost slip, suspected
+        leak — and the previous link stops redeeming. The visit''s lifetime governs
+        the link: ACTIVE is live, COMPLETED lives out VISIT_LINK_COMPLETED_GRACE,
+        CANCELLED dies at once. Service-to-service: X-HIS-API-Key, the system''s only
+        inbound HIS→CarePath call. format=qr answers the same URL encoded as a PNG
+        QR ready for the slip.'
+      parameters:
+      - description: Visit id (VN)
+        in: path
+        name: visitId
+        required: true
+        type: string
+      - description: url (JSON, default) or qr (image/png of the same URL)
+        in: query
+        name: format
+        type: string
+      - description: Discard the current token and mint a new one (default false)
+        in: query
+        name: rotate
+        type: boolean
+      responses:
+        "200":
+          description: 'format=qr: the link as a PNG QR'
+          schema:
+            type: string
+        "400":
+          description: unknown format value
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "401":
+          description: missing or invalid HIS API key
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: visit not projected
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - hisApiKey: []
+      summary: Mint the visit's patient link (HIS surface)
+      tags:
+      - his
   /api/v1/journeys/{visitId}:
     get:
       description: 'Returns the CarePath-derived journey plan (ADR-0009): steps in
@@ -819,11 +887,10 @@ paths:
   /api/v1/journeys/{visitId}/claim:
     post:
       description: 'Records that the identity behind the patient session owns the
-        visit (#96) — the only way read access to a journey is minted. Knowing the
-        VN is the credential, matching the product''s patient front door. Idempotent:
-        re-claiming a visit already owned by this identity succeeds. A visit that
-        was never projected answers 404, indistinguishable from the journey read''s
-        unknown-visit 404.'
+        visit by naming it (#96) — demo deployments only (ALLOW_DEMO_AUTH): production
+        mints ownership through the slip-held link token instead (POST /api/v1/journeys/claim,
+        #136). Idempotent; a visit that was never projected answers 404, indistinguishable
+        from the journey read''s unknown-visit 404.'
       parameters:
       - description: Visit id
         in: path
@@ -1187,6 +1254,46 @@ paths:
       summary: Transition one step
       tags:
       - journeys
+  /api/v1/journeys/claim:
+    post:
+      consumes:
+      - application/json
+      description: 'Exchanges the slip-held link token (#136) for the visit it addresses
+        and records the #96 claim — the identity behind the patient session becomes
+        the visit''s owner, exactly as typing a VN used to do on demo deployments.
+        The token rides the request body, never a URL. Unknown, rotated, cancelled,
+        past-grace, and secret-rotated tokens all answer the journey read''s 404.'
+      parameters:
+      - description: 'the vt token from the slip URL''s #vt= fragment'
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/visitlink.redeemRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/visitlink.redeemResponse'
+        "401":
+          description: missing or invalid patient session
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: visit unknown or link not redeemable — indistinguishable
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Redeem a visit link token for this session
+      tags:
+      - auth
   /api/v1/navigation/route:
     get:
       description: Shortest walkable route for the SVG overlay. from is the current

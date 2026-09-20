@@ -25,6 +25,12 @@ services:
       # Console pickers read CarePath's service-point list; dev runs the two
       # apps on separate ports, so point the browser at the published API.
       CAREPATH_API_BASE_URL: ${CAREPATH_API_BASE_URL:-http://localhost:8080}
+      # Visit-link mint (ADR-0014) is called server-side over the docker
+      # network. Leave CAREPATH_HIS_API_KEY empty to keep the legacy
+      # ?visit= QR; set it (same value as the api's HIS_API_KEY) to serve
+      # minted #vt= slip QRs instead.
+      CAREPATH_API_INTERNAL_BASE_URL: ${CAREPATH_API_INTERNAL_BASE_URL:-http://api:8080}
+      CAREPATH_HIS_API_KEY: ${CAREPATH_HIS_API_KEY:-}
     ports:
       - "${MOCK_HIS_PORT:-8090}:8090"
 
@@ -61,6 +67,13 @@ services:
       JWT_SECRET: ${JWT_SECRET:-}
       ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
       REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-168h}
+      # Visit link (ADR-0014). HIS_API_KEY + VISIT_LINK_SECRET must BOTH be
+      # set or the mint/redeem routes don't register at all (fail-closed).
+      HIS_API_KEY: ${HIS_API_KEY:-}
+      VISIT_LINK_SECRET: ${VISIT_LINK_SECRET:-}
+      VISIT_LINK_COMPLETED_GRACE: ${VISIT_LINK_COMPLETED_GRACE:-30m}
+      # Absolute base of the patient web app — the minted #vt= URL rides on it.
+      PATIENT_APP_BASE_URL: ${PATIENT_APP_BASE_URL:-http://localhost:5173}
     depends_on:
       postgres:
         condition: service_healthy

@@ -51,6 +51,13 @@ func RequirePatientVisit(s Service, claims ClaimRepo) fiber.Handler {
 // the resolved identity without re-reading the bearer.
 const identityLocalKey = "session.identity"
 
+// IdentityFromCtx returns the identity RequireSession resolved for this
+// request, for a handler chained after the guard (visitlink's redeem).
+func IdentityFromCtx(c fiber.Ctx) (identity.Identity, bool) {
+	id, ok := c.Locals(identityLocalKey).(identity.Identity)
+	return id, ok
+}
+
 // identityFromRequest resolves the Authorization bearer to the identity
 // behind it, or the module's one 401.
 func identityFromRequest(c fiber.Ctx, s Service) (identity.Identity, error) {

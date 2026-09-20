@@ -29,14 +29,21 @@ func New(database *db.DB) *Repo {
 // duplicates or keeps a step the current plan no longer has.
 func (r *Repo) UpsertVisit(ctx context.Context, visit journey.Visit) error {
 	q := r.database.Querier(ctx)
+	// completed_at latches on the first transition to COMPLETED (#136): the
+	// visit link's completed-grace is evaluated lazily against it. COALESCE
+	// keeps it NULL while the visit is anything else, and a repeat completed
+	// sync never refreshes it.
 	_, err := q.Exec(ctx,
-		`INSERT INTO carepath.journey_visit (visit_id, patient_ref, patient_name, status, synced_at)
-		 VALUES ($1, $2, $3, $4, now())
+		`INSERT INTO carepath.journey_visit (visit_id, patient_ref, patient_name, status, synced_at, completed_at)
+		 VALUES ($1, $2, $3, $4, now(), CASE WHEN $4 = 'COMPLETED' THEN now() END)
 		 ON CONFLICT (visit_id) DO UPDATE
 		 SET patient_ref = EXCLUDED.patient_ref,
 		     patient_name = EXCLUDED.patient_name,
 		     status = EXCLUDED.status,
-		     synced_at = now()`,
+		     synced_at = now(),
+		     completed_at = COALESCE(
+		         journey_visit.completed_at,
+		         CASE WHEN EXCLUDED.status = 'COMPLETED' THEN now() END)`,
 		visit.VisitID, visit.PatientRef, visit.PatientName, visit.Status,
 	)
 	if err != nil {

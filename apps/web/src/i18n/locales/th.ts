@@ -65,7 +65,8 @@ export const th = {
   'auth.errorUnknown': 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ',
   'auth.retry': 'ลองอีกครั้ง',
 
-  // VN front door (routes/patient/-VisitEntryScreen.tsx).
+  // VN front door (routes/patient/-VisitEntryScreen.tsx) and the slip-link
+  // exchange / no-visit doors (routes/patient/-VisitLinkExchange.tsx).
   'entry.role': 'ผู้ป่วย',
   'entry.title': 'ค้นหาการนัดหมาย',
   'entry.lead': 'กรอกหมายเลขการรักษา (VN) จากสลิกของโรงพยาบาลเพื่อดูแผนการรักษาของคุณ',
@@ -73,6 +74,14 @@ export const th = {
   'entry.vnPlaceholder': 'เช่น VISIT-001',
   'entry.required': 'กรุณากรอกหมายเลขการรักษา',
   'entry.submit': 'ดูแผนการรักษา',
+  'entry.exchanging': 'กำลังเปิดการรับบริการ…',
+  'entry.exchangingLead': 'กรุณารอสักครู่ ระบบกำลังแสดงแผนการรักษาของท่าน',
+  'entry.linkInvalidTitle': 'ลิงก์ไม่ถูกต้องหรือหมดอายุ',
+  'entry.linkInvalidLead': 'กรุณาสแกน QR บนใบนำทางที่โรงพยาบาลออกให้อีกครั้ง',
+  'entry.linkErrorTitle': 'เปิดการรับบริการไม่สำเร็จ',
+  'entry.linkErrorLead': 'ระบบไม่ตอบสนอง กรุณาลองอีกครั้ง',
+  'entry.noVisitTitle': 'เปิดแผนการรักษาจากใบนำทาง',
+  'entry.noVisitLead': 'สแกน QR บนใบนำทางที่โรงพยาบาลออกให้ เพื่อดูแผนการรักษาของท่าน',
 
   // Patient journey home (routes/patient/-JourneyScreen.tsx).
   'journey.title': 'การมาโรงพยาบาลของคุณวันนี้',

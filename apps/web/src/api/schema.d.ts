@@ -332,6 +332,163 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/his/visits/{visitId}/patient-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Mint the visit's patient link (#136, ADR-0014) — the credential the printed navigation slip carries. Returns the visit's URL with a high-entropy token in the fragment (`#vt=…`): redeeming it at POST /api/v1/journeys/claim records the #96 claim for the patient's session. Repeat calls return the same URL, so re-printing a slip never invalidates the one already in a patient's hand; rotate=true discards the current token (lost slip, suspected leak) and the previous link stops redeeming. The link's lifetime follows the visit: ACTIVE is live, COMPLETED lives out VISIT_LINK_COMPLETED_GRACE (default 30m) from the projection's completed_at, CANCELLED dies at once. Service-to-service: the system's only inbound HIS→CarePath call, authenticated by the deployment's HIS API key. Registered only when both HIS_API_KEY and VISIT_LINK_SECRET are set (fail closed). format=qr answers the same URL as a PNG QR ready for the slip. */
+        post: {
+            parameters: {
+                query?: {
+                    /** @description url answers the link as JSON; qr answers it as a PNG QR code of the same URL. */
+                    format?: "url" | "qr";
+                    /** @description Discard the current token and mint a new one. */
+                    rotate?: boolean;
+                };
+                header?: never;
+                path: {
+                    /** @description Visit id (VN) */
+                    visitId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The visit's link (format=url as JSON, format=qr as image/png) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VisitLink"];
+                        "image/png": string;
+                    };
+                };
+                /** @description Unknown format value */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid HIS API key */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Visit not projected */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/journeys/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Redeem a slip-held visit link token (#136, ADR-0014) for the visit it addresses and record the #96 claim — the identity behind the patient session becomes the visit's owner, exactly as typing a VN used to do on demo deployments. The token rides the request body, never a URL. Unknown, rotated, cancelled, past-grace, and secret-rotated tokens all answer the same 404 the journey read gives — indistinguishable by design. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RedeemVisitLinkRequest"];
+                };
+            };
+            responses: {
+                /** @description Claim recorded; the visit the token addressed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RedeemVisitLinkResponse"];
+                    };
+                };
+                /** @description Missing request body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing, malformed, or invalid patient session */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Visit unknown or link not redeemable — indistinguishable */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/journeys/{visitId}": {
         parameters: {
             query?: never;
@@ -406,7 +563,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Mint visit ownership for this session's identity (#96): records that the identity behind the patient session may read this visit. Naming the VN is the credential, matching the patient front door. Idempotent — re-claiming a visit this identity already owns succeeds. This is the only way read access to a journey is granted. */
+        /** @description Mint visit ownership for this session's identity (#96): records that the identity behind the patient session may read this visit. Naming the VN is the credential, matching the patient front door. Idempotent — re-claiming a visit this identity already owns succeeds. This is the only way read access to a journey is granted. Demo deployments only (ALLOW_DEMO_AUTH): production mints ownership through the slip-held link token instead (POST /api/v1/journeys/claim, #136) — this route is not registered when the demo bypass is off. */
         post: {
             parameters: {
                 query?: never;
@@ -1638,6 +1795,22 @@ export interface components {
         Error: {
             error: string;
             code: string;
+        };
+        /** @description The visit's patient link (#136): the slip-held credential. visitUrl carries the token in its fragment (#vt=…), never a query string, so it cannot reach an access log. The raw token is never stored server-side (sha256 only, ADR-0011 precedent). */
+        VisitLink: {
+            /** @example VISIT-001 */
+            visitId: string;
+            /** @example https://carepath.example/patient/journey#vt=5Xy_EHiOtUrt9xEv4NqzRQ */
+            visitUrl: string;
+        };
+        /** @description The vt token from the slip URL's fragment. */
+        RedeemVisitLinkRequest: {
+            token: string;
+        };
+        /** @description The visit the redeemed token addressed, now claimed by this session's identity. */
+        RedeemVisitLinkResponse: {
+            /** @example VISIT-001 */
+            visitId: string;
         };
         /** @description Staff/admin credentials (ADR-0010). The demo deployment seeds admin/demo (ADMIN) and staff/demo (STAFF) — demo credentials only. */
         LoginRequest: {

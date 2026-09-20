@@ -3,125 +3,336 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f4f6f5">
 <title>Mock HIS Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
+  /*
+   * CarePath design tokens, mirrored by hand from the `:root`/`@theme` blocks
+   * of apps/web/src/styles/index.css (spec: DESIGN.md). The console is a
+   * staff-side demo tool, so it follows the STAFF register: secondary blue
+   * for interactive elements, flat 1px-line surfaces (no card shadows),
+   * sharper radii, pills only for badges and chips, zone tints for
+   * clinic/order chips. Orange (primary) is never used here — it means
+   * "your route, right now" and belongs to the patient app.
+   */
   :root {
-    --bg: #f4f6f8; --panel: #ffffff; --line: #dde3e9; --ink: #1c2733;
-    --muted: #64748b; --accent: #0f6fde; --ok: #15803d; --warn: #b45309;
-    --bad: #b91c1c; --chip: #eef2f7;
+    --secondary: #0b6e99;
+    --secondary-tint: #e3f1f7;
+    --secondary-edge: #cfe6ef;
+    --ink: #1f2b33;
+    --ink-muted: #66727d;
+    --neutral: #f4f6f5;
+    --surface: #ffffff;
+    --line: #dde3e3;
+    --success: #1f7a5c;
+    --success-tint: #e7f5ef;
+    --warning: #9a5310;
+    --warning-tint: #fff1e2;
+    --zone-opd: #dcecff;
+    --zone-opd-edge: #a8c6ea;
+    --zone-diagnostic: #e7e0ff;
+    --zone-diagnostic-edge: #b6a6e0;
+    --zone-support: #eceff2;
+    --zone-support-edge: #c4cbd0;
+    --font-sans: 'Noto Sans Thai', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-code: 'Space Grotesk', 'Noto Sans Thai', system-ui, sans-serif;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --gutter: 20px;
   }
+
   * { box-sizing: border-box; }
-  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
-  header { display: flex; align-items: baseline; gap: 12px; padding: 14px 20px; background: #10233c; color: #fff; }
-  header h1 { font-size: 16px; margin: 0; }
-  header span { color: #9fb3cc; font-size: 12px; }
-  header .live { margin-left: auto; font-size: 12px; color: #7ee2a8; }
-  main { display: grid; grid-template-columns: 300px 1fr 340px; gap: 14px; padding: 14px 20px; align-items: start; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
-  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
-  .panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin: 14px 0 6px; }
-  .visit { padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; cursor: pointer; }
-  .visit:hover { background: var(--chip); }
-  .visit.sel { border-color: var(--accent); background: #eaf2fd; }
-  .visit .id { font-weight: 600; }
-  .visit .sub { color: var(--muted); font-size: 12px; }
-  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
-  .b-ACTIVE { background: #dcfce7; color: var(--ok); }
-  .b-COMPLETED { background: #e2e8f0; color: var(--muted); }
-  .b-CANCELLED { background: #fee2e2; color: var(--bad); }
-  .b-PLACED { background: var(--chip); color: var(--muted); }
-  .b-PERFORMED { background: #fef3c7; color: var(--warn); }
-  .b-RESULTED { background: #dbeafe; color: var(--accent); }
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; font-size: 12px; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line); }
-  td { padding: 7px 6px; border-bottom: 1px solid var(--line); }
-  td .code { font-weight: 600; }
-  button { border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
-  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.primary:hover { opacity: .9; }
-  button.danger { border-color: #e5b8b8; color: var(--bad); }
-  button.danger:hover:not(:disabled) { background: #fdf0f0; border-color: var(--bad); }
-  button:disabled { opacity: .4; cursor: default; }
-  form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  input, select { border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; font: inherit; }
-  input { flex: 1; min-width: 90px; }
-  .picker-row { display: flex; gap: 6px; width: 100%; }
-  .picker-row select, .picker-row input { flex: 1; }
+  body { margin: 0; font: 400 14px/1.6 var(--font-sans); color: var(--ink); background: var(--neutral); }
+  :focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+
+  /* ── Top bar ─────────────────────────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
+    padding: 10px var(--gutter);
+    background: var(--surface); border-bottom: 1px solid var(--line);
+  }
+  .topbar h1 { margin: 0; font: 700 16px/1.3 var(--font-code); letter-spacing: -0.01em; }
+  .tag {
+    padding: 2px 10px; border-radius: 999px;
+    background: var(--warning-tint); color: var(--warning);
+    font: 600 12px/1.5 var(--font-code);
+  }
+  .topbar-note { flex: 1 1 260px; min-width: 0; margin: 0; color: var(--ink-muted); font: 500 12px/1.4 var(--font-sans); }
+  .clock { margin-left: auto; color: var(--ink-muted); font: 600 13px/1 var(--font-code); font-variant-numeric: tabular-nums; }
+  .lang-toggle { min-height: 30px; padding: 4px 12px; font-size: 12px; }
+  @media (max-width: 859px) { .topbar-note { display: none; } }
+
+  /* ── Layout: 1 column → 2 columns → 3 columns ────────────────────────── */
+  main {
+    display: grid; grid-template-columns: minmax(0, 1fr); align-items: start;
+    gap: var(--gutter); padding: var(--gutter);
+    max-width: 1720px; margin: 0 auto;
+  }
+  @media (min-width: 900px) {
+    main { grid-template-columns: 320px minmax(0, 1fr); grid-template-areas: "visits detail" "visits events"; }
+    #visits-panel { grid-area: visits; }
+    #detail-panel { grid-area: detail; }
+    #events-panel { grid-area: events; }
+  }
+  @media (min-width: 1280px) {
+    main { grid-template-columns: 320px minmax(0, 1fr) 360px; grid-template-areas: "visits detail events"; gap: 24px; padding: 40px; }
+  }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 16px; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 12px; }
+  .panel-head h2 { margin: 0; font: 700 16px/1.3 var(--font-sans); }
+  .count {
+    padding: 1px 10px; border-radius: 999px;
+    background: var(--secondary-tint); color: var(--secondary);
+    font: 700 12px/1.6 var(--font-code); font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Visit list ──────────────────────────────────────────────────────── */
+  .visit {
+    display: block; width: 100%; text-align: left;
+    padding: 10px 12px; margin: 0 0 4px;
+    border: 1px solid transparent; border-radius: var(--radius-md);
+    background: none; font: inherit; color: inherit; cursor: pointer;
+  }
+  .visit:hover { background: var(--neutral); }
+  .visit.sel { background: var(--secondary-tint); border-color: var(--secondary-edge); }
+  .visit-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .visit-id { font: 700 13px/1.4 var(--font-code); }
+  .visit-sub { margin-top: 2px; color: var(--ink-muted); font-size: 12px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .visit-clinics { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .mini-clinic {
+    padding: 1px 8px; border-radius: 999px;
+    background: var(--zone-opd); border: 1px solid var(--zone-opd-edge);
+    font: 600 11px/1.5 var(--font-code);
+  }
+
+  .badge {
+    display: inline-flex; align-items: center; flex: none;
+    padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+    font: 600 11px/1.4 var(--font-code);
+  }
+  .b-ACTIVE { background: var(--success-tint); color: var(--success); }
+  .b-COMPLETED { background: var(--zone-support); color: var(--ink-muted); }
+  .b-CANCELLED { background: var(--warning-tint); color: var(--warning); }
+  .b-PLACED { background: var(--zone-support); color: var(--ink-muted); }
+  .b-PERFORMED { background: var(--secondary-tint); color: var(--secondary); }
+  .b-RESULTED { background: var(--success-tint); color: var(--success); }
+
+  /* ── Buttons (staff register: secondary blue primary, ghost, danger) ──── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 36px; padding: 6px 12px;
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--secondary);
+    font: 600 13px/1 var(--font-code); text-decoration: none; cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .btn:hover:not(:disabled) { background: var(--secondary-tint); border-color: var(--secondary-edge); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn-primary {
+    min-height: 40px; border-radius: var(--radius-md);
+    background: var(--secondary); border-color: var(--secondary); color: #fff; font-size: 14px;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--secondary); border-color: var(--secondary); filter: brightness(.92); }
+  .btn-danger { color: var(--warning); }
+  .btn-danger:hover:not(:disabled) { background: var(--warning-tint); border-color: var(--primary-edge, #f4c894); }
+  .btn-lg { width: 100%; min-height: 44px; font-size: 15px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .actions .btn, .clinic .btn, td .btn { min-height: 32px; padding: 4px 10px; font-size: 12px; }
+
+  /* ── Forms ───────────────────────────────────────────────────────────── */
+  input, select {
+    min-height: 40px; padding: 6px 10px; min-width: 0;
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--ink);
+    font: 400 13px/1.4 var(--font-sans);
+  }
+  input::placeholder { color: var(--ink-muted); }
+  .form { display: flex; flex-wrap: wrap; gap: 8px; }
+  .picker-row { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+  .picker-row > input, .picker-row > select { flex: 1 1 150px; min-width: 0; }
+  .picker-row .btn { flex: 0 0 auto; }
+  .field-label { margin: 10px 0 0; color: var(--ink-muted); font: 500 12px/1.4 var(--font-sans); }
+  .hint { margin: 8px 0 0; color: var(--ink-muted); font-size: 12px; line-height: 1.5; }
+
   .chips { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
-  .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--chip); border: 1px solid var(--line); border-radius: 999px; padding: 2px 6px 2px 10px; font-size: 12px; font-weight: 600; }
-  .chip button { border: none; background: none; padding: 0 4px; font-size: 13px; color: var(--muted); cursor: pointer; }
-  .chip button:hover { color: var(--bad); }
-  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
-  .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-  .qr { text-align: center; }
-  .qr img { display: block; width: 132px; height: 132px; border: 1px solid var(--line); border-radius: 8px; background: #fff; margin: 0 auto; }
-  .qr .hint a { color: var(--accent); text-decoration: none; font-weight: 600; }
-  .qr .hint a:hover { text-decoration: underline; }
-  .empty { color: var(--muted); padding: 12px 0; text-align: center; }
-  .clinics { display: flex; flex-wrap: wrap; gap: 8px; }
-  .clinic { display: flex; align-items: center; gap: 8px; background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
-  .clinic .code { font-weight: 700; }
-  #events { list-style: none; margin: 0; padding: 0; font-size: 12px; max-height: 70vh; overflow: auto; }
-  #events li { display: flex; gap: 8px; padding: 5px 2px; border-bottom: 1px dashed var(--line); }
-  #events .eid { color: var(--muted); min-width: 84px; }
-  #events .typ { font-weight: 600; min-width: 140px; }
-  #events .typ.visit { color: var(--accent); }
-  #events .typ.order { color: var(--ok); }
-  #events .typ.encounter { color: var(--warn); }
-  #events .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #toast { position: fixed; bottom: 16px; right: 16px; background: #10233c; color: #fff; border-radius: 8px; padding: 9px 14px; font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 420px; }
-  #toast.show { opacity: .96; }
-  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 6px 3px 10px; border-radius: 999px;
+    background: var(--zone-opd); border: 1px solid var(--zone-opd-edge);
+    font: 600 12px/1.5 var(--font-code);
+  }
+  .chip-order { background: var(--zone-diagnostic); border-color: var(--zone-diagnostic-edge); }
+  .chip button {
+    border: none; background: none; padding: 0 4px; min-height: 24px;
+    border-radius: 999px; font: 400 14px/1 var(--font-sans);
+    color: var(--ink-muted); cursor: pointer;
+  }
+  .chip button:hover { color: var(--warning); }
+
+  details.creator { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  details.creator > summary {
+    list-style: none; display: flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 40px; border-radius: var(--radius-md); cursor: pointer;
+    border: 1px dashed var(--secondary-edge); background: var(--surface);
+    color: var(--secondary); font: 600 14px/1 var(--font-code);
+  }
+  details.creator > summary::-webkit-details-marker { display: none; }
+  details.creator[open] > summary { margin-bottom: 12px; }
+
+  /* ── Visit detail ────────────────────────────────────────────────────── */
+  .subhead { margin: 16px 0 8px; font: 700 13px/1.4 var(--font-sans); }
+  .detail-head { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .detail-info { flex: 1 1 260px; min-width: 0; }
+  .detail-id { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font: 700 18px/1.2 var(--font-code); }
+  .detail-sub { margin-top: 4px; color: var(--ink-muted); font-size: 12px; line-height: 1.5; }
+  .qr { flex: 0 0 auto; text-align: center; }
+  .qr img {
+    display: block; width: 148px; height: 148px; margin: 0 auto;
+    border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff;
+  }
+  .qr-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+  .clinics { display: grid; gap: 8px; }
+  .clinic {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-md);
+  }
+  .clinic-code {
+    display: inline-flex; padding: 2px 10px; border-radius: 999px;
+    background: var(--zone-opd); border: 1px solid var(--zone-opd-edge);
+    font: 700 12px/1.5 var(--font-code);
+  }
+  .clinic-name { flex: 1 1 auto; min-width: 0; color: var(--ink-muted); font-size: 12px; line-height: 1.4; }
+  .clinic .actions { margin: 0 0 0 auto; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--ink-muted); font: 600 12px/1.4 var(--font-code); }
+  td { padding: 8px; border-bottom: 1px solid var(--line); font-size: 13px; line-height: 1.5; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  td .code { font: 700 12px/1.5 var(--font-code); }
+  td.cell-actions { text-align: right; }
+  th.th-actions { text-align: right; }
+  td.cell-actions .actions { justify-content: flex-end; margin: 0; }
+
+  /* Orders become stacked cards where the table cannot fit (DESIGN.md:
+   * staff mobile = card list, desktop = real table). */
+  @media (max-width: 639px) {
+    .orders thead { display: none; }
+    .orders tbody tr { display: block; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-md); margin-bottom: 8px; }
+    .orders tbody tr:last-child { margin-bottom: 0; }
+    .orders td { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 3px 0; border-bottom: none; }
+    .orders td::before { content: attr(data-label); flex: none; color: var(--ink-muted); font: 500 12px/1.5 var(--font-sans); }
+    .orders td.cell-actions { justify-content: flex-end; }
+    .orders td.cell-actions::before { content: none; }
+    /* staff-register touch targets on phones */
+    .btn, .actions .btn, .clinic .btn, td .btn { min-height: 44px; }
+  }
+
+  /* ── Event feed ──────────────────────────────────────────────────────── */
+  .events { list-style: none; margin: 0; padding: 0; }
+  .events li {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+    padding: 7px 2px; border-bottom: 1px solid var(--line); font-size: 12px; line-height: 1.5;
+  }
+  .events li:last-child { border-bottom: none; }
+  .events .typ { font: 700 12px/1.5 var(--font-code); color: var(--ink); }
+  .typ-visit { color: var(--secondary); }
+  .typ-order { color: var(--success); }
+  .typ-encounter { color: var(--warning); }
+  .events .time { margin-left: auto; color: var(--ink-muted); font: 500 11px/1.5 var(--font-code); font-variant-numeric: tabular-nums; }
+  .events .who { flex-basis: 100%; color: var(--ink-muted); }
+  .events .vid { font: 600 12px/1.5 var(--font-code); color: var(--ink); }
+  @media (min-width: 900px) { .events { max-height: 64vh; overflow-y: auto; } }
+
+  .empty { padding: 20px 0; text-align: center; color: var(--ink-muted); font-size: 13px; }
+
+  /* ── Toast — floats above content, so it is the one shadowed element ─── */
+  #toast {
+    position: fixed; z-index: 50; bottom: 20px; left: 50%; transform: translateX(-50%);
+    max-width: min(420px, calc(100vw - 40px));
+    background: var(--ink); color: #fff; border-radius: var(--radius-md);
+    padding: 10px 16px; font-size: 13px; line-height: 1.5;
+    opacity: 0; transition: opacity .25s; pointer-events: none;
+    box-shadow: 0 8px 24px rgba(31, 43, 51, 0.18);
+  }
+  #toast.show { opacity: .97; }
+  #toast.err { background: var(--warning); }
+  @media (min-width: 900px) { #toast { left: auto; right: 24px; transform: none; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Mock HIS Console</h1>
-  <span>drives the fake HIS for demos &mdash; every action surfaces as canonical facts on the feed (ADR-0009)</span>
-  <span class="live" id="clock"></span>
+<header class="topbar">
+  <h1 data-i18n="docTitle">Mock HIS Console</h1>
+  <span class="tag" data-i18n="tag">demo driver</span>
+  <p class="topbar-note" data-i18n="note">drives the fake HIS for demos &mdash; every action surfaces as canonical facts on the event feed (ADR-0009)</p>
+  <span class="clock" id="clock"></span>
+  <button class="btn lang-toggle" id="lang-toggle" type="button" aria-label="Switch language">EN</button>
 </header>
 
 <main>
-  <section class="panel" id="visits-panel">
-    <h2>Visits</h2>
-    <div id="visits"><div class="empty">loading&hellip;</div></div>
-    <form id="create-form">
-      <select id="new-visit-type" aria-label="Visit type">
-        <option value="APPOINTMENT">APPOINTMENT</option>
-        <option value="WALKIN">WALKIN</option>
-      </select>
-      <input id="new-patient-ref" placeholder="HN (optional)">
-      <input id="new-patient-name" placeholder="patient name (optional)">
-      <div class="picker-row">
-        <select id="new-clinic-code" aria-label="Clinic"></select>
-        <button type="button" id="add-clinic">Add clinic</button>
-      </div>
-      <div id="chosen-clinics" class="chips"></div>
-      <h3>Pre-visit orders (optional)</h3>
-      <div class="picker-row">
-        <select id="new-order-type" aria-label="Order type"></select>
-        <input id="new-order-name" placeholder="order name, e.g. CBC">
-        <button type="button" id="add-order">Add order</button>
-      </div>
-      <div id="chosen-orders" class="chips"></div>
-      <button class="primary" type="submit">New visit</button>
-    </form>
-    <div class="hint">Pre-visit orders are attributed to the first clinic added. Clinic and order-type options mirror CarePath's service points (CLINIC:*/ORDERTYPE:*).</div>
+  <section class="panel" id="visits-panel" aria-labelledby="visits-title">
+    <div class="panel-head">
+      <h2 id="visits-title" data-i18n="visitsTitle">Visits</h2>
+      <span class="count" id="visit-count" hidden></span>
+    </div>
+    <div id="visits"><div class="empty" data-i18n="loading">loading&hellip;</div></div>
+    <details class="creator">
+      <summary data-i18n="newVisit">New visit</summary>
+      <form id="create-form" class="form">
+        <div class="picker-row">
+          <select id="new-visit-type" aria-label="Visit type" data-i18n-aria="visitTypeAria">
+            <option value="APPOINTMENT">APPOINTMENT</option>
+            <option value="WALKIN">WALKIN</option>
+          </select>
+          <input id="new-patient-ref" placeholder="HN (optional)" aria-label="Patient HN" data-i18n-ph="hnPh" data-i18n-aria="hnAria">
+        </div>
+        <div class="picker-row">
+          <input id="new-patient-name" placeholder="patient name (optional)" aria-label="Patient name" data-i18n-ph="patientNamePh" data-i18n-aria="patientNameAria">
+        </div>
+        <div class="field-label" data-i18n="clinicsLabel">Clinics (at least one)</div>
+        <div class="picker-row">
+          <select id="new-clinic-code" aria-label="Clinic" data-i18n-aria="clinicAria"></select>
+          <button type="button" class="btn" id="add-clinic" data-i18n="add">Add</button>
+        </div>
+        <div id="chosen-clinics" class="chips"></div>
+        <div class="field-label" data-i18n="ordersLabel">Pre-visit orders (optional, attributed to the first clinic)</div>
+        <div class="picker-row">
+          <select id="new-order-type" aria-label="Order type" data-i18n-aria="orderTypeAria"></select>
+          <input id="new-order-name" placeholder="order name, e.g. CBC" aria-label="Order name" data-i18n-ph="orderNamePh" data-i18n-aria="orderNameAria">
+          <button type="button" class="btn" id="add-order" data-i18n="add">Add</button>
+        </div>
+        <div id="chosen-orders" class="chips"></div>
+        <button class="btn btn-primary btn-lg" type="submit" data-i18n="createVisit">New visit</button>
+        <p class="hint" data-i18n="catalogHint">Clinic and order-type options mirror CarePath's service points (CLINIC:*/ORDERTYPE:*), so a visit staged here always resolves to a destination.</p>
+      </form>
+    </details>
   </section>
 
-  <section class="panel" id="detail-panel">
-    <h2>Visit detail</h2>
-    <div id="detail"><div class="empty">select a visit on the left</div></div>
+  <section class="panel" id="detail-panel" aria-labelledby="detail-title">
+    <div class="panel-head"><h2 id="detail-title" data-i18n="detailTitle">Visit detail</h2></div>
+    <div id="detail"><div class="empty" data-i18n="selectVisitHint">select a visit to drive it</div></div>
   </section>
 
-  <section class="panel">
-    <h2>Event feed (canonical)</h2>
-    <ul id="events"><li class="empty">loading&hellip;</li></ul>
+  <section class="panel" id="events-panel" aria-labelledby="events-title">
+    <div class="panel-head">
+      <h2 id="events-title" data-i18n="eventsTitle">Event feed</h2>
+      <span class="count">canonical</span>
+    </div>
+    <ul id="events" class="events"><li class="empty" data-i18n="loading">loading&hellip;</li></ul>
   </section>
 </main>
 
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script>
 "use strict";
@@ -157,12 +368,215 @@ let chosenOrders = [];
 
 const $ = (sel) => document.querySelector(sel);
 
+// el builds an element with class and text in one step; every dynamic
+// string goes through textContent, never innerHTML, so patient names and
+// order names from the store cannot inject markup.
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+// The console speaks its own UI language (ADR-0012 keeps display text
+// client-owned; this embedded page is the client). Thai is the default for
+// the staff running demos; the toggle in the topbar flips to English and
+// remembers the choice. Domain codes (VISIT-001, MED, PLACED, event types,
+// APPOINTMENT/WALKIN) stay untranslated everywhere — they are identifiers,
+// not prose. Static markup below stays English as the no-JS fallback.
+let lang = "th";
+const STRINGS = {
+  th: {
+    docTitle: "คอนโซล Mock HIS",
+    tag: "เครื่องมือเดโม",
+    note: "ขับเคลื่อน HIS จำลองสำหรับเดโม — ทุกการกระทำจะปรากฏเป็น canonical facts บน event feed (ADR-0009)",
+    loading: "กำลังโหลด…",
+    visitsTitle: "รายการ visit",
+    detailTitle: "รายละเอียด visit",
+    eventsTitle: "Event feed",
+    newVisit: "สร้าง visit ใหม่",
+    createVisit: "สร้าง visit ใหม่",
+    visitTypeAria: "ประเภท visit",
+    hnPh: "HN (ไม่บังคับ)",
+    hnAria: "HN ผู้ป่วย",
+    patientNamePh: "ชื่อผู้ป่วย (ไม่บังคับ)",
+    patientNameAria: "ชื่อผู้ป่วย",
+    clinicsLabel: "คลินิก (อย่างน้อยหนึ่งคลินิก)",
+    clinicAria: "คลินิก",
+    add: "เพิ่ม",
+    ordersLabel: "ออเดอร์ก่อน visit (ไม่บังคับ, บันทึกให้คลินิกแรก)",
+    orderTypeAria: "ประเภทออเดอร์",
+    orderNamePh: "ชื่อออเดอร์ เช่น CBC",
+    orderNameAria: "ชื่อออเดอร์",
+    orderedByClinicAria: "คลินิกที่สั่ง",
+    catalogHint: "ตัวเลือกคลินิกและประเภทออเดอร์มาจาก service points ของ CarePath (CLINIC:*/ORDERTYPE:*) เพื่อให้ visit ที่สร้างที่นี่ชี้ไปยังปลายทางได้เสมอ",
+    selectVisitHint: "เลือก visit เพื่อเริ่มขับเคลื่อน",
+    noVisits: "ไม่มี visit",
+    visitNotFound: "ไม่พบ visit",
+    noEvents: "ไม่มี event",
+    noOrdersYet: "ยังไม่มีออเดอร์",
+    openedAt: "เปิด {time}",
+    allClinicsAssigned: "คลินิกทุกแห่งของ CarePath อยู่ใน visit นี้แล้ว",
+    colType: "ประเภท", colName: "ชื่อ", colByClinic: "โดยคลินิก", colStatus: "สถานะ", colActions: "การจัดการ",
+    clinicsSubhead: "คลินิก",
+    ordersSubhead: "ออเดอร์",
+    completeVisit: "ปิด visit",
+    cancelVisit: "ยกเลิก visit",
+    callPatientIn: "เรียกผู้ป่วย",
+    completeEncounter: "ปิด encounter",
+    performed: "ทำแล้ว",
+    resulted: "ออกผลแล้ว",
+    cancel: "ยกเลิก",
+    addClinic: "เพิ่มคลินิก",
+    placeOrder: "สั่งออเดอร์",
+    openPatientView: "เปิดหน้าผู้ป่วย",
+    copyLink: "คัดลอกลิงก์",
+    qrAlt: "QR code ของ {id}",
+    confirmCancel: "ยกเลิก {id}? ออเดอร์ที่ยังเปิดอยู่จะถูกยกเลิกทั้งหมด",
+    chipRemove: "ลบ {label}",
+    toastCreated: "สร้าง {id} แล้ว",
+    toastCreateFailed: "สร้างล้มเหลว: {err}",
+    toastVisitCompleted: "{id} ปิดแล้ว",
+    toastCompleteFailed: "ปิด visit ล้มเหลว: {err}",
+    toastVisitCancelled: "{id} ถูกยกเลิก",
+    toastCancelFailed: "ยกเลิกล้มเหลว: {err}",
+    toastCalledIn: "เรียกผู้ป่วย {code} แล้ว",
+    toastCallInFailed: "เรียกผู้ป่วยล้มเหลว: {err}",
+    toastEncounterCompleted: "ปิด encounter ของ {code} แล้ว",
+    toastEncounterFailed: "ปิด encounter ล้มเหลว: {err}",
+    toastClinicAdded: "เพิ่มคลินิก {code} แล้ว",
+    toastAddClinicFailed: "เพิ่มคลินิกล้มเหลว: {err}",
+    toastOrderPlaced: "สั่งออเดอร์ {type} แล้ว",
+    toastPlaceOrderFailed: "สั่งออเดอร์ล้มเหลว: {err}",
+    toastOrderAction: "{ref} → {action}",
+    toastOrderActionFailed: "การกระทำกับออเดอร์ล้มเหลว: {err}",
+    toastLinkCopied: "คัดลอกลิงก์ผู้ป่วยแล้ว",
+    toastCopyUnavailable: "คัดลอกไม่ได้ — เปิดลิงก์แทน",
+    toastOrderNameRequired: "ต้องระบุชื่อออเดอร์",
+    toastClinicFirst: "เพิ่มคลินิกก่อน",
+    toastOneClinic: "ต้องเพิ่มอย่างน้อยหนึ่งคลินิก",
+    toastRefreshFailed: "โหลดข้อมูลใหม่ล้มเหลว: {err}",
+  },
+  en: {
+    docTitle: "Mock HIS Console",
+    tag: "demo driver",
+    note: "drives the fake HIS for demos — every action surfaces as canonical facts on the event feed (ADR-0009)",
+    loading: "loading…",
+    visitsTitle: "Visits",
+    detailTitle: "Visit detail",
+    eventsTitle: "Event feed",
+    newVisit: "New visit",
+    createVisit: "New visit",
+    visitTypeAria: "Visit type",
+    hnPh: "HN (optional)",
+    hnAria: "Patient HN",
+    patientNamePh: "patient name (optional)",
+    patientNameAria: "Patient name",
+    clinicsLabel: "Clinics (at least one)",
+    clinicAria: "Clinic",
+    add: "Add",
+    ordersLabel: "Pre-visit orders (optional, attributed to the first clinic)",
+    orderTypeAria: "Order type",
+    orderNamePh: "order name, e.g. CBC",
+    orderNameAria: "Order name",
+    orderedByClinicAria: "Ordered by clinic",
+    catalogHint: "Clinic and order-type options mirror CarePath's service points (CLINIC:*/ORDERTYPE:*), so a visit staged here always resolves to a destination.",
+    selectVisitHint: "select a visit to drive it",
+    noVisits: "no visits",
+    visitNotFound: "visit not found",
+    noEvents: "no events",
+    noOrdersYet: "no orders yet",
+    openedAt: "opened {time}",
+    allClinicsAssigned: "Every CarePath clinic is already assigned to this visit.",
+    colType: "Type", colName: "Name", colByClinic: "By clinic", colStatus: "Status", colActions: "Actions",
+    clinicsSubhead: "Clinics",
+    ordersSubhead: "Orders",
+    completeVisit: "Complete visit",
+    cancelVisit: "Cancel visit",
+    callPatientIn: "Call patient in",
+    completeEncounter: "Complete encounter",
+    performed: "Performed",
+    resulted: "Resulted",
+    cancel: "Cancel",
+    addClinic: "Add clinic",
+    placeOrder: "Place order",
+    openPatientView: "Open patient view",
+    copyLink: "Copy link",
+    qrAlt: "QR code for {id}",
+    confirmCancel: "Cancel {id}? Every open order will be cancelled.",
+    chipRemove: "Remove {label}",
+    toastCreated: "Created {id}",
+    toastCreateFailed: "Create failed: {err}",
+    toastVisitCompleted: "{id} completed",
+    toastCompleteFailed: "Complete failed: {err}",
+    toastVisitCancelled: "{id} cancelled",
+    toastCancelFailed: "Cancel failed: {err}",
+    toastCalledIn: "{code} called patient in",
+    toastCallInFailed: "Call patient in failed: {err}",
+    toastEncounterCompleted: "{code} encounter completed",
+    toastEncounterFailed: "Complete encounter failed: {err}",
+    toastClinicAdded: "Clinic {code} added",
+    toastAddClinicFailed: "Add clinic failed: {err}",
+    toastOrderPlaced: "Order placed: {type}",
+    toastPlaceOrderFailed: "Place order failed: {err}",
+    toastOrderAction: "{ref} → {action}",
+    toastOrderActionFailed: "Order action failed: {err}",
+    toastLinkCopied: "Patient link copied",
+    toastCopyUnavailable: "Copy not available — open the link instead",
+    toastOrderNameRequired: "order name is required",
+    toastClinicFirst: "add a clinic first",
+    toastOneClinic: "add at least one clinic",
+    toastRefreshFailed: "Refresh failed: {err}",
+  },
+};
+
+function t(key, vars) {
+  let s = (STRINGS[lang] && STRINGS[lang][key]) || STRINGS.en[key] || key;
+  if (vars) {
+    for (const [k, v] of Object.entries(vars)) s = s.split("{" + k + "}").join(String(v));
+  }
+  return s;
+}
+
+function timeLocale() {
+  return lang === "th" ? "th-TH" : "en-US";
+}
+
+// Swaps every statically-annotated node to the current language; the
+// data-driven panels rebuild on the next render tick, which toggleLang()
+// forces by dropping their diff caches.
+function applyStaticTexts() {
+  document.documentElement.lang = lang;
+  document.title = t("docTitle");
+  for (const n of document.querySelectorAll("[data-i18n]")) n.textContent = t(n.dataset.i18n);
+  for (const n of document.querySelectorAll("[data-i18n-ph]")) n.placeholder = t(n.dataset.i18nPh);
+  for (const n of document.querySelectorAll("[data-i18n-aria]")) n.setAttribute("aria-label", t(n.dataset.i18nAria));
+  $("#lang-toggle").textContent = lang === "th" ? "EN" : "ไทย";
+}
+
+function toggleLang() {
+  lang = lang === "th" ? "en" : "th";
+  try { localStorage.setItem("console-lang", lang); } catch { /* private mode */ }
+  applyStaticTexts();
+  lastVisitsJSON = "";
+  lastDetailJSON = "";
+  renderNewClinicPicker();
+  renderOrderTypePicker();
+  refresh(true);
+}
+$("#lang-toggle").onclick = toggleLang;
+
+function fmtTime(iso) {
+  return iso ? new Date(iso).toLocaleTimeString(timeLocale()) : "";
+}
+
 function toast(msg, isError) {
-  const el = $("#toast");
-  el.textContent = msg;
-  el.style.background = isError ? "#7f1d1d" : "#10233c";
-  el.classList.add("show");
-  setTimeout(() => el.classList.remove("show"), 2600);
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.toggle("err", !!isError);
+  t.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove("show"), 2600);
 }
 
 async function api(method, path, body) {
@@ -233,7 +647,7 @@ function renderOrderTypePicker() {
 }
 
 function tick() {
-  $("#clock").textContent = new Date().toLocaleTimeString();
+  $("#clock").textContent = new Date().toLocaleTimeString(timeLocale());
 }
 
 function renderVisits(visits) {
@@ -242,62 +656,78 @@ function renderVisits(visits) {
   const json = JSON.stringify(visits);
   if (json === lastVisitsJSON) return;
   lastVisitsJSON = json;
+  const count = $("#visit-count");
+  count.hidden = !visits.length;
+  count.textContent = String(visits.length);
   const box = $("#visits");
-  if (!visits.length) { box.innerHTML = '<div class="empty">no visits</div>'; return; }
+  if (!visits.length) { box.replaceChildren(el("div", "empty", t("noVisits"))); return; }
   box.replaceChildren(...visits.map((v) => {
-    const row = document.createElement("div");
-    row.className = "visit" + (v.visitId === selectedVisit ? " sel" : "");
-    const clinicCodes = v.clinics.map((c) => c.code).join(", ");
-    row.innerHTML =
-      '<div class="id">' + v.visitId + ' <span class="badge b-' + v.status + '">' + v.status + "</span></div>" +
-      '<div class="sub">' + v.patientRef + " &middot; " + clinicCodes + "</div>";
+    const row = el("button", "visit" + (v.visitId === selectedVisit ? " sel" : ""));
+    row.type = "button";
+    const top = el("div", "visit-top");
+    top.append(el("span", "visit-id", v.visitId), el("span", "badge b-" + v.status, v.status));
+    const sub = el("div", "visit-sub", v.patientName ? v.patientName + ", " + v.patientRef : v.patientRef);
+    const clinics = el("div", "visit-clinics");
+    v.clinics.forEach((c) => clinics.append(el("span", "mini-clinic", c.code)));
+    row.append(top, sub, clinics);
     row.onclick = () => { selectedVisit = v.visitId; lastVisitsJSON = ""; refresh(true); };
     return row;
   }));
 }
 
-function orderRow(visit, order) {
+// Each td carries data-label so the ≤639px CSS can echo the column name
+// when the table collapses into stacked cards.
+function orderRow(order) {
   const tr = document.createElement("tr");
-  const actions = document.createElement("div");
-  actions.className = "actions";
+  const td = (label) => {
+    const cell = document.createElement("td");
+    cell.dataset.label = label;
+    return cell;
+  };
+
+  const typeTd = td(t("colType"));
+  typeTd.append(el("span", "code", order.orderType));
+  const nameTd = td(t("colName"));
+  nameTd.textContent = order.orderName;
+  const byTd = td(t("colByClinic"));
+  byTd.textContent = order.orderedByClinic;
+  const statusTd = td(t("colStatus"));
+  statusTd.append(el("span", "badge b-" + order.status, order.status));
+
+  const actions = el("div", "actions");
   if (order.status === "PLACED" || order.status === "PERFORMED") {
     if (order.status === "PLACED") {
-      const perform = document.createElement("button");
-      perform.textContent = "Performed";
+      const perform = el("button", "btn", t("performed"));
+      perform.type = "button";
       perform.onclick = () => orderAction(order.orderRef, "performed");
       actions.appendChild(perform);
     }
     if (order.status === "PERFORMED") {
-      const result = document.createElement("button");
-      result.className = "primary";
-      result.textContent = "Resulted";
+      const result = el("button", "btn btn-primary", t("resulted"));
+      result.type = "button";
       result.onclick = () => orderAction(order.orderRef, "resulted");
       actions.appendChild(result);
     }
-    const cancel = document.createElement("button");
-    cancel.className = "danger";
-    cancel.textContent = "Cancel";
+    const cancel = el("button", "btn btn-danger", t("cancel"));
+    cancel.type = "button";
     cancel.onclick = () => orderAction(order.orderRef, "cancel");
     actions.appendChild(cancel);
   }
-  tr.innerHTML =
-    '<td><span class="code">' + order.orderType + "</span></td>" +
-    "<td>" + order.orderName + "</td>" +
-    "<td>" + order.orderedByClinic + "</td>" +
-    '<td><span class="badge b-' + order.status + '">' + order.status + "</span></td>";
-  const td = document.createElement("td");
-  td.appendChild(actions);
-  tr.appendChild(td);
+  const actionsTd = td("");
+  actionsTd.className = "cell-actions";
+  actionsTd.append(actions);
+
+  tr.append(typeTd, nameTd, byTd, statusTd, actionsTd);
   return tr;
 }
 
 async function orderAction(orderRef, action) {
   try {
     await api("POST", "/api/v1/demo/orders/" + encodeURIComponent(orderRef) + "/" + action, {});
-    toast(orderRef + " → " + action);
+    toast(t("toastOrderAction", { ref: orderRef, action }));
     lastDetailJSON = "";
     refresh(true);
-  } catch (err) { toast("Order action failed: " + err.message, true); }
+  } catch (err) { toast(t("toastOrderActionFailed", { err: err.message }), true); }
 }
 
 function renderDetail(visit) {
@@ -306,90 +736,122 @@ function renderDetail(visit) {
   lastDetailJSON = json;
 
   const box = $("#detail");
-  if (!visit) { box.innerHTML = '<div class="empty">visit not found</div>'; return; }
   box.replaceChildren();
+  if (!visit) { box.append(el("div", "empty", t("visitNotFound"))); return; }
 
-  const head = document.createElement("div");
-  head.className = "detail-head";
-  const info = document.createElement("div");
-  info.innerHTML =
-    "<div style=\"font-weight:600;font-size:16px\">" + visit.visitId +
-    ' <span class="badge b-' + visit.status + '">' + visit.status + "</span></div>" +
-    '<div class="hint">' + visit.patientRef + (visit.patientName ? " &middot; " + visit.patientName : "") +
-    " &middot; " + visit.visitType + "</div>";
+  const head = el("div", "detail-head");
+  const info = el("div", "detail-info");
+  const idRow = el("div", "detail-id");
+  idRow.append(el("span", null, visit.visitId), el("span", "badge b-" + visit.status, visit.status));
+  info.append(idRow);
+  const subBits = [visit.patientRef];
+  if (visit.patientName) subBits.push(visit.patientName);
+  subBits.push(visit.visitType, t("openedAt", { time: fmtTime(visit.openedAt) }));
+  info.append(el("div", "detail-sub", subBits.join(", ")));
+
   if (visit.status === "ACTIVE") {
-    const btnRow = document.createElement("div");
-    btnRow.className = "actions";
-    btnRow.style.marginTop = "8px";
-    const complete = document.createElement("button");
-    complete.className = "primary";
-    complete.textContent = "Complete visit";
+    const btnRow = el("div", "actions");
+    const complete = el("button", "btn btn-primary", t("completeVisit"));
+    complete.type = "button";
     complete.onclick = async () => {
       try {
         await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/complete", {});
-        toast(visit.visitId + " completed");
+        toast(t("toastVisitCompleted", { id: visit.visitId }));
         lastDetailJSON = "";
         refresh(true);
-      } catch (err) { toast("Complete failed: " + err.message, true); }
+      } catch (err) { toast(t("toastCompleteFailed", { err: err.message }), true); }
     };
-    const cancel = document.createElement("button");
-    cancel.className = "danger";
-    cancel.textContent = "Cancel visit";
+    const cancel = el("button", "btn btn-danger", t("cancelVisit"));
+    cancel.type = "button";
     cancel.onclick = async () => {
-      if (!window.confirm("Cancel " + visit.visitId + "? Every open order will be cancelled.")) return;
+      if (!window.confirm(t("confirmCancel", { id: visit.visitId }))) return;
       try {
         await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/cancel", {});
-        toast(visit.visitId + " cancelled");
+        toast(t("toastVisitCancelled", { id: visit.visitId }));
         lastDetailJSON = "";
         refresh(true);
-      } catch (err) { toast("Cancel failed: " + err.message, true); }
+      } catch (err) { toast(t("toastCancelFailed", { err: err.message }), true); }
     };
     btnRow.append(complete, cancel);
     info.appendChild(btnRow);
   }
+
   const patientAppBaseUrl = window.PATIENT_APP_BASE_URL || "";
-  const patientLink = patientAppBaseUrl + "/patient/journey?visit=" + encodeURIComponent(visit.visitId);
-  const qr = document.createElement("div");
-  qr.className = "qr";
-  qr.innerHTML =
-    '<a href="' + patientLink + '" target="_blank" rel="noopener">' +
-    '<img src="/api/v1/demo/visits/' + encodeURIComponent(visit.visitId) + '/qrcode.png"' +
-    ' alt="QR code for ' + visit.visitId + '" width="132" height="132"></a>' +
-    '<div class="hint">' + visit.visitId +
-    ' &middot; <a href="' + patientLink + '" target="_blank" rel="noopener">open &rarr;</a></div>';
+  let patientLink = patientAppBaseUrl + "/patient/journey?visit=" + encodeURIComponent(visit.visitId);
+  const qr = el("div", "qr");
+  const qrLink = document.createElement("a");
+  qrLink.href = patientLink;
+  qrLink.target = "_blank";
+  qrLink.rel = "noopener";
+  const img = document.createElement("img");
+  img.src = "/api/v1/demo/visits/" + encodeURIComponent(visit.visitId) + "/qrcode.png";
+  img.alt = t("qrAlt", { id: visit.visitId });
+  img.width = 148;
+  img.height = 148;
+  qrLink.appendChild(img);
+  qr.appendChild(qrLink);
+  const qrActions = el("div", "qr-actions");
+  const open = el("a", "btn", t("openPatientView"));
+  open.href = patientLink;
+  open.target = "_blank";
+  open.rel = "noopener";
+  qrActions.append(open);
+  // #136: when the stack mints slip links, replace the legacy raw-VN link
+  // (which only works on ALLOW_DEMO_AUTH stacks) with the token link —
+  // mock-his presents the HIS key server-side; the browser never sees it.
+  void (async () => {
+    try {
+      const link = await api("GET", "/api/v1/demo/visits/" + encodeURIComponent(visit.visitId) + "/patient-link");
+      if (link && link.visitUrl) {
+        patientLink = link.visitUrl;
+        qrLink.href = patientLink;
+        open.href = patientLink;
+      }
+    } catch { /* mint not configured — the legacy VN link stays */ }
+  })();
+  const copy = el("button", "btn", t("copyLink"));
+  copy.type = "button";
+  copy.onclick = async () => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try { await navigator.clipboard.writeText(patientLink); toast(t("toastLinkCopied")); return; } catch { /* fall through */ }
+    }
+    toast(t("toastCopyUnavailable"), true);
+  };
+  qrActions.append(copy);
+  qr.append(qrActions);
   head.append(info, qr);
   box.appendChild(head);
 
-  box.appendChild(document.createElement("h3")).textContent = "Clinics";
-  const clinics = document.createElement("div");
-  clinics.className = "clinics";
+  box.append(el("h3", "subhead", t("clinicsSubhead")));
+  const clinics = el("div", "clinics");
   visit.clinics.forEach((c) => {
-    const chip = document.createElement("div");
-    chip.className = "clinic";
-    chip.innerHTML = '<span class="code">' + c.code + "</span>";
+    const chip = el("div", "clinic");
+    chip.append(el("span", "clinic-code", c.code));
+    if (c.name) chip.append(el("span", "clinic-name", c.name));
     if (visit.status === "ACTIVE") {
-      const call = document.createElement("button");
-      call.textContent = "Call patient in";
+      const actions = el("div", "actions");
+      const call = el("button", "btn", t("callPatientIn"));
+      call.type = "button";
       call.onclick = async () => {
         try {
           await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/clinics/" + encodeURIComponent(c.code) + "/start-encounter", {});
-          toast(c.code + " called patient in");
+          toast(t("toastCalledIn", { code: c.code }));
           lastDetailJSON = "";
           refresh(true);
-        } catch (err) { toast("Call patient in failed: " + err.message, true); }
+        } catch (err) { toast(t("toastCallInFailed", { err: err.message }), true); }
       };
-      chip.appendChild(call);
-      const done = document.createElement("button");
-      done.textContent = "Complete encounter";
+      const done = el("button", "btn", t("completeEncounter"));
+      done.type = "button";
       done.onclick = async () => {
         try {
           await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/clinics/" + encodeURIComponent(c.code) + "/complete-encounter", {});
-          toast(c.code + " encounter completed");
+          toast(t("toastEncounterCompleted", { code: c.code }));
           lastDetailJSON = "";
           refresh(true);
-        } catch (err) { toast("Complete encounter failed: " + err.message, true); }
+        } catch (err) { toast(t("toastEncounterFailed", { err: err.message }), true); }
       };
-      chip.appendChild(done);
+      actions.append(call, done);
+      chip.appendChild(actions);
     }
     clinics.appendChild(chip);
   });
@@ -398,14 +860,13 @@ function renderDetail(visit) {
     const remaining = clinicCatalog.filter((c) => !visit.clinics.some((vc) => vc.code === c.code));
     if (remaining.length) {
       const addClinicForm = document.createElement("form");
-      const row = document.createElement("div");
-      row.className = "picker-row";
-      const select = document.createElement("select");
-      select.setAttribute("aria-label", "Clinic");
+      addClinicForm.className = "form";
+      const row = el("div", "picker-row");
+      const select = el("select");
+      select.setAttribute("aria-label", t("clinicAria"));
       setSelectOptions(select, clinicOptions(remaining));
-      const btn = document.createElement("button");
+      const btn = el("button", "btn", t("addClinic"));
       btn.type = "submit";
-      btn.textContent = "Add clinic";
       row.append(select, btn);
       addClinicForm.appendChild(row);
       addClinicForm.onsubmit = async (e) => {
@@ -413,71 +874,67 @@ function renderDetail(visit) {
         if (!select.value) return;
         try {
           await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/clinics", { clinicCode: select.value, clinicName: clinicName(select.value) });
-          toast("Clinic " + select.value + " added");
+          toast(t("toastClinicAdded", { code: select.value }));
           lastDetailJSON = "";
           refresh(true);
-        } catch (err) { toast("Add clinic failed: " + err.message, true); }
+        } catch (err) { toast(t("toastAddClinicFailed", { err: err.message }), true); }
       };
       box.appendChild(addClinicForm);
     } else {
-      const hint = document.createElement("div");
-      hint.className = "hint";
-      hint.textContent = "Every CarePath clinic is already assigned to this visit.";
-      box.appendChild(hint);
+      box.append(el("div", "hint", t("allClinicsAssigned")));
     }
   }
 
-  box.appendChild(document.createElement("h3")).textContent = "Orders";
+  box.append(el("h3", "subhead", t("ordersSubhead")));
   if (!visit.orders.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.textContent = "no orders yet";
-    box.appendChild(empty);
+    box.append(el("div", "empty", t("noOrdersYet")));
   } else {
-    const table = document.createElement("table");
+    const table = el("table", "orders");
     const thead = document.createElement("thead");
-    thead.innerHTML = "<tr><th>Type</th><th>Name</th><th>By clinic</th><th>Status</th><th></th></tr>";
-    table.appendChild(thead);
+    const hr = document.createElement("tr");
+    [t("colType"), t("colName"), t("colByClinic"), t("colStatus")].forEach((h) => hr.append(el("th", null, h)));
+    const actionsTh = el("th", "th-actions", t("colActions"));
+    hr.append(actionsTh);
+    thead.appendChild(hr);
     const tbody = document.createElement("tbody");
-    visit.orders.forEach((o) => tbody.appendChild(orderRow(visit, o)));
-    table.appendChild(tbody);
+    visit.orders.forEach((o) => tbody.appendChild(orderRow(o)));
+    table.append(thead, tbody);
     box.appendChild(table);
   }
 
   if (visit.status === "ACTIVE") {
     const form = document.createElement("form");
-    const picker = document.createElement("div");
-    picker.className = "picker-row";
-    const typeSelect = document.createElement("select");
-    typeSelect.setAttribute("aria-label", "Order type");
+    form.className = "form";
+    const picker = el("div", "picker-row");
+    const typeSelect = el("select");
+    typeSelect.setAttribute("aria-label", t("orderTypeAria"));
     setSelectOptions(typeSelect, orderTypeCatalog.map((t) => ({ value: t, label: t })));
-    const nameInput = document.createElement("input");
-    nameInput.placeholder = "order name, e.g. CBC";
-    const clinicSelect = document.createElement("select");
-    clinicSelect.setAttribute("aria-label", "Ordered by clinic");
+    const nameInput = el("input");
+    nameInput.placeholder = t("orderNamePh");
+    nameInput.setAttribute("aria-label", t("orderNameAria"));
+    const clinicSelect = el("select");
+    clinicSelect.setAttribute("aria-label", t("orderedByClinicAria"));
     visit.clinics.forEach((c) => {
       const opt = document.createElement("option");
       opt.value = c.code;
       opt.textContent = c.code;
       clinicSelect.appendChild(opt);
     });
-    const btn = document.createElement("button");
-    btn.className = "primary";
+    const btn = el("button", "btn btn-primary", t("placeOrder"));
     btn.type = "submit";
-    btn.textContent = "Place order";
     picker.append(typeSelect, nameInput, clinicSelect, btn);
     form.appendChild(picker);
     form.onsubmit = async (e) => {
       e.preventDefault();
-      if (!nameInput.value.trim()) { toast("order name is required", true); return; }
+      if (!nameInput.value.trim()) { toast(t("toastOrderNameRequired"), true); return; }
       try {
         await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/orders", {
           orderType: typeSelect.value, orderName: nameInput.value.trim(), orderedByClinic: clinicSelect.value,
         });
-        toast("Order placed: " + typeSelect.value);
+        toast(t("toastOrderPlaced", { type: typeSelect.value }));
         lastDetailJSON = "";
         refresh(true);
-      } catch (err) { toast("Place order failed: " + err.message, true); }
+      } catch (err) { toast(t("toastPlaceOrderFailed", { err: err.message }), true); }
     };
     box.appendChild(form);
   }
@@ -485,28 +942,29 @@ function renderDetail(visit) {
 
 function renderEvents(events) {
   const list = $("#events");
-  if (!events.length) { list.innerHTML = '<li class="empty">no events</li>'; return; }
+  if (!events.length) { list.replaceChildren(el("li", "empty", t("noEvents"))); return; }
   list.replaceChildren(...events.map((e) => {
     const li = document.createElement("li");
     const kind = e.type.split(".")[0];
     const detail = (e.payload && (e.payload.orderType || e.payload.clinicCode)) || "";
-    li.innerHTML =
-      '<span class="eid">' + e.eventId + "</span>" +
-      '<span class="typ ' + kind + '">' + e.type + "</span>" +
-      '<span class="who">' + e.visitId + (detail ? " &middot; " + detail : "") + "</span>";
+    li.append(
+      el("span", "typ typ-" + kind, e.type),
+      el("span", "time", fmtTime(e.occurredAt)),
+    );
+    const who = el("div", "who");
+    who.append(el("span", "vid", e.visitId));
+    if (detail) who.append(" " + detail);
+    li.append(who);
     return li;
   }));
 }
 
-function renderChipList(box, items, labelOf, onRemove) {
+function renderChipList(box, items, cls, labelOf, onRemove) {
   box.replaceChildren(...items.map((item, i) => {
-    const chip = document.createElement("span");
-    chip.className = "chip";
-    chip.textContent = labelOf(item);
-    const remove = document.createElement("button");
+    const chip = el("span", cls, labelOf(item));
+    const remove = el("button", null, "×");
     remove.type = "button";
-    remove.setAttribute("aria-label", "Remove " + labelOf(item));
-    remove.textContent = "×";
+    remove.setAttribute("aria-label", t("chipRemove", { label: labelOf(item) }));
     remove.onclick = () => onRemove(i);
     chip.appendChild(remove);
     return chip;
@@ -514,7 +972,7 @@ function renderChipList(box, items, labelOf, onRemove) {
 }
 
 function renderChosenClinics() {
-  renderChipList($("#chosen-clinics"), chosenClinics, (c) => c.clinicCode, (i) => {
+  renderChipList($("#chosen-clinics"), chosenClinics, "chip", (c) => c.clinicCode, (i) => {
     chosenClinics.splice(i, 1);
     renderNewClinicPicker();
     renderChosenClinics();
@@ -522,7 +980,7 @@ function renderChosenClinics() {
 }
 
 function renderChosenOrders() {
-  renderChipList($("#chosen-orders"), chosenOrders, (o) => o.orderType + " " + o.orderName, (i) => {
+  renderChipList($("#chosen-orders"), chosenOrders, "chip chip-order", (o) => o.orderType + " " + o.orderName, (i) => {
     chosenOrders.splice(i, 1);
     renderChosenOrders();
   });
@@ -539,8 +997,8 @@ $("#add-clinic").onclick = () => {
 $("#add-order").onclick = () => {
   const orderType = $("#new-order-type").value;
   const orderName = $("#new-order-name").value.trim();
-  if (!orderName) { toast("order name is required", true); return; }
-  if (!chosenClinics.length) { toast("add a clinic first", true); return; }
+  if (!orderName) { toast(t("toastOrderNameRequired"), true); return; }
+  if (!chosenClinics.length) { toast(t("toastClinicFirst"), true); return; }
   chosenOrders.push({ orderType, orderName, orderedByClinic: chosenClinics[0].clinicCode });
   $("#new-order-name").value = "";
   renderChosenOrders();
@@ -548,7 +1006,7 @@ $("#add-order").onclick = () => {
 
 $("#create-form").onsubmit = async (e) => {
   e.preventDefault();
-  if (!chosenClinics.length) { toast("add at least one clinic", true); return; }
+  if (!chosenClinics.length) { toast(t("toastOneClinic"), true); return; }
   const body = {
     visitType: $("#new-visit-type").value,
     clinics: chosenClinics,
@@ -560,7 +1018,7 @@ $("#create-form").onsubmit = async (e) => {
   if (chosenOrders.length) body.orders = chosenOrders;
   try {
     const visit = await api("POST", "/api/v1/demo/visits", body);
-    toast("Created " + visit.visitId);
+    toast(t("toastCreated", { id: visit.visitId }));
     $("#new-patient-ref").value = "";
     $("#new-patient-name").value = "";
     chosenClinics = [];
@@ -570,7 +1028,7 @@ $("#create-form").onsubmit = async (e) => {
     selectedVisit = visit.visitId;
     lastVisitsJSON = "";
     refresh(true);
-  } catch (err) { toast("Create failed: " + err.message, true); }
+  } catch (err) { toast(t("toastCreateFailed", { err: err.message }), true); }
 };
 
 let refreshing = false;
@@ -593,12 +1051,17 @@ async function refresh(force) {
       if (!visit) selectedVisit = null;
     }
   } catch (err) {
-    toast("Refresh failed: " + err.message, true);
+    toast(t("toastRefreshFailed", { err: err.message }), true);
   } finally {
     refreshing = false;
   }
 }
 
+// Thai is the default; a stored choice (set by the toggle) wins.
+try {
+  if (localStorage.getItem("console-lang") === "en") lang = "en";
+} catch { /* private mode keeps the default */ }
+applyStaticTexts();
 tick();
 setInterval(tick, 1000);
 renderNewClinicPicker();
