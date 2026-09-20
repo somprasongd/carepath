@@ -106,10 +106,10 @@ func (fakeTx) WithinTransaction(ctx context.Context, fn func(context.Context) er
 func str(s string) *string { return &s }
 func num(n int) *int       { return &n }
 
-func newPlaceWithFloor(placeID, building, floorName string) *hospitalmap.Place {
+func newPlaceWithFloor(placeID, placeName, floorCode, floorName string) *hospitalmap.Place {
 	return &hospitalmap.Place{
-		ID: placeID, FloorID: "F-1", Name: building, PlaceType: "ROOM",
-		Floor: &hospitalmap.Floor{ID: "F-1", BuildingID: "B-1", Code: "2", Name: floorName},
+		ID: placeID, FloorID: "F-1", Name: placeName, PlaceType: "ROOM",
+		Floor: &hospitalmap.Floor{ID: "F-1", BuildingID: "B-1", Code: floorCode, Name: floorName},
 	}
 }
 
@@ -272,7 +272,9 @@ func TestSharedJourneyRedaction(t *testing.T) {
 				Status: journey.StepStarted, ServicePointID: str("SP-CLINIC-MED"),
 				ServicePoint: &servicepoint.ServicePoint{
 					ID: "SP-CLINIC-MED", Code: "CLINIC:MED", Name: "อายุรกรรม (MED)",
-					Place: newPlaceWithFloor("OPD-NS-01", "อาคารผู้ป่วยนอก", "ชั้น 2"),
+					// Seed data exactly as migrated: an English floor name
+					// with a numeric code (000007_hospital_map.up.sql).
+					Place: newPlaceWithFloor("OPD-NS-01", "อาคารผู้ป่วยนอก", "2", "Upper Floor"),
 				}},
 			{StepKey: "CLINIC:MED:2", Sequence: 3, Kind: journey.KindClinic,
 				ClinicCode: str("MED"), Round: num(2), Status: journey.StepPending},
@@ -293,7 +295,7 @@ func TestSharedJourneyRedaction(t *testing.T) {
 		t.Errorf("servicePointName = %q, want the code suffix stripped", shared.CurrentStep.ServicePointName)
 	}
 	if shared.CurrentStep.FloorName != "ชั้น 2" {
-		t.Errorf("floorName = %q, want ชั้น 2", shared.CurrentStep.FloorName)
+		t.Errorf("floorName = %q, want ชั้น 2 derived from the floor code, not the DB name", shared.CurrentStep.FloorName)
 	}
 
 	raw, err := json.Marshal(shared)
@@ -328,5 +330,16 @@ func TestSharedJourneyCompletedAndFollowUp(t *testing.T) {
 	}
 	if shared := BuildSharedJourney(waiting, time.Now()); shared.CurrentStep == nil || shared.CurrentStep.Title != "กลับมาพบแพทย์" {
 		t.Errorf("follow-up title = %+v, want กลับมาพบแพทย์", shared.CurrentStep)
+	}
+}
+
+// The floor line comes from the code; an unmapped code falls back to the
+// DB name rather than rendering a bare "ชั้น ".
+func TestDisplayFloorName(t *testing.T) {
+	if got := displayFloorName("1", "Ground Floor"); got != "ชั้น 1" {
+		t.Errorf("displayFloorName(1, Ground Floor) = %q, want ชั้น 1", got)
+	}
+	if got := displayFloorName("", "Ground Floor"); got != "Ground Floor" {
+		t.Errorf("displayFloorName(_, Ground Floor) = %q, want the name as fallback", got)
 	}
 }

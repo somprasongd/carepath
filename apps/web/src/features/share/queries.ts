@@ -44,8 +44,11 @@ export function useStopSharing(visitId: string) {
 
 /**
  * The relative's read (#90): poll the shared journey every 15s, matching the
- * patient screens (#36), and stop once the visit is DONE — there is nothing
- * left to follow.
+ * patient screens (#36) — including after DONE, so revoking the link or
+ * letting it pass its expiry flips an already-open tab to the expired state
+ * on the next tick. Only a dead link stops the clock: a 401 means nothing
+ * further can change, while transient errors keep polling so the tab
+ * recovers.
  *
  * The key is a constant on purpose: the share token must never enter a query
  * key (it would land in devtools and cache snapshots — apps/web AGENTS.md
@@ -57,7 +60,7 @@ export function sharedJourneyQueryOptions(hasToken: boolean) {
     queryFn: () => apiGetShared<SharedJourney>('/api/v1/shared/journey'),
     enabled: hasToken,
     staleTime: 15_000,
-    refetchInterval: (query) => (query.state.data?.status === 'DONE' ? false : 15_000),
+    refetchInterval: (query) => (query.state.error?.status === 401 ? false : 15_000),
   })
 }
 

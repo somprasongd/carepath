@@ -37,16 +37,20 @@ describe('sharedJourneyQueryOptions (#90)', () => {
     expect(sharedJourneyQueryOptions(false).enabled).toBe(false)
   })
 
-  it('polls every 15s while the visit is live and stops once DONE', () => {
+  it('polls every 15s — even after DONE — and stops only when the link is dead', () => {
     const { refetchInterval, staleTime } = sharedJourneyQueryOptions(true)
     expect(staleTime).toBe(15_000)
     expect(refetchInterval).toBeTypeOf('function')
     const interval = refetchInterval as (
-      query: { state: { data?: SharedJourney } },
+      query: { state: { data?: SharedJourney; error?: { status: number } } },
     ) => number | false | undefined
     expect(interval({ state: { data: { status: 'WAITING' } as SharedJourney } })).toBe(15_000)
     expect(interval({ state: { data: undefined } })).toBe(15_000)
-    expect(interval({ state: { data: { status: 'DONE' } as SharedJourney } })).toBe(false)
+    // DONE keeps polling so a revoke/expiry flips an open tab without a
+    // reload — the live-revocation promise of the share flow.
+    expect(interval({ state: { data: { status: 'DONE' } as SharedJourney } })).toBe(15_000)
+    expect(interval({ state: { error: { status: 401 } } })).toBe(false)
+    expect(interval({ state: { error: { status: 502 } } })).toBe(15_000)
   })
 
   it('sends only the share bearer — the patient session token must not ride along', async () => {
