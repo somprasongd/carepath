@@ -5,8 +5,12 @@
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
 | visit_id | text |  | false |  | [carepath.journey_visit](carepath.journey_visit.md) |  |
+| step_key | text |  | false |  |  |  |
 | sequence | integer |  | false |  |  |  |
-| service_code | text |  | false |  |  |  |
+| kind | text |  | false |  |  |  |
+| clinic_code | text |  | true |  |  |  |
+| round | integer |  | true |  |  |  |
+| order_refs | text[] | '{}'::text[] | false |  |  |  |
 | status | text |  | false |  |  |  |
 | service_point_id | text |  | true |  |  |  |
 
@@ -15,13 +19,13 @@
 | Name | Type | Definition |
 | ---- | ---- | ---------- |
 | journey_step_visit_id_fkey | FOREIGN KEY | FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE |
-| journey_step_pkey | PRIMARY KEY | PRIMARY KEY (visit_id, sequence) |
+| journey_step_pkey | PRIMARY KEY | PRIMARY KEY (visit_id, step_key) |
 
 ## Indexes
 
 | Name | Definition |
 | ---- | ---------- |
-| journey_step_pkey | CREATE UNIQUE INDEX journey_step_pkey ON carepath.journey_step USING btree (visit_id, sequence) |
+| journey_step_pkey | CREATE UNIQUE INDEX journey_step_pkey ON carepath.journey_step USING btree (visit_id, step_key) |
 
 ## Relations
 
@@ -32,8 +36,12 @@ erDiagram
 
 "carepath.journey_step" {
   text visit_id FK
+  text step_key
   integer sequence
-  text service_code
+  text kind
+  text clinic_code
+  integer round
+  text__ order_refs
   text status
   text service_point_id
 }
@@ -42,6 +50,7 @@ erDiagram
   text patient_ref
   text status
   timestamp_with_time_zone synced_at
+  text patient_name
 }
 ```
 

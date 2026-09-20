@@ -7,7 +7,7 @@
 | id | text |  | false |  |  |  |
 | code | text |  | false |  |  |  |
 | name | text |  | false |  |  |  |
-| place_id | text |  | false |  |  |  |
+| place_id | text |  | false |  | [carepath.place](carepath.place.md) |  |
 | active | boolean | true | false |  |  |  |
 
 ## Constraints
@@ -16,6 +16,7 @@
 | ---- | ---- | ---------- |
 | service_point_pkey | PRIMARY KEY | PRIMARY KEY (id) |
 | service_point_code_key | UNIQUE | UNIQUE (code) |
+| service_point_place_id_fkey | FOREIGN KEY | FOREIGN KEY (place_id) REFERENCES place(place_id) |
 
 ## Indexes
 
@@ -29,13 +30,23 @@
 ```mermaid
 erDiagram
 
+"carepath.service_point" }o--|| "carepath.place" : "FOREIGN KEY (place_id) REFERENCES place(place_id)"
 
 "carepath.service_point" {
   text id
   text code
   text name
-  text place_id
+  text place_id FK
   boolean active
+}
+"carepath.place" {
+  text place_id
+  text floor_id FK
+  text name
+  text place_type
+  numeric x
+  numeric y
+  text entry_node_id FK
 }
 ```
 

@@ -74,6 +74,7 @@ type fakeRepo struct {
 	upserts    int
 	marks      int
 	audits     []CommandAudit
+	events     []StepStatusEvent
 	inTxMarker bool
 }
 
@@ -138,6 +139,12 @@ func (f *fakeRepo) ClosedRounds(_ context.Context, visitID string) (map[string]b
 		out[k] = v
 	}
 	return out, nil
+}
+
+func (f *fakeRepo) AppendStatusEvents(ctx context.Context, events []StepStatusEvent) error {
+	_, f.inTxMarker = ctx.Value(txMarker{}).(bool)
+	f.events = append(f.events, events...)
+	return nil
 }
 
 func snapshot() his.Visit {
@@ -631,5 +638,238 @@ func TestCloseRoundNoOpenRoundIsNotFound(t *testing.T) {
 	_, err := svc.CloseRound(context.Background(), "VISIT-001", "SURG", "test", Actor{UserID: "user-1", Username: "tester"})
 	if !errors.Is(err, ErrNoOpenRound) {
 		t.Fatalf("error = %v, want ErrNoOpenRound", err)
+	}
+}
+
+// --- #85: the append-only step status timeline -----------------------------
+
+func eventsOf(events []StepStatusEvent, stepKey string) []StepStatusEvent {
+	var out []StepStatusEvent
+	for _, ev := range events {
+		if ev.StepKey == stepKey {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+// #85 AC: a visit's first projection appends one row per step, each with
+// from_status NULL (the step just entered the plan).
+func TestTimelineFirstProjectionRecordsEveryStep(t *testing.T) {
+	repo := newFakeRepo()
+	svc := newTestService(&fakeHIS{visit: snapshot()}, repo)
+
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("ApplyHISEvent: %v", err)
+	}
+
+	if len(repo.events) != 3 {
+		t.Fatalf("events = %d, want 3 (REGISTRATION, CLINIC:MED:1, CASHIER): %+v", len(repo.events), repo.events)
+	}
+	byKey := map[string]StepStatusEvent{}
+	for _, ev := range repo.events {
+		if ev.FromStatus != nil {
+			t.Fatalf("event %s from_status = %v, want nil (step just entered the plan)", ev.StepKey, *ev.FromStatus)
+		}
+		if ev.Source != EventSourcePlanner || ev.ActorUserID != "" {
+			t.Fatalf("event %s source/actor = %s/%s, want planner with no actor", ev.StepKey, ev.Source, ev.ActorUserID)
+		}
+		if ev.VisitID != "VISIT-001" || ev.Kind == "" {
+			t.Fatalf("event = %+v, want visit id and a copied kind", ev)
+		}
+		byKey[ev.StepKey] = ev
+	}
+	if byKey["REGISTRATION"].ToStatus != StepCompleted ||
+		byKey["CLINIC:MED:1"].ToStatus != StepReady ||
+		byKey["CASHIER"].ToStatus != StepPending {
+		t.Fatalf("initial statuses = %+v, want COMPLETED/READY/PENDING", byKey)
+	}
+}
+
+// #85 AC: a replan that changes nothing appends not a single row — the
+// ingest poller replans regularly and the table must not grow on no-ops.
+func TestTimelineNoOpReplanAppendsNothing(t *testing.T) {
+	repo := newFakeRepo()
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	before := len(repo.events)
+
+	// A fresh event id for the same unchanged snapshot still replans…
+	next := his.Event{EventID: "EVT-000002", VisitID: "VISIT-001", PatientRef: "PAT-001", Type: his.EventVisitUpdated}
+	if err := svc.ApplyHISEvent(context.Background(), next); err != nil {
+		t.Fatalf("re-apply: %v", err)
+	}
+	if repo.upserts != 2 {
+		t.Fatalf("upserts = %d, want 2 (the replan did run)", repo.upserts)
+	}
+	// …but the timeline must not have grown.
+	if got := len(repo.events); got != before {
+		t.Fatalf("events = %d, want %d after a no-op replan: %+v", got, before, repo.events[before:])
+	}
+}
+
+// #85 AC: a staff transition is recorded with the pre-command status and the
+// command's source and actor; planner-driven changes of the same replan
+// round (the next step's gate opening) are recorded separately as planner
+// events without an actor.
+func TestTimelineTransitionRecordsCommandAndPlannerCascade(t *testing.T) {
+	repo := newFakeRepo()
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if _, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
+		TransitionCommand{CommandID: "CMD-1", To: CommandToStarted}, "staff-web",
+		Actor{UserID: "user-1", Username: "tester"}); err != nil {
+		t.Fatalf("start clinic: %v", err)
+	}
+	started := eventsOf(repo.events, "CLINIC:MED:1")
+	if len(started) != 2 { // nil→READY from the first projection, READY→STARTED from the command
+		t.Fatalf("clinic events = %+v, want the initial projection plus the command", started)
+	}
+	cmd := started[1]
+	if cmd.FromStatus == nil || *cmd.FromStatus != StepReady || cmd.ToStatus != StepStarted {
+		t.Fatalf("command event = %+v, want READY→STARTED", cmd)
+	}
+	if cmd.Source != "staff-web" || cmd.ActorUserID != "user-1" || cmd.ActorUsername != "tester" {
+		t.Fatalf("command event source/actor = %s/%s,%s, want staff-web/user-1,tester", cmd.Source, cmd.ActorUserID, cmd.ActorUsername)
+	}
+
+	before := len(repo.events)
+	if _, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
+		TransitionCommand{CommandID: "CMD-2", To: CommandToCompleted}, "staff-web",
+		Actor{UserID: "user-1", Username: "tester"}); err != nil {
+		t.Fatalf("complete clinic: %v", err)
+	}
+	round := repo.events[before:]
+	if len(round) != 2 {
+		t.Fatalf("events of the completing round = %+v, want the command plus the cashier gate opening", round)
+	}
+	completed := eventsOf(round, "CLINIC:MED:1")
+	if len(completed) != 1 || completed[0].FromStatus == nil || *completed[0].FromStatus != StepStarted ||
+		completed[0].ToStatus != StepCompleted || completed[0].Source != "staff-web" || completed[0].ActorUserID != "user-1" {
+		t.Fatalf("completing command event = %+v, want STARTED→COMPLETED attributed to the command", completed)
+	}
+	cashier := eventsOf(round, "CASHIER")
+	if len(cashier) != 1 || cashier[0].FromStatus == nil || *cashier[0].FromStatus != StepPending ||
+		cashier[0].ToStatus != StepReady || cashier[0].Source != EventSourcePlanner || cashier[0].ActorUserID != "" {
+		t.Fatalf("cashier event = %+v, want PENDING→READY by the planner with no actor", cashier)
+	}
+}
+
+// #85 AC: replaying the same command id re-audits but never grows the
+// timeline (nothing changed).
+func TestTimelineDuplicateCommandDoesNotGrow(t *testing.T) {
+	repo := newFakeRepo()
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	for i := 0; i < 2; i++ {
+		if _, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
+			TransitionCommand{CommandID: "CMD-1", To: CommandToStarted}, "staff-web",
+			Actor{UserID: "user-1", Username: "tester"}); err != nil {
+			t.Fatalf("start clinic %d: %v", i, err)
+		}
+	}
+	started := eventsOf(repo.events, "CLINIC:MED:1")
+	if len(started) != 2 {
+		t.Fatalf("clinic events = %+v, want exactly the projection and one command row", started)
+	}
+	if len(repo.audits) != 2 {
+		t.Fatalf("audits = %d, want 2 (a replayed command is still re-audited)", len(repo.audits))
+	}
+}
+
+// #85 AC: a step withdrawn by a replan is recorded as CANCELLED. The HIS's
+// encounter.completed fact drives the close, so the promotion to COMPLETED is
+// attributed to the planner with no actor (the audit table has no row here
+// either — no staff commanded anything).
+func TestTimelineWithdrawnStepRecordedAsCancelled(t *testing.T) {
+	repo := newFakeRepo()
+	visit := snapshot()
+	visit.Orders = []his.Order{
+		{OrderRef: "ORD-1", OrderType: his.OrderTypeLab, OrderedByClinic: "MED", OrderedAt: openedAt.Add(10 * time.Minute), Status: his.OrderPlaced},
+	}
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": visit}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
+		TransitionCommand{CommandID: "C1", To: CommandToStarted}, "staff-web",
+		Actor{UserID: "user-1", Username: "tester"}); err != nil {
+		t.Fatalf("start clinic: %v", err)
+	}
+	before := len(repo.events)
+
+	closeEvent := his.Event{
+		EventID: "EVT-000003", VisitID: "VISIT-001", PatientRef: "PAT-001", Type: his.EventEncounterCompleted,
+		Payload: map[string]any{"clinicCode": "MED"},
+	}
+	if err := svc.ApplyHISEvent(context.Background(), closeEvent); err != nil {
+		t.Fatalf("encounter.completed: %v", err)
+	}
+
+	round := repo.events[before:]
+	if len(round) != 2 {
+		t.Fatalf("events of the closing round = %+v, want the round completing and the withdrawal", round)
+	}
+	completed := eventsOf(round, "CLINIC:MED:1")
+	if len(completed) != 1 || completed[0].FromStatus == nil || *completed[0].FromStatus != StepStarted ||
+		completed[0].ToStatus != StepCompleted || completed[0].Source != EventSourcePlanner || completed[0].ActorUserID != "" {
+		t.Fatalf("round-1 completing event = %+v, want STARTED→COMPLETED by the planner with no actor", completed)
+	}
+	withdrawn := eventsOf(round, "CLINIC:MED:2")
+	if len(withdrawn) != 1 || withdrawn[0].FromStatus == nil || *withdrawn[0].FromStatus != StepWaiting ||
+		withdrawn[0].ToStatus != StepCancelled || withdrawn[0].Source != EventSourcePlanner {
+		t.Fatalf("withdrawn round-2 event = %+v, want WAITING→CANCELLED", withdrawn)
+	}
+	if withdrawn[0].Kind != KindClinic {
+		t.Fatalf("withdrawn event kind = %s, want the kind copied from the withdrawn step", withdrawn[0].Kind)
+	}
+}
+
+// The staff close-round override takes effect through the replan, so its
+// timeline row carries the command's source and actor (NFR-09), while the
+// inferred return it drops is a planner withdrawal.
+func TestTimelineCloseRoundAttributedToCommand(t *testing.T) {
+	repo := newFakeRepo()
+	visit := snapshot()
+	visit.Orders = []his.Order{
+		{OrderRef: "ORD-1", OrderType: his.OrderTypeLab, OrderedByClinic: "MED", OrderedAt: openedAt.Add(10 * time.Minute), Status: his.OrderPlaced},
+	}
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": visit}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := svc.TransitionStep(context.Background(), "VISIT-001", "CLINIC:MED:1",
+		TransitionCommand{CommandID: "C1", To: CommandToStarted}, "staff-web",
+		Actor{UserID: "user-1", Username: "tester"}); err != nil {
+		t.Fatalf("start clinic: %v", err)
+	}
+	before := len(repo.events)
+
+	if _, err := svc.CloseRound(context.Background(), "VISIT-001", "MED", "test",
+		Actor{UserID: "user-1", Username: "tester"}); err != nil {
+		t.Fatalf("CloseRound: %v", err)
+	}
+
+	round := repo.events[before:]
+	completed := eventsOf(round, "CLINIC:MED:1")
+	if len(completed) != 1 || completed[0].FromStatus == nil || *completed[0].FromStatus != StepStarted ||
+		completed[0].ToStatus != StepCompleted || completed[0].Source != "test" || completed[0].ActorUserID != "user-1" {
+		t.Fatalf("close-round event = %+v, want STARTED→COMPLETED attributed to the command", completed)
+	}
+	if withdrawn := eventsOf(round, "CLINIC:MED:2"); len(withdrawn) != 1 || withdrawn[0].ToStatus != StepCancelled {
+		t.Fatalf("withdrawn round-2 event = %+v, want CANCELLED", withdrawn)
 	}
 }

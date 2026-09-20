@@ -247,3 +247,26 @@ func (r *Repo) ClosedRounds(ctx context.Context, visitID string) (map[string]boo
 	}
 	return closed, nil
 }
+
+// AppendStatusEvents appends one batch of timeline rows for a single replan
+// round (#85). There is deliberately no UPDATE, DELETE, or read-back path in
+// code — the table is the append-only history of how step statuses traveled.
+func (r *Repo) AppendStatusEvents(ctx context.Context, events []journey.StepStatusEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+	q := r.database.Querier(ctx)
+	for _, ev := range events {
+		if _, err := q.Exec(ctx,
+			`INSERT INTO carepath.journey_step_status_event
+			       (visit_id, step_key, kind, service_point_id, from_status, to_status, source, actor_user_id, actor_username)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			ev.VisitID, ev.StepKey, ev.Kind, ev.ServicePointID, ev.FromStatus, ev.ToStatus,
+			ev.Source, ev.ActorUserID, ev.ActorUsername,
+		); err != nil {
+			return apperr.Wrapf(apperr.KindInternal, err,
+				"journey: append status event %s of %s", ev.StepKey, ev.VisitID)
+		}
+	}
+	return nil
+}
