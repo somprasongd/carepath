@@ -301,6 +301,11 @@ const docTemplate = `{
         },
         "/api/v1/demo/zigbee/location": {
             "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
                 "description": "Demo-only simulator for the Zigbee positioning service (#33): reports a zone-level fix for the visit through the canonical ZIGBEE location provider and returns the recorded observation. The zone resolves to its representative navigation node, which becomes the routing start point like any other location. A real Zigbee integration will consume positioning-service pushes through a separate adapter, not this endpoint.",
                 "consumes": [
                     "application/json"
@@ -332,6 +337,18 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "invalid body, or a floor/zone that does not resolve to a known location",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "missing or invalid staff access token",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "authenticated, but not STAFF or ADMIN",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }

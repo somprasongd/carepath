@@ -34,7 +34,9 @@ fix resolves through the canonical ZIGBEE location provider (ADR-0004) to
 the zone's representative navigation node and becomes the visit's routing
 start point. The simulator is an adapter of its own — a real Zigbee
 integration (the flow above) lands as a separate provider and does not
-reuse it.
+reuse it. The call requires a `STAFF`/`ADMIN` access token (same
+`Authorization: Bearer …` as the other staff surfaces): it moves the
+visit's routing origin, so it is a staff tool, not an open write.
 
 ## Tag assignment
 

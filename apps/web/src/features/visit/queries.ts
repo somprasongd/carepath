@@ -85,26 +85,42 @@ function journeyIsFinal(journey: Journey): boolean {
   return journey.status === 'CANCELLED' || journey.completed
 }
 
-// Visits this page session has already claimed. The claim (#96) is what
-// mints read access to a visit — every patient visit-scoped call goes
-// through ensureVisitClaimed first, so a QR deep-link straight into
-// /patient/navigate or a share command works without passing the journey
-// screen first.
+// Visits this page session has successfully claimed, plus the claims
+// currently in flight. The claim (#96) is what mints read access to a
+// visit — every patient visit-scoped call goes through ensureVisitClaimed
+// first, so a QR deep-link straight into /patient/navigate or a share
+// command works without passing the journey screen first.
 const claimedVisits = new Set<string>()
+const claimsInFlight = new Map<string, Promise<void>>()
 
 /**
  * Bind this session's identity to the visit (#96) before reading or
  * commanding it. Claiming is the patient's front door made explicit: knowing
  * the visit id (typed VN, scanned QR) is the credential. Idempotent server-
  * side, and once per page session is enough — the Set keeps the 15s polls
- * and parallel queries from re-firing the POST. A visit that was never
- * projected 404s here with the same "journey not found" the read itself
- * would give.
+ * and parallel queries from re-firing the POST. Only a claim that SUCCEEDED
+ * is remembered: a failed one is retried by the next call (query retry,
+ * refetch), so one transient failure can't wedge the visit's queries into
+ * permanent 404s until a reload. A visit that was never projected 404s here
+ * with the same "journey not found" the read itself would give.
  */
 export async function ensureVisitClaimed(visitId: string): Promise<void> {
   if (claimedVisits.has(visitId)) return
-  claimedVisits.add(visitId)
-  await apiPostNoContent(`/api/v1/journeys/${encodeURIComponent(visitId)}/claim`)
+  // Concurrent callers (poll + parallel queries) share one in-flight POST.
+  const existing = claimsInFlight.get(visitId)
+  if (existing) {
+    await existing
+    return
+  }
+  const claim = apiPostNoContent(`/api/v1/journeys/${encodeURIComponent(visitId)}/claim`)
+    .then(() => {
+      claimedVisits.add(visitId)
+    })
+    .finally(() => {
+      claimsInFlight.delete(visitId)
+    })
+  claimsInFlight.set(visitId, claim)
+  await claim
 }
 
 /**

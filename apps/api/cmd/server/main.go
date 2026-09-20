@@ -240,7 +240,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	servicepoint.NewHandler(servicePoints).Register(app.Group("/api/v1"), staffGuard)
 	locationHandler := location.NewHandler(locations)
 	locationHandler.Register(app.Group("/api/v1"), patientVisitGuard)
-	locationHandler.RegisterDemo(app.Group("/api/v1"))
+	locationHandler.RegisterDemo(app.Group("/api/v1"), staffGuard)
 	notification.NewHandler(notifications).Register(app.Group("/api/v1"), patientVisitGuard)
 	navigation.NewHandler(navigationGraph).Register(app.Group("/api/v1"))
 

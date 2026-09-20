@@ -179,7 +179,10 @@ let refreshInFlight: Promise<StaffTokenPair | null> | undefined
  * concurrent caller (a StrictMode double-mount, several 401s landing
  * together) shares one round-trip, because spending a refresh token twice
  * trips the server's reuse detector and burns the whole session. Resolves
- * with the pair, or null when no token is stored or the server refuses it.
+ * with the pair, or null when no token is stored or the server refuses it
+ * (401 — unknown, expired, revoked, or already-spent). Any other failure
+ * (offline, 5xx) is transient: it rethrows with the session intact, so the
+ * next attempt retries the exchange instead of destroying it.
  */
 function refreshStaffSession(): Promise<StaffTokenPair | null> {
   refreshInFlight ??= (async () => {
@@ -193,9 +196,12 @@ function refreshStaffSession(): Promise<StaffTokenPair | null> {
       })
       adoptStaffTokens(pair)
       return pair
-    } catch {
-      clearStaffSession()
-      return null
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearStaffSession()
+        return null
+      }
+      throw err
     }
   })().finally(() => {
     refreshInFlight = undefined
@@ -240,7 +246,9 @@ async function request<TReturn>(path: string, init: RequestInit, retried = false
 
   // A staff request whose access token expired: try one silent rotation and
   // replay the call. The auth endpoints themselves are exempt — a failed
-  // login must surface, not trigger a refresh loop.
+  // login must surface, not trigger a refresh loop. A refused rotation ends
+  // the session; a transient one (offline, 5xx) propagates as the network
+  // error it is, with the session intact for the next attempt.
   if (
     response.status === 401 &&
     staffAccessToken &&

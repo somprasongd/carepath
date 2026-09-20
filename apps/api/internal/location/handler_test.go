@@ -173,7 +173,7 @@ func newDemoTestApp(t *testing.T) (*fiber.App, *fakeRepo) {
 	app := fiber.New()
 	handler := location.NewHandler(svc)
 	handler.Register(app.Group("/api/v1"), func(c fiber.Ctx) error { return c.Next() })
-	handler.RegisterDemo(app.Group("/api/v1"))
+	handler.RegisterDemo(app.Group("/api/v1"), func(c fiber.Ctx) error { return c.Next() })
 	return app, repo
 }
 
@@ -262,5 +262,31 @@ func TestSimulateZigbeeInvalidFixes(t *testing.T) {
 				t.Fatalf("status = %d, want 400", resp.StatusCode)
 			}
 		})
+	}
+}
+
+// The demo simulator sits behind the staff guard (a rejected caller never
+// reaches the handler), pinning the wiring RegisterDemo now mounts — an
+// open write here would let anyone move any visit's routing origin.
+func TestSimulateZigbeeRequiresStaffGuard(t *testing.T) {
+	repo := &fakeRepo{}
+	nav := &fakeNavigation{nodes: demoGraph}
+	svc, err := location.NewService(repo, nav, qr.New(&fakePlaces{}, nav), zigbee.New(nav))
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	app := fiber.New()
+	handler := location.NewHandler(svc)
+	handler.RegisterDemo(app.Group("/api/v1"), func(c fiber.Ctx) error {
+		return c.SendStatus(http.StatusUnauthorized)
+	})
+
+	resp, _ := postZigbeeFix(t, app,
+		`{"visitId":"VISIT-Z","floorId":"I-1301","zone":"PUBLIC","confidence":0.8}`)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+	if len(repo.recorded) != 0 {
+		t.Fatalf("repo.recorded = %d entries, want 0 — the guard must stop the write", len(repo.recorded))
 	}
 }

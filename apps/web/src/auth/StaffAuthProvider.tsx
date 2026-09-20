@@ -34,7 +34,18 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
     // Single-flight in the client: StrictMode's double-mounted effect (and
     // any concurrent 401s) share one refresh call — spending the token twice
     // would trip the server's reuse detector.
-    const pair = await restoreStaffSession()
+    let pair: StaffTokenPair | null = null
+    try {
+      pair = await restoreStaffSession()
+    } catch {
+      // Transient failure (offline boot, API down): the client keeps the
+      // persisted refresh token, so this is signed-out-for-now, not
+      // signed-out-for-good — a later restore (retry/reload once the API is
+      // reachable) signs back in without re-typing the password.
+      setIdentity(null)
+      setStatus('unauthenticated')
+      return
+    }
     if (pair) {
       setIdentity(pair.identity)
       setStatus('authenticated')

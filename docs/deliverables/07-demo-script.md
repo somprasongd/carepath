@@ -55,11 +55,15 @@ Expected: หน้า "เส้นทางไปพบแพทย์ · ช�
 
 ### Beat 3 — รายงานตำแหน่งปัจจุบัน (0:30)
 
-จำลองผู้ป่วยเดินมาถึงโซนสาธาระของชั้น 1 ด้วย **Zigbee simulator** (terminal สำรอง):
+จำลองผู้ป่วยเดินมาถึงโซนสาธาระของชั้น 1 ด้วย **Zigbee simulator** (terminal สำรอง) — endpoint นี้ต้องใช้ staff token (ตั้งแต่ครั้ง refresh ล่าสุด simulator เป็น staff surface แล้ว) ขอ token ก่อนแล้วค่อยยิง:
 
 ```bash
+TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"staff","password":"demo"}' | jq -r .accessToken)
 curl -X POST localhost:8080/api/v1/demo/zigbee/location \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"visitId":"VISIT-002","floorId":"I-1301","zone":"PUBLIC","confidence":0.92}'
 # → {"nodeId":"I-1301/node-cashier","zone":"PUBLIC","source":"ZIGBEE",...}
 ```

@@ -115,6 +115,23 @@ describe('ensureVisitClaimed (#96 visit claim)', () => {
     expect((failure as { status?: number }).status).toBe(404)
   })
 
+  it('retries a claim that failed — one transient failure must not wedge the visit', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'internal server error' }, 500))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    // First claim fails (e.g. a blip mid-deploy) — the query shows the error,
+    // and its retry must POST again rather than skip the claim forever.
+    const failure = await ensureVisitClaimed('VISIT-CLAIM-E2').catch((e: unknown) => e)
+    expect((failure as { status?: number }).status).toBe(500)
+    await expect(ensureVisitClaimed('VISIT-CLAIM-E2')).resolves.toBeUndefined()
+    // Now it is remembered — later calls read without another claim POST.
+    await ensureVisitClaimed('VISIT-CLAIM-E2')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('the journey queryFn claims before it reads', async () => {
     const fetchMock = vi.fn().mockImplementation((path: string) => {
       if (path.endsWith('/claim')) {
