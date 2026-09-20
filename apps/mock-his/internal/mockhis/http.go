@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
@@ -194,14 +195,16 @@ func New(log *slog.Logger, patientAppBaseURL string) *fiber.App {
 		return c.JSON(visit)
 	})
 
-	// QR of the visit id — demo prop for the console detail panel (scan to
-	// type the id into the patient view instead of keying it by hand).
+	// QR for the console detail panel — demo stand-in for the real printed
+	// navigation slip's QR: encodes the patient-view URL for this visit, so
+	// scanning it (or clicking the console link) opens the journey directly.
 	app.Get("/api/v1/demo/visits/:visitId/qrcode.png", func(c fiber.Ctx) error {
 		visitID := c.Params("visitId")
 		if _, ok := store.GetVisit(visitID); !ok {
 			return errResponse(c, http.StatusNotFound, "visit not found")
 		}
-		png, err := qrcode.Encode(visitID, qrcode.Medium, 256)
+		target := patientAppBaseURL + "/patient/journey?visit=" + url.QueryEscape(visitID)
+		png, err := qrcode.Encode(target, qrcode.Medium, 256)
 		if err != nil {
 			return errResponse(c, http.StatusInternalServerError, "qr encode failed")
 		}

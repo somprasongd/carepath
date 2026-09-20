@@ -365,7 +365,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/v1/demo/visits/{visitId}/qrcode.png:
     get:
-      description: A QR code encoding the visit id, for the patient hand-off demo prop.
+      description: A QR code encoding the patient-view URL for this visit (demo stand-in for the real printed navigation-slip QR).
       parameters:
         - in: path
           name: visitId
