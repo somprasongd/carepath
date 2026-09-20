@@ -40,8 +40,31 @@ gets tested before a real tag exists.
 The stack is the single-origin topology from `docker-compose.prod.yml`. The
 host's ports 80/443 belong to nginx-proxy-manager, so the edge proxy publishes
 on host port **8080** (`http://61.19.253.24:8080`) and joins the shared
-`webproxy` network — an NPM proxy host can later route a domain straight to
-the `proxy` container, terminating TLS in front of it (LIFF will need that).
+`webproxy` network with the alias `carepath`.
+
+### Domain & TLS — https://carepath.somprasongd.work
+
+DNS (Cloudflare, **DNS-only** — keep it grey-cloud or Let's Encrypt HTTP-01
+renewal breaks): `carepath.somprasongd.work` → `61.19.253.24`.
+
+TLS terminates at nginx-proxy-manager (proxy host id 18, owned by the server
+admins): `carepath.somprasongd.work` → `carepath:80` (the edge proxy on the
+`webproxy` network), Let's Encrypt cert (issued 2026-09-20, auto-renewed by
+NPM), HTTP→HTTPS forced, HTTP/2. No CarePath env knows the domain — the SPA
+talks to a relative `/api` and the share token is a bearer credential
+(ADR-0011), so nothing needs an external URL configured.
+
+When real patient logins are wanted: point the LINE LIFF endpoint at
+`https://carepath.somprasongd.work` and set `LINE_CHANNEL_ID` in the host's
+`.env` (HTTPS is a LIFF requirement — satisfied now).
+
+> The `migrate` service pins `search_path=public` on its database URL
+> (as `docker-compose.yml` does). Without it, golang-migrate's bookkeeping
+> table lands in "first schema in search_path" — `carepath`, once migration
+> 000001 has created it — so a fresh DB tracks in `public` while a re-run
+> tracks in `carepath` and re-applies everything from scratch into a dirty
+> state. Symptom seen live: `relation "journey_closed_round" already exists`
+> on a re-run of an already-migrated database.
 
 The workflow authenticates over SSH with a dedicated deploy key
 (`carepath-deploy@github-actions`, private half in the repo secret

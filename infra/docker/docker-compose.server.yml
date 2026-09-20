@@ -38,8 +38,14 @@ services:
     volumes:
       - ./migrations:/migrations:ro
     command:
+      # search_path=public pins golang-migrate's bookkeeping table to one
+      # schema. Without it the tracker lands in "first schema in
+      # search_path" — `carepath` once migration 000001 has created it —
+      # so a fresh DB tracks in public while a re-run tracks in carepath
+      # and re-applies everything from scratch (dirty-db crash). Same fix
+      # as docker-compose.yml (dev); docker-compose.prod.yml gets it too.
       - -path=/migrations
-      - -database=postgres://${POSTGRES_USER:-carepath}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-carepath}?sslmode=disable
+      - -database=postgres://${POSTGRES_USER:-carepath}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-carepath}?sslmode=disable&search_path=public
       - up
 
   api:
@@ -80,8 +86,12 @@ services:
       - mock-his
     restart: unless-stopped
     networks:
-      - default
-      - webproxy
+      default: null
+      webproxy:
+        aliases:
+          # Deterministic name for nginx-proxy-manager to target
+          # (https://carepath.somprasongd.work → carepath:80 there).
+          - carepath
 
 volumes:
   pgdata:

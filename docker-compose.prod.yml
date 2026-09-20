@@ -41,8 +41,10 @@ services:
     volumes:
       - ./infra/postgres/migrations:/migrations:ro
     command:
+      # search_path=public pins golang-migrate's bookkeeping table to one
+      # schema — see docker-compose.yml (dev) for the dirty-db story.
       - -path=/migrations
-      - -database=postgres://${POSTGRES_USER:-carepath}:${POSTGRES_PASSWORD:-carepath}@postgres:5432/${POSTGRES_DB:-carepath}?sslmode=disable
+      - -database=postgres://${POSTGRES_USER:-carepath}:${POSTGRES_PASSWORD:-carepath}@postgres:5432/${POSTGRES_DB:-carepath}?sslmode=disable&search_path=public
       - up
 
   api:
