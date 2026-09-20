@@ -524,7 +524,7 @@ docker compose up --build     # หรือ: make up
 
 migration ของฐานข้อมูลรันอัตโนมัติผ่าน service `migrate` (golang-migrate) ก่อน API จะสตาร์ต
 
-หน้าเว็บคุยกับ API แบบ same-origin ผ่าน `/api` (dev: Vite proxy ส่งต่อให้, ดู `apps/web/vite.config.ts`) — ทดสอบบนมือถือจึง tunnel แค่ port เดียว
+หน้าเว็บคุยกับ API แบบ same-origin ผ่าน `/api` (dev: Vite proxy ส่งต่อให้, ดู `apps/web/vite.config.ts`) — ทดสอบบนมือถือจึง tunnel แค่ port เดียว ถ้าจะชี้ไปที่ origin อื่นตั้ง `VITE_API_BASE_URL` ได้ตามปกติ
 
 ### รูปแบบ production (single origin)
 
@@ -532,12 +532,15 @@ migration ของฐานข้อมูลรันอัตโนมัต�
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
-สถาปัตยกรรมต่างจาก dev compose: nginx เป็นประตูเดียว (serve static build ของเว็บ + proxy `/api` ไปให้ API — รายละเอียดอยู่ใน `infra/docker/nginx.conf`) API กับ PostgreSQL ไม่เปิดออกนอก docker network เหลือเปิดแค่:
+ต่างจาก dev compose ตรงที่**เปิด port ออกแค่ service `proxy`** ตัวเดียว (`CAREPATH_EDGE_PORT`, default 80) — ทุกอย่างที่เบราว์เซอร์ต้องการอยู่บน origin เดียวกันหมด:
 
-| บริการ | URL |
+| เส้นทางบน edge | ไปที่ |
 |---|---|
-| Edge (web + API) | http://localhost:{`CAREPATH_EDGE_PORT` หรือ 80} |
-| Mock HIS console | http://localhost:8090/console |
+| `/` | web (static build ของ SPA) |
+| `/api/…` | CarePath API |
+| `/console`, `/api/v1/demo/visits|orders…`, `/api/v1/events` | Mock HIS (console ของคนดำเนินการ) |
+
+การแยกเส้นทางอยู่ใน `infra/docker/proxy.conf` — path ฝั่ง demo ของ Mock HIS ไม่ชนกับของ API (ตัวเดียวที่ API มีคือ `/api/v1/demo/zigbee`) ส่วน PostgreSQL, API, Mock HIS และ web ไม่เปิดออกนอก docker network ทั้งหมด
 
 ถ้าจะชี้ LIFF endpoint มาที่ stack นี้ ต้องมี TLS ครอบหน้า edge ก่อน (LIFF รับเฉพาะ HTTPS นอกจาก localhost)
 
@@ -588,6 +591,8 @@ curl -s localhost:8080/api/v1/journeys/VISIT-001 | jq '.steps[] | {stepKey, stat
 หน้า **Mock HIS console** (http://localhost:8090/console) ทำแบบเดียวกันได้ผ่าน UI: เปิด visit, สั่ง order, กด performed / resulted, ปิด encounter, ปิด visit
 **ประวัติย้อนหลังเพื่อ dashboard ผู้บริหาร (#88)** — นอกจาก visit สาธิต 2 คนข้างบน ฐานข้อมูลที่ reset มาพร้อม visit `VISIT-H-001` … `VISIT-H-009` (ชื่อขึ้นต้น "สาธิต" ทั้งหมด) ที่จบไปแล้วในวันเดียวกัน เพื่อให้ [ภาพรวมของผู้บริหาร](#5-ผู้บริหารโรงพยาบาล-executive) มีเวลารอเฉลี่ยและคอขวดให้ดูทันทีโดยไม่ต้องอัด event เองก่อนสาธิต ชุดข้อมูลนี้เขียนลง projection ตรง ๆ ผ่าน migration `000016_seed_demo_history` (เวลาเป็น offset จาก `now()` ย้อนหลัง ~4 ชั่วโมง บีบไม่ให้ข้ามเที่ยงคืน) — เป็นข้อมูลสาธิตล้วน ไม่มี HIS event อ้างถึง และห้ามใช้วิธีนี้กับข้อมูลจริง visit เหล่านี้จะโผล่ในหน้า "ผู้ป่วยวันนี้" ของเจ้าหน้าที่ด้วย (สถานะ COMPLETED ทั้งหมด ไม่มีปุ่มให้กด) ซึ่งตั้งใจให้คอนโซลดูมีชีวิตขึ้น
 
+
+**ประวัติย้อนหลังเพื่อ dashboard ผู้บริหาร (#88)** — นอกจาก visit สาธิต 2 คนข้างบน ฐานข้อมูลที่ reset มาพร้อม visit `VISIT-H-001` … `VISIT-H-009` (ชื่อขึ้นต้น "สาธิต" ทั้งหมด) ที่จบไปแล้วในวันเดียวกัน เพื่อให้ [ภาพรวมของผู้บริหาร](#5-ผู้บริหารโรงพยาบาล-executive) มีเวลารอเฉลี่ยและคอขวดให้ดูทันทีโดยไม่ต้องอัด event เองก่อนสาธิต ชุดข้อมูลนี้เขียนลง projection ตรง ๆ ผ่าน migration `000016_seed_demo_history` (เวลาเป็น offset จาก `now()` ย้อนหลัง ~4 ชั่วโมง บีบไม่ให้ข้ามเที่ยงคืน) — เป็นข้อมูลสาธิตล้วน ไม่มี HIS event อ้างถึง และห้ามใช้วิธีนี้กับข้อมูลจริง visit เหล่านี้จะโผล่ในหน้า "ผู้ป่วยวันนี้" ของเจ้าหน้าที่ด้วย (สถานะ COMPLETED ทั้งหมด ไม่มีปุ่มให้กด) ซึ่งตั้งใจให้คอนโซลดูมีชีวิตขึ้น
 
 ### URL แยกตามบทบาท (ผู้ป่วย vs เจ้าหน้าที่)
 

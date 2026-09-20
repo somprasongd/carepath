@@ -52,7 +52,7 @@ Files in `routes/` whose name starts with `-` are colocated components excluded 
 ```
 packages/contracts/openapi/carepath.yaml
   → (npm run gen:api) → src/api/schema.d.ts
-  → src/api/client.ts (fetch, VITE_API_BASE_URL)
+  → src/api/client.ts (fetch, same-origin /api — Vite proxy in dev, nginx edge in prod; VITE_API_BASE_URL only overrides the origin)
   → features/visit/queries.ts (TanStack Query, queryKey ['visit', id])
   → features/visit/journey.ts (mapping to design-system types)
   → routes/patient/* screens

@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  /** CarePath API base URL; defaults to the local docker-compose api on :8080. */
+  /** API base override; unset/empty = same-origin (dev Vite proxy, prod nginx edge). */
   readonly VITE_API_BASE_URL?: string
   /** 'line' uses real LIFF login; anything else falls back to the demo stub. */
   readonly VITE_AUTH_MODE?: 'line' | 'demo'

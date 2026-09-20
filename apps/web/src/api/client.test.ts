@@ -28,7 +28,7 @@ describe('apiGet', () => {
     await expect(apiGet<{ visitId: string }>('/api/v1/visits/V-1')).resolves.toEqual({
       visitId: 'V-1',
     })
-    expect(fetch).toHaveBeenCalledWith('http://localhost:8080/api/v1/visits/V-1', {
+    expect(fetch).toHaveBeenCalledWith('/api/v1/visits/V-1', {
       method: 'GET',
     })
   })
@@ -75,7 +75,7 @@ describe('apiPost', () => {
     await expect(
       apiPost<{ sessionToken: string }>('/api/v1/auth/session', { source: 'demo', idToken: '' }),
     ).resolves.toEqual({ sessionToken: 'tok-1' })
-    expect(fetch).toHaveBeenCalledWith('http://localhost:8080/api/v1/auth/session', {
+    expect(fetch).toHaveBeenCalledWith('/api/v1/auth/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: 'demo', idToken: '' }),
@@ -116,7 +116,7 @@ describe('apiPost', () => {
     ).resolves.toEqual({ visitId: 'V-1', status: 'ACTIVE' })
 
     const [url, init] = vi.mocked(fetchMock).mock.calls[0]
-    expect(url).toBe('http://localhost:8080/api/v1/journeys/V-1/steps/2/transition')
+    expect(url).toBe('/api/v1/journeys/V-1/steps/2/transition')
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('content-type')).toBe('application/json')
     expect(JSON.parse(String(init?.body))).toEqual({ to: 'STARTED', source: 'staff-web' })
@@ -147,7 +147,7 @@ describe('setApiAuthToken', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ source: 'line' })))
 
     await apiGet('/api/v1/auth/session')
-    expect(fetch).toHaveBeenCalledWith('http://localhost:8080/api/v1/auth/session', {
+    expect(fetch).toHaveBeenCalledWith('/api/v1/auth/session', {
       method: 'GET',
       headers: { Authorization: 'Bearer tok-1' },
     })
@@ -159,7 +159,7 @@ describe('setApiAuthToken', () => {
 
     await apiPost('/api/v1/journeys/V-1/steps/1/transition', { to: 'STARTED' })
     expect(fetch).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/journeys/V-1/steps/1/transition',
+      '/api/v1/journeys/V-1/steps/1/transition',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer tok-1' },

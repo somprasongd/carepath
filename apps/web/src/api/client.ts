@@ -3,7 +3,11 @@
  * contract-generated schema.d.ts — never hand-write a shape that exists there.
  */
 
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
+// Same-origin by default: in dev the Vite server proxies /api to the backend
+// (vite.config.ts), and in production the nginx edge serves web + /api from
+// one origin — so a relative path reaches the API in both. Set
+// VITE_API_BASE_URL only to target an API on a different origin.
+const apiBase = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export class ApiError extends Error {
   constructor(
