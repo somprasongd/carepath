@@ -97,7 +97,7 @@ jobs:
           TARGET="$SSH_USER@$SSH_HOST"
           ssh -i "$KEY" -p "$SSH_PORT" "$TARGET" "mkdir -p ~/docker-apps/carepath/migrations"
           scp -i "$KEY" -P "$SSH_PORT" infra/docker/docker-compose.server.yml "$TARGET:docker-apps/carepath/docker-compose.yml"
-          rsync -e "ssh -i $KEY -p $SSH_PORT" --delete infra/postgres/migrations/ "$TARGET:docker-apps/carepath/migrations/"
+          rsync -e "ssh -i $KEY -p $SSH_PORT" -r --delete infra/postgres/migrations/ "$TARGET:docker-apps/carepath/migrations/"
 
       - name: Roll out
         run: |
