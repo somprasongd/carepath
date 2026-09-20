@@ -61,12 +61,20 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = useCallback(async (username: string, password: string) => {
-    const pair = await apiPost<StaffTokenPair>('/api/v1/auth/login', { username, password })
-    adoptStaffTokens(pair)
-    expired.current = false
-    setIdentity(pair.identity)
-    setStatus('authenticated')
-    return pair.identity
+    try {
+      const pair = await apiPost<StaffTokenPair>('/api/v1/auth/login', { username, password })
+      adoptStaffTokens(pair)
+      expired.current = false
+      setIdentity(pair.identity)
+      setStatus('authenticated')
+      return pair.identity
+    } catch (err) {
+      // A failed login attempt shouldn't leave a stale refresh token behind —
+      // otherwise a later reload could silently "restore" a different, unrelated
+      // session instead of honoring the error the user just saw.
+      clearStaffSession()
+      throw err
+    }
   }, [])
 
   const logout = useCallback(async () => {
