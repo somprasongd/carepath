@@ -67,7 +67,7 @@ func eventTypes(body map[string]any) []string {
 }
 
 func TestVisitSnapshotMatchesContract(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 
 	status, body := do(t, app, http.MethodGet, "/api/v1/visits/VISIT-001", "")
 	if status != http.StatusOK {
@@ -93,11 +93,38 @@ func TestVisitSnapshotMatchesContract(t *testing.T) {
 	}
 }
 
+// A visit opened without pre-visit orders must report an empty array, not a
+// JSON null: the contract declares orders an array, and the console's detail
+// panel (visit.orders.length) breaks on null.
+func TestOpenVisitWithoutOrdersHasEmptyArray(t *testing.T) {
+	app := New(discardLogger(), "", "")
+
+	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits",
+		`{"visitType":"WALKIN","clinics":[{"clinicCode":"MED"}]}`)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %v)", status, body)
+	}
+	if body["orders"] == nil {
+		t.Fatalf("orders = null, want []")
+	}
+	if orders, ok := body["orders"].([]any); !ok || len(orders) != 0 {
+		t.Fatalf("orders = %v, want an empty array", body["orders"])
+	}
+
+	status, snap := do(t, app, http.MethodGet, "/api/v1/visits/VISIT-003", "")
+	if status != http.StatusOK {
+		t.Fatalf("canonical snapshot status = %d, want 200", status)
+	}
+	if orders, ok := snap["orders"].([]any); !ok || len(orders) != 0 {
+		t.Fatalf("canonical orders = %v, want an empty array", snap["orders"])
+	}
+}
+
 // The #39 deterministic demo scenario: VISIT-002 is a walk-in MED patient
 // whose chest X-ray is ordered mid-visit, with stable identifiers the E2E
 // happy path (#40) and the demo script (#41) rely on.
 func TestSeedScenarioVisit(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 
 	status, body := do(t, app, http.MethodGet, "/api/v1/visits/VISIT-002", "")
 	if status != http.StatusOK {
@@ -139,7 +166,7 @@ func TestSeedScenarioVisit(t *testing.T) {
 }
 
 func TestOpenVisit(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits",
 		`{"visitType":"WALKIN","patientRef":"HN-X","patientName":"ทดสอบ",`+
@@ -177,7 +204,7 @@ func TestOpenVisit(t *testing.T) {
 }
 
 func TestOpenVisitWithPreVisitOrders(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits",
 		`{"visitType":"APPOINTMENT","clinics":[{"clinicCode":"MED"}],`+
 			`"orders":[{"orderType":"LAB","orderName":"CBC","orderedByClinic":"MED"}]}`)
@@ -191,7 +218,7 @@ func TestOpenVisitWithPreVisitOrders(t *testing.T) {
 }
 
 func TestAddClinic(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics", `{"clinicCode":"SURG"}`)
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %v)", status, body)
@@ -210,7 +237,7 @@ func TestAddClinic(t *testing.T) {
 }
 
 func TestOrderLifecycle(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 	status, order := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/orders",
 		`{"orderType":"XRAY","orderName":"Chest X-Ray","orderedByClinic":"MED"}`)
 	if status != http.StatusOK || order["status"] != "PLACED" {
@@ -244,7 +271,7 @@ func TestOrderLifecycle(t *testing.T) {
 }
 
 func TestOrderCancel(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 	_, order := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/orders",
 		`{"orderType":"EKG","orderName":"ECG","orderedByClinic":"MED"}`)
 	ref := order["orderRef"].(string)
@@ -259,7 +286,7 @@ func TestOrderCancel(t *testing.T) {
 }
 
 func TestPlaceOrderRejectsUnknownTypeAndFinishedVisit(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 	if status, _ := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/orders",
 		`{"orderType":"MRI","orderName":"MRI","orderedByClinic":"MED"}`); status != http.StatusBadRequest {
 		t.Fatalf("unknown order type status = %d, want 400", status)
@@ -277,7 +304,7 @@ func TestPlaceOrderRejectsUnknownTypeAndFinishedVisit(t *testing.T) {
 }
 
 func TestCompleteEncounter(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics/MED/complete-encounter", "")
 	if status != http.StatusOK || body["visitId"] != "VISIT-001" {
 		t.Fatalf("complete-encounter = %d %v, want 200 VISIT-001", status, body)
@@ -291,7 +318,7 @@ func TestCompleteEncounter(t *testing.T) {
 }
 
 func TestCompleteVisit(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/complete", "")
 	if status != http.StatusOK || body["status"] != "COMPLETED" {
 		t.Fatalf("complete = %d %v, want 200 COMPLETED", status, body)
@@ -305,7 +332,7 @@ func TestCompleteVisit(t *testing.T) {
 }
 
 func TestEventFeedCursorAndEnvelope(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 
 	status, page := do(t, app, http.MethodGet, "/api/v1/events?limit=1", "")
 	if status != http.StatusOK {
@@ -336,7 +363,7 @@ func TestEventFeedCursorAndEnvelope(t *testing.T) {
 }
 
 func TestListDemoVisits(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 	do(t, app, http.MethodPost, "/api/v1/demo/visits", `{"visitType":"WALKIN","clinics":[{"clinicCode":"SURG"}]}`)
 
 	status, visits := doList(t, app, http.MethodGet, "/api/v1/demo/visits", "")
@@ -355,7 +382,7 @@ func TestListDemoVisits(t *testing.T) {
 // The full ADR-0009 example flow: pre-visit lab, clinic round, a mid-visit
 // order inferring a return, encounter completed, cashier, done.
 func TestDemoActionsSurfaceAsCanonicalEvents(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 	_, xray := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/orders",
 		`{"orderType":"XRAY","orderName":"Chest X-Ray","orderedByClinic":"MED"}`)
 	ref := xray["orderRef"].(string)
@@ -385,7 +412,7 @@ func TestDemoActionsSurfaceAsCanonicalEvents(t *testing.T) {
 
 // #22 follow-up: the console detail panel shows a QR of the visit id.
 func TestVisitQrcode(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 
 	status, png := doRaw(t, app, http.MethodGet, "/api/v1/demo/visits/VISIT-001/qrcode.png", "")
 	if status != http.StatusOK {
@@ -408,7 +435,7 @@ func TestVisitQrcode(t *testing.T) {
 // Visit cancellation from the console: open orders are cancelled, the visit
 // becomes CANCELLED, everything surfaces as canonical events.
 func TestCancelVisit(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/cancel", "")
 	if status != http.StatusOK {
@@ -444,7 +471,7 @@ func TestCancelVisit(t *testing.T) {
 }
 
 func TestCancelCompletedVisitConflicts(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 	do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/complete", "")
 
 	if status, resp := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/cancel", ""); status != http.StatusConflict {
@@ -453,7 +480,7 @@ func TestCancelCompletedVisitConflicts(t *testing.T) {
 }
 
 func TestConsoleServed(t *testing.T) {
-	app := New(discardLogger(), "")
+	app := New(discardLogger(), "", "")
 
 	req, _ := http.NewRequest(http.MethodGet, "/console", nil)
 	resp, err := app.Test(req)
@@ -470,8 +497,11 @@ func TestConsoleServed(t *testing.T) {
 	if !strings.Contains(string(raw), "Mock HIS Console") {
 		t.Fatalf("/console body does not look like the console page")
 	}
-	if !strings.Contains(string(raw), "ORDER_TYPES") {
-		t.Fatal("/console body is missing the ORDER_TYPES the pickers use")
+	if !strings.Contains(string(raw), "FALLBACK_CLINICS") || !strings.Contains(string(raw), "FALLBACK_ORDER_TYPES") {
+		t.Fatal("/console body is missing the fallback catalogs the pickers bootstrap from")
+	}
+	if strings.Contains(string(raw), "CAREPATH_API_BASE_URL=") {
+		t.Fatal("/console body should not pin CAREPATH_API_BASE_URL when the API is same-origin")
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, "/", nil)
@@ -481,5 +511,27 @@ func TestConsoleServed(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != "/console" {
 		t.Fatalf("GET / = %d %q, want 302 to /console", resp.StatusCode, resp.Header.Get("Location"))
+	}
+}
+
+// The console pickers read CarePath's service-point list, so the page must
+// carry the injected base URLs for the browser to call when the apps run on
+// separate origins (dev).
+func TestConsoleInjectsBaseURLs(t *testing.T) {
+	app := New(discardLogger(), "http://localhost:5173", "http://localhost:8080")
+
+	req, _ := http.NewRequest(http.MethodGet, "/console", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("GET /console: %v", err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	for _, want := range []string{
+		`window.CAREPATH_API_BASE_URL="http://localhost:8080"`,
+		`window.PATIENT_APP_BASE_URL="http://localhost:5173"`,
+	} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("/console body is missing %s", want)
+		}
 	}
 }

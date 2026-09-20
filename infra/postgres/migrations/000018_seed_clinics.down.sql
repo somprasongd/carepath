@@ -1,0 +1,2 @@
+DELETE FROM carepath.service_point WHERE id IN
+    ('SP-CLINIC-ENT', 'SP-CLINIC-SURG', 'SP-CLINIC-OPHTH', 'SP-CLINIC-DENT');

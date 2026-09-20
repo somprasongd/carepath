@@ -20,8 +20,11 @@ func main() {
 		port = "8090"
 	}
 	patientAppBaseURL := strings.TrimRight(os.Getenv("PATIENT_APP_BASE_URL"), "/")
+	// Where the console's pickers read CarePath's service-point list; empty
+	// = same-origin (correct behind the prod single-origin proxy).
+	carepathAPIBaseURL := strings.TrimRight(os.Getenv("CAREPATH_API_BASE_URL"), "/")
 	log.Info("starting mock-his", "addr", ":"+port)
-	if err := mockhis.New(log, patientAppBaseURL).Listen(":" + port); err != nil {
+	if err := mockhis.New(log, patientAppBaseURL, carepathAPIBaseURL).Listen(":" + port); err != nil {
 		log.Error("server exited", "error", err.Error())
 		os.Exit(1)
 	}

@@ -170,7 +170,7 @@ entry, lab result reporting), so these endpoints exist on the mock only and
 must never be consumed by CarePath.
 
 - `GET /api/v1/demo/visits` — list all visits (seed + created), for console selection.
-- `POST /api/v1/demo/visits` — open a visit: `{visitType, clinics: [{clinicCode}], patientRef?, patientName?, orders?}`. Emits `visit.opened`.
+- `POST /api/v1/demo/visits` — open a visit: `{visitType, clinics: [{clinicCode, clinicName?}], patientRef?, patientName?, orders?}`. Emits `visit.opened`.
 - `POST /api/v1/demo/visits/{visitId}/clinics` — assign an additional clinic mid-visit: `{clinicCode}`. Emits `visit.updated`.
 - `POST /api/v1/demo/visits/{visitId}/orders` — place an order: `{orderType, orderName, orderedByClinic}`. Emits `order.placed`. `409` when the visit is not `ACTIVE`.
 - `POST /api/v1/demo/orders/{orderRef}/performed` — the procedure happened. Emits `order.performed`. `409` unless `PLACED`.
@@ -184,6 +184,21 @@ must never be consumed by CarePath.
 Every console action mutates only Mock HIS state and surfaces as canonical
 events; CarePath learns through the #21 feed poller exclusively — nothing
 writes the CarePath database directly.
+
+The console's clinic and order-type pickers are dropdowns listing exactly
+what CarePath can resolve to a destination: the browser reads CarePath's
+public `GET /api/v1/service-points` and narrows it to `CLINIC:<code>`
+(clinic pickers) and `ORDERTYPE:<type>` (order-type pickers), so a visit
+staged from the console can never name a clinic or order type CarePath has
+no service point for. Until that fetch lands (the API may still be booting)
+the pickers fall back to a catalog mirroring CarePath's seed service points,
+and the fetch is retried on the console's refresh tick. Like `/console`
+itself this read is demo tooling outside the canonical contract — the HIS
+surface stays one-directional (CarePath polls Mock HIS; Mock HIS never
+calls CarePath server-side). `CAREPATH_API_BASE_URL` points the console at
+the API when the two aren't same-origin (docker-compose.yml defaults it to
+the dev API port; behind docker-compose.prod.yml's single-origin proxy the
+empty default is correct).
 
 One demo-operational caveat: the event log lives in memory, so restarting Mock
 HIS resets event ids from `EVT-000001` while CarePath's stored feed cursor

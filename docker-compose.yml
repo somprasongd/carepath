@@ -22,6 +22,9 @@ services:
     environment:
       PORT: 8090
       PATIENT_APP_BASE_URL: ${PATIENT_APP_BASE_URL:-http://localhost:5173}
+      # Console pickers read CarePath's service-point list; dev runs the two
+      # apps on separate ports, so point the browser at the published API.
+      CAREPATH_API_BASE_URL: ${CAREPATH_API_BASE_URL:-http://localhost:8080}
     ports:
       - "${MOCK_HIS_PORT:-8090}:8090"
 
