@@ -14,6 +14,32 @@ export type JourneyStep = components['schemas']['JourneyStep']
 export type PlanningRules = components['schemas']['PlanningRules']
 export type VisitQueue = components['schemas']['JourneyQueue']
 export type VisitQueueStep = components['schemas']['JourneyQueueStep']
+export type StationQueue = components['schemas']['StationQueue']
+export type StationQueueEntry = components['schemas']['StationQueueEntry']
+
+/**
+ * One station's live queue (FR-15, #102): who is being served (STARTED,
+ * latest call first) and who is waiting (READY, earliest arrival first).
+ * Polled on the staff console's cadence so calls made elsewhere land here
+ * without a reload; calling the next patient is the same staff transition
+ * the patients' screen sees — its success invalidates this key.
+ */
+export function stationQueueQueryOptions(servicePointId: string) {
+  return queryOptions({
+    queryKey: ['staff', 'queue', servicePointId] as const,
+    queryFn: () =>
+      apiGet<StationQueue>(`/api/v1/staff/queue/${encodeURIComponent(servicePointId)}`),
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+  })
+}
+
+export function useStationQueue(servicePointId: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    ...stationQueueQueryOptions(servicePointId),
+    enabled: options?.enabled ?? true,
+  })
+}
 
 /**
  * Staff visit monitor (#37): every projected journey, freshest sync first —
@@ -172,7 +198,10 @@ export function useTransitionStep(visitId: string) {
       }),
     onSuccess: (journey) => {
       queryClient.setQueryData(journeyQueryOptions(visitId).queryKey, journey)
-      void queryClient.invalidateQueries({ queryKey: ['staff', 'visits'] })
+      // The whole staff namespace, not just the visit list: a transition is
+      // also what the station queue screens live on (#102) — the called
+      // patient must move from waiting to serving immediately.
+      void queryClient.invalidateQueries({ queryKey: ['staff'] })
     },
   })
 }
@@ -192,7 +221,7 @@ export function useCloseRound(visitId: string) {
       ),
     onSuccess: (journey) => {
       queryClient.setQueryData(journeyQueryOptions(visitId).queryKey, journey)
-      void queryClient.invalidateQueries({ queryKey: ['staff', 'visits'] })
+      void queryClient.invalidateQueries({ queryKey: ['staff'] })
     },
   })
 }

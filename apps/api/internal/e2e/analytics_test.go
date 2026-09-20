@@ -97,7 +97,7 @@ func newAnalyticsApp(t *testing.T, database *db.DB) *fiber.App {
 	// The patient guard is a no-op here: this suite exercises the staff
 	// surface only. The visit-ownership policy itself (#96) is pinned in
 	// internal/session/guard_test.go.
-	journey.NewHandler(journeys).Register(app.Group("/api/v1"),
+	journey.NewHandler(journeys, nil).Register(app.Group("/api/v1"),
 		auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin),
 		func(c fiber.Ctx) error { return c.Next() })
 	analytics.NewHandler(analyticsService).Register(app.Group("/api/v1"),

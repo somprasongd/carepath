@@ -986,6 +986,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/staff/my/service-points": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "FR-15/#102: the caller's assigned service points (user_service_point), with resolved place and floor — the picker for the staff queue console. ADMIN sees every active point; STAFF sees only the points assigned to them.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "staff"
+                ],
+                "summary": "List the service points the caller may work",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/servicepoint.ServicePoint"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "missing, malformed, or expired staff access token",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "authenticated, but the user's roles do not allow this action",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/staff/planning-rules": {
             "get": {
                 "security": [
@@ -1016,6 +1062,58 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "authenticated, but the user's roles do not allow this action",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/staff/queue/{servicePointId}": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "FR-15/#102: who is being served (STARTED) and who is waiting (READY, longest-waiting first) at the service point, with patient detail and arrival/call times from the timeline. Patient-level data on the staff surface only (NFR-03) — never analytics. STAFF sees only points they are assigned to (user_service_point); ADMIN may read any point. Not assigned reads as 403, including a point id that does not exist.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "staff"
+                ],
+                "summary": "Get one service point's working queue",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Service point ID (from /staff/my/service-points)",
+                        "name": "servicePointId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/journey.StationQueue"
+                        }
+                    },
+                    "401": {
+                        "description": "missing, malformed, or expired staff access token",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "authenticated, but not assigned to this service point",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }
@@ -1420,6 +1518,73 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/journey.QueueStep"
                     }
+                },
+                "visitId": {
+                    "type": "string"
+                }
+            }
+        },
+        "journey.StationQueue": {
+            "type": "object",
+            "properties": {
+                "asOf": {
+                    "type": "string"
+                },
+                "servicePointId": {
+                    "type": "string"
+                },
+                "serving": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/journey.StationQueueEntry"
+                    }
+                },
+                "waiting": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/journey.StationQueueEntry"
+                    }
+                }
+            }
+        },
+        "journey.StationQueueEntry": {
+            "type": "object",
+            "properties": {
+                "clinicCode": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "patientName": {
+                    "type": "string"
+                },
+                "patientRef": {
+                    "type": "string"
+                },
+                "readyAt": {
+                    "description": "ReadyAt is when the step entered READY — the moment the patient\njoined this queue. Nil only when no timeline row survived (a row\nseeded outside the normal flow); such entries still queue, last.",
+                    "type": "string"
+                },
+                "round": {
+                    "type": "integer"
+                },
+                "sequence": {
+                    "type": "integer"
+                },
+                "startedAt": {
+                    "description": "StartedAt is set while the step is being served.",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "READY (waiting) or STARTED (being served)",
+                    "type": "string"
+                },
+                "stepKey": {
+                    "type": "string"
+                },
+                "totalSteps": {
+                    "type": "integer"
                 },
                 "visitId": {
                     "type": "string"

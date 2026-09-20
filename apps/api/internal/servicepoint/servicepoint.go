@@ -33,4 +33,9 @@ type ServicePoint struct {
 type Repo interface {
 	GetByCode(ctx context.Context, code string) (ServicePoint, error)
 	List(ctx context.Context) ([]ServicePoint, error)
+	// ListForUser returns the active service points assigned to the staff
+	// user through user_service_point (#102), ordered by code.
+	ListForUser(ctx context.Context, userID string) ([]ServicePoint, error)
+	// IsAssigned reports whether the user is assigned to the service point.
+	IsAssigned(ctx context.Context, userID, servicePointID string) (bool, error)
 }

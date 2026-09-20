@@ -39,6 +39,13 @@ import (
 const shareVisit = "VISIT-E2E-SHARE-1"
 
 func newShareApp(t *testing.T, database *db.DB) *fiber.App {
+	return newShareAppWithHIS(t, database, "http://127.0.0.1:1")
+}
+
+// newShareAppWithHIS builds the same stack with the HIS client pointed at a
+// live base URL. The station queue suite (#102) drives the real transition
+// path, which replans from the HIS snapshot before writing.
+func newShareAppWithHIS(t *testing.T, database *db.DB, hisBaseURL string) *fiber.App {
 	t.Helper()
 	authService := auth.NewService(authpostgres.New(database), database,
 		auth.NewTokenIssuer([]byte("e2e-test-secret"), time.Minute), time.Hour)
@@ -51,7 +58,7 @@ func newShareApp(t *testing.T, database *db.DB) *fiber.App {
 	// reads.
 	hospitalMap := hospitalmap.NewService(hospitalmappostgres.New(database))
 	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), hospitalMap)
-	journeys := journey.NewService(httpclient.New("http://127.0.0.1:1", nil), servicePoints,
+	journeys := journey.NewService(httpclient.New(hisBaseURL, nil), servicePoints,
 		journeypostgres.New(database), database, "Asia/Bangkok")
 	shares := share.NewService(sharepostgres.New(database), journeys, database, time.Hour)
 
@@ -64,10 +71,14 @@ func newShareApp(t *testing.T, database *db.DB) *fiber.App {
 	// session's identity must have claimed the visit before reading or
 	// sharing it.
 	patientVisitGuard := session.RequirePatientVisit(sessions, claims)
-	journey.NewHandler(journeys).Register(app.Group("/api/v1"),
-		auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin),
+	staffGuard := auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin)
+	journey.NewHandler(journeys, servicePoints).Register(app.Group("/api/v1"),
+		staffGuard,
 		patientVisitGuard)
 	share.NewHandler(shares).Register(app.Group("/api/v1"), patientVisitGuard)
+	// The station queue suite (#102) shares this app: the picker feed reads
+	// the same assignment table through the servicepoint module.
+	servicepoint.NewHandler(servicePoints).Register(app.Group("/api/v1"), staffGuard)
 	return app
 }
 

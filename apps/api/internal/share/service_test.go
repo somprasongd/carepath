@@ -84,6 +84,10 @@ func (f *fakeJourneys) GetJourney(_ context.Context, _ string) (journey.View, er
 	return f.view, nil
 }
 
+func (f *fakeJourneys) GetStationQueue(_ context.Context, _ string) (journey.StationQueue, error) {
+	panic("not implemented in fake")
+}
+
 func (f *fakeJourneys) GetQueue(_ context.Context, _ string) (journey.QueueView, error) {
 	panic("not implemented in fake")
 }

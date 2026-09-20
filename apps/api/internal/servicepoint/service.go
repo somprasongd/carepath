@@ -13,6 +13,11 @@ import (
 type Service interface {
 	GetByCode(ctx context.Context, code string) (ServicePoint, error)
 	List(ctx context.Context) ([]ServicePoint, error)
+	// ListForUser returns the staff user's assigned points (#102) — the
+	// picker for the queue console.
+	ListForUser(ctx context.Context, userID string) ([]ServicePoint, error)
+	// IsAssigned reports whether the user may work this point's queue.
+	IsAssigned(ctx context.Context, userID, servicePointID string) (bool, error)
 }
 
 type service struct {
@@ -45,6 +50,30 @@ func (s *service) List(ctx context.Context) ([]ServicePoint, error) {
 	if err != nil {
 		return nil, err
 	}
+	return s.attachPlaces(ctx, points)
+}
+
+// ListForUser returns the service points the staff user is assigned to
+// (#102) with places resolved — the points their queue console may show.
+func (s *service) ListForUser(ctx context.Context, userID string) ([]ServicePoint, error) {
+	points, err := s.repo.ListForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.attachPlaces(ctx, points)
+}
+
+// IsAssigned reports whether the user may work the queue of this service
+// point. Non-assignment and a nonexistent point read the same: the caller
+// is not allowed either way, and that is the only question being asked.
+func (s *service) IsAssigned(ctx context.Context, userID, servicePointID string) (bool, error) {
+	return s.repo.IsAssigned(ctx, userID, servicePointID)
+}
+
+// attachPlaces resolves the place (and floor) of each point in one batch,
+// leaving Place nil for points whose place is not in the map — the same
+// explicit unmapped state as everywhere else in this module.
+func (s *service) attachPlaces(ctx context.Context, points []ServicePoint) ([]ServicePoint, error) {
 	places, err := s.places.ListPlaces(ctx)
 	if err != nil {
 		return nil, apperr.Wrapf(apperr.KindInternal, err, "servicepoint: list places")

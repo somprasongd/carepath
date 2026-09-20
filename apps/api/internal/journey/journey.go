@@ -168,4 +168,9 @@ type Repo interface {
 	// Service points with no waiting steps and no samples are simply absent
 	// from the map — the zero value carries the same facts.
 	QueueStats(ctx context.Context, excludeVisitID string, servicePointIDs []string, tz string) (map[string]SPQueueStats, error)
+	// StationQueue returns the raw, unordered queue entries of one service
+	// point — every READY or STARTED step of an ACTIVE visit mapped there,
+	// with patient detail and the timeline's arrival/call times (#102,
+	// FR-15). The service shapes them; ordering is not the port's contract.
+	StationQueue(ctx context.Context, servicePointID string) ([]StationQueueEntry, error)
 }

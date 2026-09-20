@@ -364,3 +364,58 @@ func (r *Repo) QueueStats(ctx context.Context, excludeVisitID string, servicePoi
 	}
 	return stats, nil
 }
+
+// stationQueueQuery lists every unfinished (READY or STARTED) step of the
+// ACTIVE visits mapped to one service point — the station console's data
+// (#102, FR-15). Arrival (ready_at) and call (started_at) times come from
+// the timeline (#85), the only place a step's status history lives: a replan
+// can rewrite journey_step, but the events survive it. started_at is gated
+// on the current status — a step that was called and returned to the queue
+// keeps its READY arrival but must not look called. total_steps counts
+// the visit's whole plan (the Y in "step X of Y"), not the filtered rows a
+// window over this result would see. The correlated subqueries stay
+// correlated on purpose — the point index on the timeline serves them, and
+// a LATERAL join buys nothing at one station's queue size.
+const stationQueueQuery = `
+	SELECT js.visit_id, js.step_key, js.kind, js.clinic_code, js.round,
+	       js.sequence,
+	       (SELECT count(*)::int FROM carepath.journey_step js2
+	         WHERE js2.visit_id = js.visit_id) AS total_steps,
+	       js.status, jv.patient_ref, jv.patient_name,
+	       (SELECT max(e.occurred_at) FROM carepath.journey_step_status_event e
+	         WHERE e.visit_id = js.visit_id AND e.step_key = js.step_key AND e.to_status = 'READY') AS ready_at,
+	       CASE WHEN js.status = 'STARTED' THEN
+	         (SELECT max(e.occurred_at) FROM carepath.journey_step_status_event e
+	           WHERE e.visit_id = js.visit_id AND e.step_key = js.step_key AND e.to_status = 'STARTED')
+	       ELSE NULL END AS started_at
+	FROM carepath.journey_step js
+	JOIN carepath.journey_visit jv ON jv.visit_id = js.visit_id
+	WHERE js.service_point_id = $1
+	  AND js.status IN ('READY', 'STARTED')
+	  AND jv.status = 'ACTIVE'
+`
+
+// StationQueue returns the raw, unordered queue entries of one service
+// point. Ordering into serving/waiting is the domain's job (shapeStationQueue).
+func (r *Repo) StationQueue(ctx context.Context, servicePointID string) ([]journey.StationQueueEntry, error) {
+	rows, err := r.database.Querier(ctx).Query(ctx, stationQueueQuery, servicePointID)
+	if err != nil {
+		return nil, apperr.Wrapf(apperr.KindInternal, err, "journey: station queue for %q", servicePointID)
+	}
+	defer rows.Close()
+
+	entries := []journey.StationQueueEntry{}
+	for rows.Next() {
+		var e journey.StationQueueEntry
+		if err := rows.Scan(&e.VisitID, &e.StepKey, &e.Kind, &e.ClinicCode, &e.Round,
+			&e.Sequence, &e.TotalSteps, &e.Status, &e.PatientRef, &e.PatientName,
+			&e.ReadyAt, &e.StartedAt); err != nil {
+			return nil, apperr.Wrapf(apperr.KindInternal, err, "journey: scan station queue row")
+		}
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperr.Wrapf(apperr.KindInternal, err, "journey: iterate station queue rows")
+	}
+	return entries, nil
+}

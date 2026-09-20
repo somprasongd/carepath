@@ -1194,6 +1194,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/staff/my/service-points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The signed-in staff member's workstation picker feed (FR-15, #102): the active service points they are assigned to in carepath.user_service_point, code-ordered. Admins bypass assignment and see the full active list — the picker is also the admin's way to watch any station. Unassigned points are simply absent for staff; assignment, not existence, decides visibility. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The caller's assigned service points (all of them for admins) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ServicePoint"][];
+                    };
+                };
+                /** @description Missing, malformed, or expired staff access token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/queue/{servicePointId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One station's live queue (FR-15, #102): the visits currently being served at the point (STARTED steps, latest call first) and those waiting (READY steps, earliest arrival first — arrival is the latest READY event on the step's timeline). Entries carry patient-level detail (name, reference) because this is the staff surface calling patients in; the analytics module never sees them (NFR-03). sequence/totalSteps say where the step sits in its visit's plan, for "step X of Y" labels. Assignment decides who may ask: a staff member assigned to the point (carepath.user_service_point) or any admin; anyone else gets 403 — identical for a point that does not exist, so the answer leaks no existence. Calling the next patient is not a new mechanism: it is the existing staff transition endpoint moving the head of the waiting list to STARTED. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    servicePointId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The station's queue as of now */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StationQueue"];
+                    };
+                };
+                /** @description Missing, malformed, or expired staff access token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Authenticated, but not assigned to this service point */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/staff/planning-rules": {
         parameters: {
             query?: never;
@@ -1561,6 +1680,45 @@ export interface components {
             avgWaitMinutes: number | null;
             /** @description The naive product waitingAhead times avgWaitMinutes — a rank-order estimate, not a promise; null whenever avgWaitMinutes is null. */
             estimatedWaitMinutes: number | null;
+        };
+        /** @description One service point's live queue (FR-15, #102): who is being served right now and who is waiting, in call order. serving and waiting are always arrays (possibly empty) so clients can render an honest "nobody waiting" instead of guessing at null. */
+        StationQueue: {
+            servicePointId: string;
+            /**
+             * Format: date-time
+             * @description When the picture was taken.
+             */
+            asOf: string;
+            /** @description STARTED steps at this point, latest call first. */
+            serving: components["schemas"]["StationQueueEntry"][];
+            /** @description READY steps at this point, earliest arrival first. */
+            waiting: components["schemas"]["StationQueueEntry"][];
+        };
+        /** @description One visit at a station — the staff-facing unit that calls a patient by name. Patient detail appears here and only here among queue surfaces; analytics stays aggregate-only (NFR-03). */
+        StationQueueEntry: {
+            visitId: string;
+            stepKey: string;
+            kind: string;
+            clinicCode?: string | null;
+            round?: number | null;
+            /** @description The step's 1-based position in its visit's plan. */
+            sequence: number;
+            /** @description Steps in the visit's plan — the Y in "step X of Y". */
+            totalSteps: number;
+            /** @enum {string} */
+            status: "READY" | "STARTED";
+            patientRef: string;
+            patientName: string;
+            /**
+             * Format: date-time
+             * @description Latest READY event for the step — the arrival that sets the waiting order; null when the timeline has none.
+             */
+            readyAt?: string | null;
+            /**
+             * Format: date-time
+             * @description Latest STARTED event for the step — when the station called this patient in; null while still waiting.
+             */
+            startedAt?: string | null;
         };
         /** @description The journey-planning rules in force, derived from the planner itself (#100): the phase ladder, the order-type mapping, and worked examples computed by the real planner. Editing the planner code changes this response — that is the point. */
         PlanningRules: {

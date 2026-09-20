@@ -50,6 +50,16 @@ type fakeServicepoint struct {
 	known map[string]bool
 }
 
+// Assignment reads (#102) are answered by the postgres-backed service in
+// production; this fake only satisfies the interface.
+func (f *fakeServicepoint) ListForUser(context.Context, string) ([]servicepoint.ServicePoint, error) {
+	panic("not implemented in fake")
+}
+
+func (f *fakeServicepoint) IsAssigned(context.Context, string, string) (bool, error) {
+	panic("not implemented in fake")
+}
+
 func (f *fakeServicepoint) GetByCode(_ context.Context, code string) (servicepoint.ServicePoint, error) {
 	if !f.known[code] {
 		return servicepoint.ServicePoint{}, servicepoint.ErrNotFound
@@ -81,6 +91,9 @@ type fakeRepo struct {
 	queueExcludeVisitID string
 	queueSPIDs          []string
 	queueTZ             string
+	// StationQueue call capture + canned answer (#102).
+	stationQueue []StationQueueEntry
+	stationSPID  string
 }
 
 func newFakeRepo() *fakeRepo {
@@ -165,6 +178,13 @@ func (f *fakeRepo) QueueStats(_ context.Context, excludeVisitID string, serviceP
 		}
 	}
 	return out, nil
+}
+
+// stationQueue is the canned StationQueue answer (#102), returned in the
+// order handed to the service so the shaping's ordering stays testable.
+func (f *fakeRepo) StationQueue(_ context.Context, servicePointID string) ([]StationQueueEntry, error) {
+	f.stationSPID = servicePointID
+	return append([]StationQueueEntry{}, f.stationQueue...), nil
 }
 
 func snapshot() his.Visit {
