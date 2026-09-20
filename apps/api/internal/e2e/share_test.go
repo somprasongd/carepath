@@ -52,7 +52,7 @@ func newShareApp(t *testing.T, database *db.DB) *fiber.App {
 	hospitalMap := hospitalmap.NewService(hospitalmappostgres.New(database))
 	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), hospitalMap)
 	journeys := journey.NewService(httpclient.New("http://127.0.0.1:1", nil), servicePoints,
-		journeypostgres.New(database), database)
+		journeypostgres.New(database), database, "Asia/Bangkok")
 	shares := share.NewService(sharepostgres.New(database), journeys, database, time.Hour)
 
 	app := fiber.New()

@@ -76,6 +76,11 @@ type fakeRepo struct {
 	audits     []CommandAudit
 	events     []StepStatusEvent
 	inTxMarker bool
+	// QueueStats call capture + canned answer (#101).
+	queueStats          map[string]SPQueueStats
+	queueExcludeVisitID string
+	queueSPIDs          []string
+	queueTZ             string
 }
 
 func newFakeRepo() *fakeRepo {
@@ -147,6 +152,21 @@ func (f *fakeRepo) AppendStatusEvents(ctx context.Context, events []StepStatusEv
 	return nil
 }
 
+// queueStats is the canned QueueStats answer; nil means "absent from the
+// map" — the no-data case the service must render honestly (#101).
+func (f *fakeRepo) QueueStats(_ context.Context, excludeVisitID string, servicePointIDs []string, tz string) (map[string]SPQueueStats, error) {
+	f.queueExcludeVisitID = excludeVisitID
+	f.queueSPIDs = servicePointIDs
+	f.queueTZ = tz
+	out := map[string]SPQueueStats{}
+	for _, id := range servicePointIDs {
+		if s, ok := f.queueStats[id]; ok {
+			out[id] = s
+		}
+	}
+	return out, nil
+}
+
 func snapshot() his.Visit {
 	return his.Visit{
 		VisitID: "VISIT-001", PatientRef: "PAT-001", PatientName: "สมชาย",
@@ -167,7 +187,7 @@ func openedEvent() his.Event {
 
 func newTestService(hisClient his.Client, repo *fakeRepo) Service {
 	sp := &fakeServicepoint{known: map[string]bool{"REGISTRATION": true, "ORDERTYPE:LAB": true, "PHARMACY": true, "CLINIC:MED": true}}
-	return NewService(hisClient, sp, repo, &fakeTransactor{})
+	return NewService(hisClient, sp, repo, &fakeTransactor{}, "Asia/Bangkok")
 }
 
 func TestApplyHISEventProjectsJourney(t *testing.T) {
@@ -219,7 +239,7 @@ func TestDuplicateEventIsNoOp(t *testing.T) {
 func TestUnmappedBindingProjectsExplicitly(t *testing.T) {
 	repo := newFakeRepo()
 	sp := &fakeServicepoint{known: map[string]bool{}} // nothing mapped
-	svc := NewService(&fakeHIS{visit: snapshot()}, sp, repo, &fakeTransactor{})
+	svc := NewService(&fakeHIS{visit: snapshot()}, sp, repo, &fakeTransactor{}, "Asia/Bangkok")
 
 	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
 		t.Fatalf("ApplyHISEvent: %v", err)

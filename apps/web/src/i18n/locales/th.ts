@@ -89,6 +89,13 @@ export const th = {
   'journey.shareWithFamily': 'แชร์ความคืบหน้าให้ญาติ',
   'journey.shareDemoHint': 'โหมดสาธิต: ยังขอสิทธิ์แชร์ไม่สำเร็จ',
 
+  // Next-step queue card (features/visit/components/QueueCard.tsx, FR-17).
+  'queue.title': 'คิวขั้นตอนถัดไป',
+  'queue.peopleAhead': 'มีผู้รออยู่ข้างหน้า {count} คน',
+  'queue.youAreNext': 'คิวของคุณถึงแล้ว',
+  'queue.estimate': 'เวลารอโดยประมาณ {minutes} นาที',
+  'queue.noData': 'ยังไม่มีข้อมูลเวลารอของจุดบริการนี้',
+
   // End-of-visit summary card (features/visit/components/VisitOutcomeCard.tsx).
   'outcome.cancelled.label': 'การมาโรงพยาบาลนี้',
   'outcome.cancelled.title': 'ถูกยกเลิก',

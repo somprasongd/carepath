@@ -125,7 +125,7 @@ func TestIngestToPlanEndToEnd(t *testing.T) {
 	hisClient := httpclient.New(server.URL, server.Client())
 	hospitalMap := hospitalmap.NewService(hospitalmappostgres.New(database))
 	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), hospitalMap)
-	journeys := journey.NewService(hisClient, servicePoints, journeypostgres.New(database), database)
+	journeys := journey.NewService(hisClient, servicePoints, journeypostgres.New(database), database, "Asia/Bangkok")
 	poller := ingest.New(hisClient, journeys, ingestpostgres.New(database),
 		slog.New(slog.NewTextHandler(&discard{}, &slog.HandlerOptions{Level: slog.LevelError})))
 

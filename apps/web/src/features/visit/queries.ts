@@ -12,6 +12,8 @@ declare module '@tanstack/react-query' {
 export type Journey = components['schemas']['Journey']
 export type JourneyStep = components['schemas']['JourneyStep']
 export type PlanningRules = components['schemas']['PlanningRules']
+export type VisitQueue = components['schemas']['JourneyQueue']
+export type VisitQueueStep = components['schemas']['JourneyQueueStep']
 
 /**
  * Staff visit monitor (#37): every projected journey, freshest sync first —
@@ -108,6 +110,31 @@ export function journeyQueryOptions(visitId: string) {
 
 export function useJourney(visitId: string) {
   return useQuery(journeyQueryOptions(visitId))
+}
+
+/**
+ * The patient queue picture (FR-17, #101): for each actionable step, how
+ * many people are waiting ahead at its service point and that point's
+ * average wait today. Polled on the journey's cadence — the queue moves
+ * faster than the plan — and keyed under the journey's key so a transition
+ * invalidating ['journey', visitId] refreshes the queue too. avgWaitMinutes
+ * null means "no samples yet", not "zero minutes": the card renders words
+ * for that case, never a guessed number.
+ */
+export function visitQueueQueryOptions(visitId: string) {
+  return queryOptions({
+    queryKey: ['journey', visitId, 'queue'] as const,
+    queryFn: async () => {
+      await ensureVisitClaimed(visitId)
+      return apiGet<VisitQueue>(`/api/v1/journeys/${encodeURIComponent(visitId)}/queue`)
+    },
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+  })
+}
+
+export function useVisitQueue(visitId: string, options?: { enabled?: boolean }) {
+  return useQuery({ ...visitQueueQueryOptions(visitId), enabled: options?.enabled ?? true })
 }
 
 /** The statuses the staff controls can command (#38). */

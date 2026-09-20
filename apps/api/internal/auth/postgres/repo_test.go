@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -61,9 +62,12 @@ func TestRefreshTokenLifecycle(t *testing.T) {
 	repo := New(newDB(t))
 	ctx := context.Background()
 
+	// Unique per run: cleanup revokes rather than deletes, so a fixed raw
+	// token would block every later local run on the same database with a
+	// duplicate-key insert (CI always starts empty and never sees this).
 	now := time.Now().UTC()
 	stored := auth.RefreshToken{
-		TokenHash: auth.HashToken("lifecycle-test"),
+		TokenHash: auth.HashToken(fmt.Sprintf("lifecycle-test-%d", now.UnixNano())),
 		UserID:    "user-staff",
 		IssuedAt:  now,
 		ExpiresAt: now.Add(24 * time.Hour),
@@ -94,7 +98,7 @@ func TestRefreshTokenLifecycle(t *testing.T) {
 
 	// Revoking the whole user's set makes every hash unusable.
 	other := auth.RefreshToken{
-		TokenHash: auth.HashToken("lifecycle-test-other"),
+		TokenHash: auth.HashToken(fmt.Sprintf("lifecycle-test-other-%d", now.UnixNano())),
 		UserID:    "user-staff",
 		IssuedAt:  now,
 		ExpiresAt: now.Add(24 * time.Hour),

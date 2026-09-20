@@ -74,6 +74,13 @@ export const en: Catalog = {
   'journey.shareWithFamily': 'Share progress with family',
   'journey.shareDemoHint': 'Demo mode: sharing is not available yet',
 
+  // Next-step queue card (features/visit/components/QueueCard.tsx, FR-17).
+  'queue.title': 'Queue at your next step',
+  'queue.peopleAhead': '{count} waiting ahead of you',
+  'queue.youAreNext': 'You are next',
+  'queue.estimate': 'Estimated wait about {minutes} minutes',
+  'queue.noData': 'No wait-time data for this point yet',
+
   'outcome.cancelled.label': 'This visit',
   'outcome.cancelled.title': 'was cancelled',
   'outcome.cancelled.body': 'If you have any questions, please ask the staff at a service point.',

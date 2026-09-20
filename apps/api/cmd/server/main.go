@@ -97,8 +97,11 @@ func run(ctx context.Context, log *slog.Logger) error {
 	}
 
 	// Inbound HIS boundary (#21): poll the canonical event feed and keep the
-	// journey projection in sync with the system of record.
-	journeys := journey.NewService(hisClient, servicePoints, journeypostgres.New(database), database)
+	// journey projection in sync with the system of record. The queue stats
+	// (#101) share the analytics timezone — it is the hospital's timezone,
+	// not an analytics-specific knob.
+	analyticsTZ := envOrDefault("ANALYTICS_TIMEZONE", "Asia/Bangkok")
+	journeys := journey.NewService(hisClient, servicePoints, journeypostgres.New(database), database, analyticsTZ)
 	poller := ingest.New(hisClient, journeys, ingestpostgres.New(database), log)
 	interval := envDuration("HIS_INGEST_INTERVAL", 5*time.Second)
 	go poller.Run(context.Background(), interval)
@@ -192,7 +195,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	// and ADMIN keep their existing reach; EXECUTIVE logins reach this
 	// surface and nothing else (they stay 403 on every /staff route above).
 	analyticsService, err := analytics.NewService(analyticspostgres.New(database), database,
-		envOrDefault("ANALYTICS_TIMEZONE", "Asia/Bangkok"))
+		analyticsTZ)
 	if err != nil {
 		return err
 	}
