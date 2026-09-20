@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/skip2/go-qrcode"
@@ -212,7 +213,7 @@ func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string) *fiber.
 		if _, ok := store.GetVisit(visitID); !ok {
 			return errResponse(c, http.StatusNotFound, "visit not found")
 		}
-		target := patientAppBaseURL + "/patient/journey?visit=" + url.QueryEscape(visitID)
+		target := qrTarget(patientAppBaseURL, c.Get(fiber.HeaderXForwardedProto), c.Get(fiber.HeaderXForwardedHost), c.Host(), visitID)
 		png, err := qrcode.Encode(target, qrcode.Medium, 256)
 		if err != nil {
 			return errResponse(c, http.StatusInternalServerError, "qr encode failed")
@@ -226,6 +227,38 @@ func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string) *fiber.
 
 func errResponse(c fiber.Ctx, status int, msg string) error {
 	return c.Status(status).JSON(fiber.Map{"error": msg})
+}
+
+// qrTarget builds the absolute URL the visit QR encodes. The console's
+// "open patient view" link can stay same-origin-relative in the browser, but
+// a QR is a physical artifact read by a phone camera — without scheme and
+// host it opens nothing. When PATIENT_APP_BASE_URL is unset (the prod
+// single-origin default, where no env knows the public domain), derive the
+// origin from the forwarded request instead: TLS ends at nginx-proxy-manager
+// in front of the edge proxy, which preserves Host and passes the forwarded
+// proto through for the demo-visit paths (infra/docker/proxy.conf).
+func qrTarget(base, forwardedProto, forwardedHost, host, visitID string) string {
+	if base == "" {
+		proto := firstForwarded(forwardedProto)
+		if proto == "" {
+			proto = "http"
+		}
+		authority := firstForwarded(forwardedHost)
+		if authority == "" {
+			authority = host
+		}
+		base = proto + "://" + authority
+	}
+	return base + "/patient/journey?visit=" + url.QueryEscape(visitID)
+}
+
+// firstForwarded takes the first entry of an X-Forwarded-* value, which
+// chains of proxies join with ", " — the first is the client-facing one.
+func firstForwarded(v string) string {
+	if i := strings.Index(v, ","); i >= 0 {
+		v = v[:i]
+	}
+	return strings.TrimSpace(v)
 }
 
 func storeErrResponse(c fiber.Ctx, err *Error) error {

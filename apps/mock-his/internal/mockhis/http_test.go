@@ -432,6 +432,66 @@ func TestVisitQrcode(t *testing.T) {
 	}
 }
 
+// A QR is read by a phone camera, so its URL must be absolute even when
+// PATIENT_APP_BASE_URL is unset (the prod single-origin default): derive the
+// origin from the forwarded request the same way the live chain does —
+// nginx-proxy-manager (TLS) → edge proxy (Host preserved) → mock-his.
+func TestQRTargetAbsolute(t *testing.T) {
+	cases := []struct {
+		name    string
+		base    string
+		xfp     string
+		xfh     string
+		host    string
+		visitID string
+		want    string
+	}{
+		{
+			name:    "env base wins",
+			base:    "http://localhost:5173",
+			xfp:     "https",
+			xfh:     "carepath.somprasongd.work",
+			visitID: "VISIT-001",
+			want:    "http://localhost:5173/patient/journey?visit=VISIT-001",
+		},
+		{
+			name:    "prod single-origin: forwarded proto + preserved host",
+			xfp:     "https",
+			host:    "carepath.somprasongd.work",
+			visitID: "VISIT-001",
+			want:    "https://carepath.somprasongd.work/patient/journey?visit=VISIT-001",
+		},
+		{
+			name:    "local prod compose: no forwarders, plain http",
+			host:    "localhost:8080",
+			visitID: "VISIT-001",
+			want:    "http://localhost:8080/patient/journey?visit=VISIT-001",
+		},
+		{
+			name:    "proxy chain joins forwarded values with commas",
+			xfp:     "https, http",
+			xfh:     "carepath.somprasongd.work, mock-his:8090",
+			visitID: "VISIT-001",
+			want:    "https://carepath.somprasongd.work/patient/journey?visit=VISIT-001",
+		},
+		{
+			name:    "visit id is query-escaped",
+			xfp:     "https",
+			host:    "carepath.somprasongd.work",
+			visitID: "VISIT-002/A",
+			want:    "https://carepath.somprasongd.work/patient/journey?visit=VISIT-002%2FA",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := qrTarget(tc.base, tc.xfp, tc.xfh, tc.host, tc.visitID)
+			if got != tc.want {
+				t.Fatalf("qrTarget() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // Visit cancellation from the console: open orders are cancelled, the visit
 // becomes CANCELLED, everything surfaces as canonical events.
 func TestCancelVisit(t *testing.T) {
