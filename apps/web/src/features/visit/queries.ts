@@ -11,6 +11,7 @@ declare module '@tanstack/react-query' {
 
 export type Journey = components['schemas']['Journey']
 export type JourneyStep = components['schemas']['JourneyStep']
+export type PlanningRules = components['schemas']['PlanningRules']
 
 /**
  * Staff visit monitor (#37): every projected journey, freshest sync first —
@@ -26,6 +27,25 @@ export function staffVisitsQueryOptions() {
 
 export function useStaffVisits() {
   return useQuery(staffVisitsQueryOptions())
+}
+
+/**
+ * The journey-planning rules in force (FR-13, #100): the phase ladder, the
+ * order-type mapping, and worked examples — everything derived from the
+ * API's planner itself, so this screen can never drift from the rules
+ * actually running. The rules only change with a deploy, so a long staleTime
+ * just avoids re-fetching a static payload on every visit.
+ */
+export function planningRulesQueryOptions() {
+  return queryOptions({
+    queryKey: ['staff', 'planning-rules'] as const,
+    queryFn: () => apiGet<PlanningRules>('/api/v1/staff/planning-rules'),
+    staleTime: 5 * 60_000,
+  })
+}
+
+export function usePlanningRules() {
+  return useQuery(planningRulesQueryOptions())
 }
 
 /**

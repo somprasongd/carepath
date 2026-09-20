@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.14.0
+  version: 0.15.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -693,6 +693,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/staff/planning-rules:
+    get:
+      description: >
+        FR-13/US-16 (#100): the journey-planning rules the planner actually
+        runs on — the phase ladder (ADR-0009 §3), the order-type to step-kind
+        mapping, and worked examples computed by calling the real planner over
+        canonical scenarios. Everything is derived from planner.go itself, so
+        editing the planner changes this response and the staff screen can
+        never drift from the rules in force. Read-only: the rules are code,
+        not editable data (ADR-0009 — a CRUD template editor would walk the
+        model back to what was retired). Codes only (ADR-0012); all display
+        text lives in the client.
+      security:
+        - staffAuth: []
+      responses:
+        '200':
+          description: The planning rules in force
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanningRules'
+        '401':
+          description: Missing, malformed, or expired staff access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Authenticated, but the user's roles do not allow this action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/analytics/overview:
     get:
       description: >
@@ -1064,6 +1097,113 @@ components:
             intent, but is not implemented — it depends on the queue data of
             FR-17, which does not exist yet.
         syncedAt: { type: string, format: date-time }
+    PlanningRules:
+      type: object
+      description: >
+        The journey-planning rules in force, derived from the planner itself
+        (#100): the phase ladder, the order-type mapping, and worked examples
+        computed by the real planner. Editing the planner code changes this
+        response — that is the point.
+      required: [phases, orderTypes, examples]
+      properties:
+        phases:
+          type: array
+          description: The phase ladder in ascending order (ADR-0009 §3). A
+            step becomes actionable only once every strictly-lower phase is
+            COMPLETED or CANCELLED; steps sharing a phase carry no order
+            between them (§6).
+          items: { $ref: '#/components/schemas/PlanningPhase' }
+        orderTypes:
+          type: array
+          description: Every canonical HIS order type and the step kind the
+            planner derives from it, in the his package's canonical order.
+          items: { $ref: '#/components/schemas/PlanningOrderType' }
+        examples:
+          type: array
+          description: >
+            Worked scenarios — HIS facts fed to the real Plan function and the
+            steps it returned, statuses included. Not illustrative strings:
+            the same inputs produce the same steps a patient would see.
+          items: { $ref: '#/components/schemas/PlanningExample' }
+    PlanningPhase:
+      type: object
+      required: [number, key]
+      properties:
+        number:
+          type: integer
+          description: Phase number; strictly lower means strictly earlier.
+        key:
+          type: string
+          description: Stable phase code (ADR-0012 — the client owns display
+            text).
+          enum: [REGISTRATION, PRE_VISIT, CLINIC, MID_VISIT, RETURN_CLINIC, CASHIER, PHARMACY]
+    PlanningOrderType:
+      type: object
+      required: [orderType, stepKind]
+      properties:
+        orderType: { type: string }
+        stepKind:
+          type: string
+          description: >
+            The step kind an order of this type becomes, or empty when the
+            order type deliberately produces no walked step: DRUG only
+            surfaces as the visit-wide PHARMACY step.
+    PlanningExample:
+      type: object
+      required: [id, scenario, steps]
+      properties:
+        id:
+          type: string
+          description: Stable scenario code the client keys its display text on.
+        scenario:
+          $ref: '#/components/schemas/PlanningExampleScenario'
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/PlanningExampleStep' }
+    PlanningExampleScenario:
+      type: object
+      description: The HIS facts a worked scenario feeds the planner.
+      required: [visitType, clinics, orders]
+      properties:
+        visitType: { type: string }
+        clinics:
+          type: array
+          description: Clinic codes the visit belongs to.
+          items: { type: string }
+        orders:
+          type: array
+          items: { $ref: '#/components/schemas/PlanningExampleOrder' }
+    PlanningExampleOrder:
+      type: object
+      description: One order of a worked scenario. An order placed at or
+        before the visit opened (empty orderedByClinic in the canonical
+        scenarios) is pre-visit; one placed later belongs to the named clinic
+        (mid-visit).
+      required: [orderRef, orderType, orderedByClinic]
+      properties:
+        orderRef: { type: string }
+        orderType: { type: string }
+        orderedByClinic: { type: string }
+    PlanningExampleStep:
+      type: object
+      description: One step of a worked example — the plan Step shape minus
+        projection concerns (no service-point binding behind a synthetic
+        scenario).
+      required: [stepKey, sequence, kind, status]
+      properties:
+        stepKey: { type: string }
+        sequence: { type: integer }
+        kind: { $ref: '#/components/schemas/StepKind' }
+        clinicCode:
+          type: [string, "null"]
+        round:
+          type: [integer, "null"]
+        orderRefs:
+          type: array
+          items: { type: string }
+        status:
+          type: string
+          enum: [PENDING, WAITING, READY, STARTED, COMPLETED, CANCELLED]
     ShareLinkResponse:
       type: object
       description: >
