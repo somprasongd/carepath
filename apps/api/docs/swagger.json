@@ -604,6 +604,58 @@
                 }
             }
         },
+        "/api/v1/journeys/{visitId}/queue": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "FR-17: for every currently-actionable step bound to a service point, how many people are waiting ahead of this patient there right now, and that point's average experienced wait so far today. Averages over zero samples are null, not 0 — \"no data yet\" and \"zero minutes\" are different facts, and the client must not render a guess. estimatedWaitMinutes is the naive product of the two, null whenever the average is null. Patient-surface (#96): the session's identity must have claimed this visit; an unclaimed or unknown visit answers the same 404 as the journey read.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "journeys"
+                ],
+                "summary": "Get the patient queue picture for the next steps",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit ID",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/journey.QueueView"
+                        }
+                    },
+                    "401": {
+                        "description": "missing or invalid patient session",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "visit unknown, or not claimed by this session — indistinguishable",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/journeys/{visitId}/share": {
             "post": {
                 "security": [
@@ -1327,6 +1379,43 @@
                     "items": {
                         "$ref": "#/definitions/journey.PlanningPhase"
                     }
+                }
+            }
+        },
+        "journey.QueueStep": {
+            "type": "object",
+            "properties": {
+                "avgWaitMinutes": {
+                    "type": "number"
+                },
+                "estimatedWaitMinutes": {
+                    "type": "number"
+                },
+                "servicePointId": {
+                    "type": "string"
+                },
+                "stepKey": {
+                    "type": "string"
+                },
+                "waitingAhead": {
+                    "type": "integer"
+                }
+            }
+        },
+        "journey.QueueView": {
+            "type": "object",
+            "properties": {
+                "asOf": {
+                    "type": "string"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/journey.QueueStep"
+                    }
+                },
+                "visitId": {
+                    "type": "string"
                 }
             }
         },

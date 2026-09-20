@@ -21,10 +21,12 @@ import {
 import { ShareSheet } from '@/features/share'
 import {
   journeyProgressLabel,
+  QueueCard,
   servicePointLabel,
   stepTitle,
   toJourneySteps,
   useJourney,
+  useVisitQueue,
   visitLoadErrorMessage,
   visitOutcome,
   VisitOutcomeCard,
@@ -48,6 +50,14 @@ export function JourneyScreen({
   const { locale } = useLocale()
   const t = useT()
   const { data: journey, isPending, isError, error, refetch } = useJourney(visitId)
+  // The queue question (FR-17) only exists while a next step does: the poll
+  // runs only then, and stops the moment the visit turns final or nothing
+  // is actionable.
+  const { data: queue } = useVisitQueue(visitId, {
+    enabled: Boolean(
+      journey && !journey.completed && journey.status !== 'CANCELLED' && journey.recommended,
+    ),
+  })
   const [shareOpen, setShareOpen] = useState(false)
   // Sharing needs a real patient session (ADR-0011). In demo fallback — API
   // unreachable, no token — the page stays fully usable and the button says
@@ -115,6 +125,11 @@ export function JourneyScreen({
   // Nothing to follow once the visit was cancelled — the shared view would
   // have nothing honest to say.
   const shareable = outcome !== 'cancelled'
+  // The queue numbers for the recommended step only; other actionable steps
+  // (§6 same-phase unordered) have numbers on the endpoint, but one card for
+  // the single primary action keeps the screen's one-question shape.
+  const queueStep =
+    recommended && queue ? queue.steps.find((s) => s.stepKey === recommended.stepKey) : undefined
 
   return (
     <JourneyShell
@@ -126,6 +141,7 @@ export function JourneyScreen({
       onNavigate={onNavigate}
       displayName={identity?.displayName}
     >
+      {queueStep && <QueueCard step={queueStep} />}
       <JourneyRail
         steps={rail}
         labels={{ currentStep: t('rail.currentStep'), nextStep: t('rail.nextStep') }}

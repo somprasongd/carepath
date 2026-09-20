@@ -162,4 +162,10 @@ type Repo interface {
 	// replan round (#85). Append-only by design: nothing ever updates or
 	// deletes these rows; only the visit-level cascade removes them.
 	AppendStatusEvents(ctx context.Context, events []StepStatusEvent) error
+	// QueueStats returns the queue picture per service point for the patient
+	// queue read (#101, FR-17): READY steps from every visit except
+	// excludeVisitID, and today's average experienced wait per point in tz.
+	// Service points with no waiting steps and no samples are simply absent
+	// from the map — the zero value carries the same facts.
+	QueueStats(ctx context.Context, excludeVisitID string, servicePointIDs []string, tz string) (map[string]SPQueueStats, error)
 }

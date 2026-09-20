@@ -1,4 +1,5 @@
 export * from './components/AttentionCard'
+export * from './components/QueueCard'
 export * from './components/StaffStatusBadge'
 export * from './components/StaffVisitDetail'
 export * from './components/StaffVisitList'

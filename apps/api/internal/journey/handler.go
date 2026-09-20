@@ -24,6 +24,7 @@ func NewHandler(service Service) *Handler {
 // composition root decides the policy (ADR-0010).
 func (h *Handler) Register(router fiber.Router, staffGuard, patientGuard fiber.Handler) {
 	router.Get("/journeys/:visitId", patientGuard, h.getJourney)
+	router.Get("/journeys/:visitId/queue", patientGuard, h.getQueue)
 	router.Get("/staff/visits", staffGuard, h.listVisits)
 	router.Get("/staff/planning-rules", staffGuard, h.planningRules)
 	router.Post("/journeys/:visitId/steps/:stepKey/transition", staffGuard, h.transitionStep)
@@ -54,6 +55,27 @@ type transitionRequestBody struct {
 //	@Router			/api/v1/journeys/{visitId} [get]
 func (h *Handler) getJourney(c fiber.Ctx) error {
 	view, err := h.service.GetJourney(c.Context(), c.Params("visitId"))
+	if err != nil {
+		return httpx.Error(c, err)
+	}
+	return c.JSON(view)
+}
+
+// getQueue godoc
+//
+//	@Summary		Get the patient queue picture for the next steps
+//	@Description	FR-17: for every currently-actionable step bound to a service point, how many people are waiting ahead of this patient there right now, and that point's average experienced wait so far today. Averages over zero samples are null, not 0 — "no data yet" and "zero minutes" are different facts, and the client must not render a guess. estimatedWaitMinutes is the naive product of the two, null whenever the average is null. Patient-surface (#96): the session's identity must have claimed this visit; an unclaimed or unknown visit answers the same 404 as the journey read.
+//	@Tags			journeys
+//	@Security		bearerAuth
+//	@Produce		json
+//	@Param			visitId	path	string	true	"Visit ID"
+//	@Success		200	{object}	journey.QueueView
+//	@Failure		401	{object}	httpx.ErrorResponse	"missing or invalid patient session"
+//	@Failure		404	{object}	httpx.ErrorResponse	"visit unknown, or not claimed by this session — indistinguishable"
+//	@Failure		500	{object}	httpx.ErrorResponse	"internal server error"
+//	@Router			/api/v1/journeys/{visitId}/queue [get]
+func (h *Handler) getQueue(c fiber.Ctx) error {
+	view, err := h.service.GetQueue(c.Context(), c.Params("visitId"))
 	if err != nil {
 		return httpx.Error(c, err)
 	}

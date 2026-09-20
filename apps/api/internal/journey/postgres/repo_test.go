@@ -389,3 +389,98 @@ func TestAppendStatusEventsRoundtripAndCascade(t *testing.T) {
 		t.Fatalf("timeline rows after visit delete = %d, want 0 (cascade)", count)
 	}
 }
+
+// #101: QueueStats must count only OTHER visits' READY steps per service
+// point, average today's experienced waits (latest READY → latest STARTED
+// per step, window resolved in the database), and keep "no samples" absent
+// rather than zero.
+func TestQueueStatsCountsAndWindow(t *testing.T) {
+	database := newDB(t)
+	cleanupJourney(t, database, "TEST-JOURNEY-QA")
+	cleanupJourney(t, database, "TEST-JOURNEY-QB")
+	cleanupJourney(t, database, "TEST-JOURNEY-QC")
+	repo := New(database)
+	ctx := context.Background()
+
+	// The asking visit: its own READY step at SP-QA must never count as
+	// someone ahead of itself.
+	if err := repo.UpsertVisit(ctx, journey.Visit{
+		VisitID: "TEST-JOURNEY-QA", PatientRef: "PAT-QA", Status: "ACTIVE",
+		Steps: []journey.Step{
+			{StepKey: "LAB:1", Sequence: 1, Kind: journey.KindLab, Status: journey.StepReady, ServicePointID: sp("SP-QA")},
+		},
+	}); err != nil {
+		t.Fatalf("seed asker: %v", err)
+	}
+	// Two other visits waiting at SP-QA, one at SP-QB (which has no samples).
+	if err := repo.UpsertVisit(ctx, journey.Visit{
+		VisitID: "TEST-JOURNEY-QB", PatientRef: "PAT-QB", Status: "ACTIVE",
+		Steps: []journey.Step{
+			{StepKey: "LAB:1", Sequence: 1, Kind: journey.KindLab, Status: journey.StepReady, ServicePointID: sp("SP-QA")},
+			{StepKey: "XRAY:1", Sequence: 2, Kind: journey.KindXray, Status: journey.StepReady, ServicePointID: sp("SP-QA")},
+			{StepKey: "EKG:1", Sequence: 3, Kind: journey.KindEKG, Status: journey.StepReady, ServicePointID: sp("SP-QB")},
+		},
+	}); err != nil {
+		t.Fatalf("seed waiting visit: %v", err)
+	}
+	// A finished visit whose LAB wait (20 minutes inside today's window)
+	// becomes SP-QA's average; a second, yesterday-dated pair at SP-QB must
+	// stay outside the window.
+	if err := repo.UpsertVisit(ctx, journey.Visit{
+		VisitID: "TEST-JOURNEY-QC", PatientRef: "PAT-QC", Status: "COMPLETED",
+		Steps: []journey.Step{
+			{StepKey: "LAB:1", Sequence: 1, Kind: journey.KindLab, Status: journey.StepCompleted, ServicePointID: sp("SP-QA")},
+		},
+	}); err != nil {
+		t.Fatalf("seed finished visit: %v", err)
+	}
+	timeline := `
+		INSERT INTO carepath.journey_step_status_event
+			(visit_id, step_key, kind, service_point_id, to_status, source, occurred_at)
+		VALUES
+			('TEST-JOURNEY-QC', 'LAB:1', 'LAB', 'SP-QA', 'READY', 'planner',
+			 (date_trunc('day', now() AT TIME ZONE $1) AT TIME ZONE $1) + interval '1 hour'),
+			('TEST-JOURNEY-QC', 'LAB:1', 'LAB', 'SP-QA', 'STARTED', 'planner',
+			 (date_trunc('day', now() AT TIME ZONE $1) AT TIME ZONE $1) + interval '1 hour 20 minutes'),
+			('TEST-JOURNEY-QB', 'EKG:1', 'EKG', 'SP-QB', 'READY', 'planner',
+			 (date_trunc('day', now() AT TIME ZONE $1) AT TIME ZONE $1) - interval '1 day'),
+			('TEST-JOURNEY-QB', 'EKG:1', 'EKG', 'SP-QB', 'STARTED', 'planner',
+			 (date_trunc('day', now() AT TIME ZONE $1) AT TIME ZONE $1) - interval '1 day' + interval '5 minutes')`
+	if _, err := database.Querier(ctx).Exec(ctx, timeline, "Asia/Bangkok"); err != nil {
+		t.Fatalf("seed timeline: %v", err)
+	}
+
+	stats, err := repo.QueueStats(ctx, "TEST-JOURNEY-QA", []string{"SP-QA", "SP-QB"}, "Asia/Bangkok")
+	if err != nil {
+		t.Fatalf("QueueStats: %v", err)
+	}
+
+	qa, ok := stats["SP-QA"]
+	if !ok {
+		t.Fatal("SP-QA absent from stats")
+	}
+	if qa.WaitingAhead != 2 {
+		t.Fatalf("SP-QA waitingAhead = %d, want 2 (other visits only; the asker excluded)", qa.WaitingAhead)
+	}
+	if qa.AvgWaitMinutes == nil || absF(*qa.AvgWaitMinutes-20.0) > 0.001 {
+		t.Fatalf("SP-QA avgWait = %v, want ~20 minutes from today's pair", qa.AvgWaitMinutes)
+	}
+
+	qb, ok := stats["SP-QB"]
+	if !ok {
+		t.Fatal("SP-QB absent from stats despite a waiting step")
+	}
+	if qb.WaitingAhead != 1 {
+		t.Fatalf("SP-QB waitingAhead = %d, want 1", qb.WaitingAhead)
+	}
+	if qb.AvgWaitMinutes != nil {
+		t.Fatalf("SP-QB avgWait = %v, want nil (only yesterday's pair — outside the window)", *qb.AvgWaitMinutes)
+	}
+}
+
+func absF(v float64) float64 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}

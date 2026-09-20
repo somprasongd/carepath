@@ -270,3 +270,97 @@ func (r *Repo) AppendStatusEvents(ctx context.Context, events []journey.StepStat
 	}
 	return nil
 }
+
+// queueWaitingQuery counts, per service point, the READY steps of every
+// visit except the one asking — the people ahead of that patient right now
+// (#101). Current state lives in journey_step, so this is a plain grouped
+// count; nothing here needs the timeline.
+const queueWaitingQuery = `
+SELECT js.service_point_id, count(*)
+FROM carepath.journey_step js
+WHERE js.status = 'READY' AND js.visit_id <> $1 AND js.service_point_id = ANY($2)
+GROUP BY js.service_point_id
+`
+
+// queueAvgWaitQuery averages the waits patients actually experienced at the
+// asked service points so far today (FR-17): per (visit, step), the latest
+// STARTED within the window minus the latest READY strictly before it — the
+// same pairing the analytics module uses for its overview, written again
+// here on purpose (#101 chose module separation over a shared calculator;
+// journey owns this table, analytics merely reads it). Midnight resolves in
+// the database via AT TIME ZONE; zero samples surface as an absent row, and
+// the service keeps that distinct from any number.
+const queueAvgWaitQuery = `
+WITH ws AS (
+    SELECT (date_trunc('day', now() AT TIME ZONE $2) AT TIME ZONE $2) AS window_start
+),
+started AS (
+    SELECT e.visit_id, e.step_key, max(e.occurred_at) AS started_at, e.service_point_id
+    FROM carepath.journey_step_status_event e CROSS JOIN ws
+    WHERE e.to_status = 'STARTED' AND e.occurred_at >= ws.window_start
+      AND e.service_point_id = ANY($1)
+    GROUP BY e.visit_id, e.step_key, e.service_point_id
+),
+wait_pairs AS (
+    SELECT s.service_point_id,
+           extract(epoch FROM (s.started_at - r.ready_at)) / 60.0 AS wait_minutes
+    FROM started s
+    JOIN LATERAL (
+        SELECT max(e.occurred_at) AS ready_at
+        FROM carepath.journey_step_status_event e
+        WHERE e.visit_id = s.visit_id AND e.step_key = s.step_key
+          AND e.to_status = 'READY' AND e.occurred_at < s.started_at
+    ) r ON r.ready_at IS NOT NULL
+)
+SELECT service_point_id, avg(wait_minutes)
+FROM wait_pairs
+WHERE service_point_id IS NOT NULL
+GROUP BY service_point_id
+`
+
+// QueueStats implements the patient queue read (#101). Two focused queries
+// (current counts, windowed averages) joined in Go: each is meaningful on
+// its own and the map merge is trivial, which one UNION'd query would not
+// be. Points with neither waiting steps nor samples stay absent — callers
+// treat the zero value as the honest "nobody ahead, no data yet".
+func (r *Repo) QueueStats(ctx context.Context, excludeVisitID string, servicePointIDs []string, tz string) (map[string]journey.SPQueueStats, error) {
+	q := r.database.Querier(ctx)
+	stats := map[string]journey.SPQueueStats{}
+
+	rows, err := q.Query(ctx, queueWaitingQuery, excludeVisitID, servicePointIDs)
+	if err != nil {
+		return nil, apperr.Wrapf(apperr.KindInternal, err, "journey: queue waiting counts")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var waiting int
+		if err := rows.Scan(&id, &waiting); err != nil {
+			return nil, apperr.Wrapf(apperr.KindInternal, err, "journey: scan queue waiting count")
+		}
+		stats[id] = journey.SPQueueStats{WaitingAhead: waiting}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperr.Wrapf(apperr.KindInternal, err, "journey: iterate queue waiting counts")
+	}
+
+	avgRows, err := q.Query(ctx, queueAvgWaitQuery, servicePointIDs, tz)
+	if err != nil {
+		return nil, apperr.Wrapf(apperr.KindInternal, err, "journey: queue average waits")
+	}
+	defer avgRows.Close()
+	for avgRows.Next() {
+		var id string
+		var avg *float64
+		if err := avgRows.Scan(&id, &avg); err != nil {
+			return nil, apperr.Wrapf(apperr.KindInternal, err, "journey: scan queue average wait")
+		}
+		s := stats[id] // waiting count may already be here; keep it
+		s.AvgWaitMinutes = avg
+		stats[id] = s
+	}
+	if err := avgRows.Err(); err != nil {
+		return nil, apperr.Wrapf(apperr.KindInternal, err, "journey: iterate queue average waits")
+	}
+	return stats, nil
+}

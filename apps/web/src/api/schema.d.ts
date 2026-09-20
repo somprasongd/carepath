@@ -460,6 +460,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/journeys/{visitId}/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The patient queue picture (FR-17, #101): for every currently actionable (READY) step bound to a service point, how many people are waiting ahead of this patient there right now, and that point's average experienced wait so far today (latest READY to latest STARTED per step, the same pairing the analytics overview uses, resolved in the database's timezone). Averages over zero samples are null, not 0 — "no data yet" and "zero minutes" are different facts, and clients must not render a guess. estimatedWaitMinutes is the naive product waitingAhead times avgWaitMinutes, null whenever the average is null. Patient surface (#96): the session's identity must have claimed this visit; an unclaimed or unknown visit answers the same 404 as the journey read. A visit with nothing actionable answers an empty steps list, not an error. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    visitId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The queue picture for the visit's actionable steps */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["JourneyQueue"];
+                    };
+                };
+                /** @description Missing, malformed, or invalid patient session */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Visit unknown, not projected, or not claimed by this session — indistinguishable by design */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/journeys/{visitId}/steps/{stepKey}/transition": {
         parameters: {
             query?: never;
@@ -1470,10 +1535,32 @@ export interface components {
             steps: components["schemas"]["JourneyStep"][];
             /** @description Every step currently READY — what the patient could do right now, in any order. */
             actionable: components["schemas"]["JourneyStep"][];
-            /** @description CarePath's pick among `actionable` for the patient-facing single primary action; null when actionable is empty. Today this is the first actionable step by sequence. Ranking it by distance or queue length (ADR-0009 §6) remains the intent, but is not implemented — it depends on the queue data of FR-17, which does not exist yet. */
+            /** @description CarePath's pick among `actionable` for the patient-facing single primary action; null when actionable is empty. Today this is the first actionable step by sequence. Ranking it by distance or queue length (ADR-0009 §6) remains the intent — the queue data it needs is served by /api/v1/journeys/{visitId}/queue (FR-17), but the ranking itself is not implemented yet. */
             recommended?: components["schemas"]["JourneyStep"] | null;
             /** Format: date-time */
             syncedAt: string;
+        };
+        /** @description The patient queue picture for one visit's actionable steps (FR-17, #101). Computed by the journey module from its own projection and timeline — analytics-style aggregates without the analytics module, which stays executive-only and patient-free. Empty steps is a valid answer: nothing actionable, or nothing bound to a service point. */
+        JourneyQueue: {
+            visitId: string;
+            /**
+             * Format: date-time
+             * @description When the counts were taken.
+             */
+            asOf: string;
+            /** @description One entry per READY step bound to a service point. */
+            steps: components["schemas"]["JourneyQueueStep"][];
+        };
+        /** @description One actionable step's queue numbers. */
+        JourneyQueueStep: {
+            stepKey: string;
+            servicePointId: string;
+            /** @description Other visits' READY steps at this service point right now — the patient's own step is excluded, so 0 means "you are next". */
+            waitingAhead: number;
+            /** @description Average experienced wait at this point so far today; null when there are no samples — never 0, which would claim a measured zero-minute wait. */
+            avgWaitMinutes: number | null;
+            /** @description The naive product waitingAhead times avgWaitMinutes — a rank-order estimate, not a promise; null whenever avgWaitMinutes is null. */
+            estimatedWaitMinutes: number | null;
         };
         /** @description The journey-planning rules in force, derived from the planner itself (#100): the phase ladder, the order-type mapping, and worked examples computed by the real planner. Editing the planner code changes this response — that is the point. */
         PlanningRules: {

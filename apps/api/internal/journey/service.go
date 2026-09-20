@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -29,6 +30,11 @@ type Service interface {
 	// display order, each resolved to its service point, with every
 	// currently-actionable step and CarePath's recommendation among them.
 	GetJourney(ctx context.Context, visitID string) (View, error)
+	// GetQueue returns the patient queue picture (FR-17, #101) for one
+	// visit: per actionable step, how many people are waiting ahead at its
+	// service point and that point's average wait so far today. Averages
+	// over zero samples are nil — "no data" never masquerades as zero.
+	GetQueue(ctx context.Context, visitID string) (QueueView, error)
 	// ListJourneys returns the projected journey of every visit for the
 	// staff visit monitor (#37), freshest sync first.
 	ListJourneys(ctx context.Context) ([]View, error)
@@ -49,10 +55,14 @@ type service struct {
 	servicePoints servicepoint.Service
 	repo          Repo
 	tx            db.Transactor
+	// queueTZ anchors the queue stats' "today" window. It is the hospital
+	// timezone, shared with the analytics module's env (#101) — midnight is
+	// resolved by the database either way, never by this process's clock.
+	queueTZ string
 }
 
-func NewService(hisClient his.Client, servicePoints servicepoint.Service, repo Repo, tx db.Transactor) Service {
-	return &service{his: hisClient, servicePoints: servicePoints, repo: repo, tx: tx}
+func NewService(hisClient his.Client, servicePoints servicepoint.Service, repo Repo, tx db.Transactor, queueTZ string) Service {
+	return &service{his: hisClient, servicePoints: servicePoints, repo: repo, tx: tx, queueTZ: queueTZ}
 }
 
 func (s *service) ApplyHISEvent(ctx context.Context, event his.Event) error {
@@ -156,6 +166,41 @@ func (s *service) GetJourney(ctx context.Context, visitID string) (View, error) 
 	})
 	if err != nil {
 		return View{}, err
+	}
+	return view, nil
+}
+
+// GetQueue reads the plan once and asks the repository for the queue stats of
+// every service point the visit's actionable steps bind to — one query set,
+// self-excluded at the repository boundary (#101). Shaping (null-not-zero,
+// the estimate product) is the pure shapeQueue.
+func (s *service) GetQueue(ctx context.Context, visitID string) (QueueView, error) {
+	var view QueueView
+	err := s.tx.WithinTransaction(ctx, func(ctx context.Context) error {
+		visit, err := s.repo.GetVisit(ctx, visitID)
+		if err != nil {
+			return err
+		}
+		spIDs := make([]string, 0, len(visit.Steps))
+		seen := make(map[string]bool, len(visit.Steps))
+		for _, step := range visit.Steps {
+			if step.Status == StepReady && step.ServicePointID != nil && !seen[*step.ServicePointID] {
+				seen[*step.ServicePointID] = true
+				spIDs = append(spIDs, *step.ServicePointID)
+			}
+		}
+		var stats map[string]SPQueueStats
+		if len(spIDs) > 0 {
+			stats, err = s.repo.QueueStats(ctx, visitID, spIDs, s.queueTZ)
+			if err != nil {
+				return err
+			}
+		}
+		view = shapeQueue(visit, stats, time.Now().UTC())
+		return nil
+	})
+	if err != nil {
+		return QueueView{}, err
 	}
 	return view, nil
 }

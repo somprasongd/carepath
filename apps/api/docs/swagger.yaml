@@ -205,6 +205,30 @@ definitions:
           $ref: '#/definitions/journey.PlanningPhase'
         type: array
     type: object
+  journey.QueueStep:
+    properties:
+      avgWaitMinutes:
+        type: number
+      estimatedWaitMinutes:
+        type: number
+      servicePointId:
+        type: string
+      stepKey:
+        type: string
+      waitingAhead:
+        type: integer
+    type: object
+  journey.QueueView:
+    properties:
+      asOf:
+        type: string
+      steps:
+        items:
+          $ref: '#/definitions/journey.QueueStep'
+        type: array
+      visitId:
+        type: string
+    type: object
   journey.StepView:
     properties:
       clinicCode:
@@ -870,6 +894,46 @@ paths:
       summary: Report a scanned location fix
       tags:
       - location
+  /api/v1/journeys/{visitId}/queue:
+    get:
+      description: 'FR-17: for every currently-actionable step bound to a service
+        point, how many people are waiting ahead of this patient there right now,
+        and that point''s average experienced wait so far today. Averages over zero
+        samples are null, not 0 — "no data yet" and "zero minutes" are different facts,
+        and the client must not render a guess. estimatedWaitMinutes is the naive
+        product of the two, null whenever the average is null. Patient-surface (#96):
+        the session''s identity must have claimed this visit; an unclaimed or unknown
+        visit answers the same 404 as the journey read.'
+      parameters:
+      - description: Visit ID
+        in: path
+        name: visitId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/journey.QueueView'
+        "401":
+          description: missing or invalid patient session
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: visit unknown, or not claimed by this session — indistinguishable
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Get the patient queue picture for the next steps
+      tags:
+      - journeys
   /api/v1/journeys/{visitId}/share:
     delete:
       description: Revokes every still-active share link of the visit. Idempotent
