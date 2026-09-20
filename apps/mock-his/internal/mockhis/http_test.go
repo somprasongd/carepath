@@ -93,6 +93,33 @@ func TestVisitSnapshotMatchesContract(t *testing.T) {
 	}
 }
 
+// A visit opened without pre-visit orders must report an empty array, not a
+// JSON null: the contract declares orders an array, and the console's detail
+// panel (visit.orders.length) breaks on null.
+func TestOpenVisitWithoutOrdersHasEmptyArray(t *testing.T) {
+	app := New(discardLogger(), "", "")
+
+	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits",
+		`{"visitType":"WALKIN","clinics":[{"clinicCode":"MED"}]}`)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %v)", status, body)
+	}
+	if body["orders"] == nil {
+		t.Fatalf("orders = null, want []")
+	}
+	if orders, ok := body["orders"].([]any); !ok || len(orders) != 0 {
+		t.Fatalf("orders = %v, want an empty array", body["orders"])
+	}
+
+	status, snap := do(t, app, http.MethodGet, "/api/v1/visits/VISIT-003", "")
+	if status != http.StatusOK {
+		t.Fatalf("canonical snapshot status = %d, want 200", status)
+	}
+	if orders, ok := snap["orders"].([]any); !ok || len(orders) != 0 {
+		t.Fatalf("canonical orders = %v, want an empty array", snap["orders"])
+	}
+}
+
 // The #39 deterministic demo scenario: VISIT-002 is a walk-in MED patient
 // whose chest X-ray is ordered mid-visit, with stable identifiers the E2E
 // happy path (#40) and the demo script (#41) rely on.

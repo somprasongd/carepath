@@ -244,8 +244,10 @@ func (s *Store) ListVisits() []Visit {
 
 func copyVisit(v *Visit) *Visit {
 	out := *v
-	out.Clinics = append([]Clinic(nil), v.Clinics...)
-	out.Orders = append([]Order(nil), v.Orders...)
+	// Seed with empty (not nil) slices so an order-less visit keeps
+	// marshalling as [] per the contract, not null.
+	out.Clinics = append([]Clinic{}, v.Clinics...)
+	out.Orders = append([]Order{}, v.Orders...)
 	return &out
 }
 
