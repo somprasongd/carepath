@@ -1,4 +1,5 @@
 import { Navigate, createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useLocale } from '@/i18n'
 import { navigatePlanForJourney, floorLabelFor } from '@/features/floorplan'
 import type { FloorPlanRoute } from '@/design-system'
 import {
@@ -23,6 +24,8 @@ export const Route = createFileRoute('/patient/navigate')({
 function PatientNavigateRoute() {
   const navigate = useNavigate()
   const { visit } = Route.useSearch()
+  const { locale } = useLocale()
+  const floorLabel = (floorId: string) => floorLabelFor(floorId, locale)
 
   // Reached without a visit (bookmark, stale link): send them to the VN
   // entry screen rather than guessing a journey for them.
@@ -35,7 +38,7 @@ function PatientNavigateRoute() {
   // second round trip. The plan resolves the destination's place and floor
   // from the recommended step (ADR-0009) onto the floor-plan asset (#25).
   const { data, isPending } = useJourney(visitId)
-  const plan = navigatePlanForJourney(data, isPending)
+  const plan = navigatePlanForJourney(data, isPending, locale)
 
   // The live route (#29): the latest location observation is the start, the
   // recommended service point the destination. No observation yet (null)
@@ -54,7 +57,7 @@ function PatientNavigateRoute() {
             // displayed floor — a cross-floor route starts upstairs (#35).
             origin: routeOriginOnFloor(route.nodes, plan.floorId) ?? undefined,
           } as FloorPlanRoute,
-          cues: turnByTurnSteps(route.nodes, route.segments, plan.name, floorLabelFor),
+          cues: turnByTurnSteps(route.nodes, route.segments, plan.name, floorLabel, locale),
         }
       : undefined
 
@@ -63,7 +66,7 @@ function PatientNavigateRoute() {
       <NavigateScreen
         plan={plan}
         route={overlay}
-        currentLocation={location ? currentLocationLabel(location, floorLabelFor) : undefined}
+        currentLocation={location ? currentLocationLabel(location, floorLabel, locale) : undefined}
         onBack={() => navigate({ to: '/patient/journey', search: { visit: visitId } })}
       />
     </div>

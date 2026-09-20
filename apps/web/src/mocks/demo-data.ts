@@ -19,7 +19,7 @@ export const journeySteps: JourneyStep[] = [
     state: 'current',
     title: 'เจาะเลือด',
     meta: 'ห้องเจาะเลือด · ชั้น 2 · LAB-01',
-    queue: { number: '12', wait: 'รอประมาณ 8 นาที' },
+    queue: { label: 'คิวที่ 12', wait: 'รอประมาณ 8 นาที' },
   },
   {
     id: 'pharmacy',

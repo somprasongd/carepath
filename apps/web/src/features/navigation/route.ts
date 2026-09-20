@@ -1,8 +1,10 @@
 // Pure mapping from the navigation route API (#28) onto what the patient
-// sees: geometry for the SVG overlay and plain-Thai turn-by-turn cues.
-// Distances in the API are authored SVG units, not metres — nothing here
-// converts or displays them, so no made-up walking times (DESIGN.md).
+// sees: geometry for the SVG overlay and turn-by-turn cues in the patient's
+// language (ADR-0012). Distances in the API are authored SVG units, not
+// metres — nothing here converts or displays them, so no made-up walking
+// times (DESIGN.md).
 import type { components } from '@/api/schema'
+import { format, lookup, messagesFor, type Locale } from '@/i18n'
 import type { LocationObservation } from './queries'
 
 export type NavigationRoute = components['schemas']['NavigationRoute']
@@ -22,15 +24,8 @@ export function routeOriginOnFloor(nodes: NavNode[], floorId: string): Point | n
   return first && first.floorId === floorId ? { x: first.x, y: first.y } : null
 }
 
-/** Thai, patient-facing label for how a location fix was obtained. */
-const SOURCE_LABELS: Record<string, string> = {
-  QR: 'สแกน QR',
-  ZIGBEE: 'Zigbee',
-  MANUAL: 'ระบุเอง',
-}
-
 /**
- * One plain-Thai line stating where the patient currently is (#35): floor,
+ * One plain line stating where the patient currently is (#35): floor,
  * positioning zone when the source carries one, and how it was known. Floor
  * ids and unknown provider names never reach the patient; an unmapped source
  * simply omits its part instead of showing raw vocabulary.
@@ -38,10 +33,14 @@ const SOURCE_LABELS: Record<string, string> = {
 export function currentLocationLabel(
   observation: Pick<LocationObservation, 'floorId' | 'zone' | 'source'>,
   floorLabel: (floorId: string) => string,
+  locale: Locale,
 ): string {
-  const parts = [`ตำแหน่งปัจจุบัน · ${floorLabel(observation.floorId)}`]
-  if (observation.zone) parts.push(`โซน ${observation.zone}`)
-  const source = SOURCE_LABELS[observation.source]
+  const catalog = messagesFor(locale)
+  const parts = [
+    format(catalog, 'navigate.locationNowAt', { floor: floorLabel(observation.floorId) }),
+  ]
+  if (observation.zone) parts.push(format(catalog, 'navigate.zone', { zone: observation.zone }))
+  const source = lookup(catalog, `navigate.source.${observation.source}`)
   if (source) parts.push(source)
   return parts.join(' · ')
 }
@@ -70,18 +69,20 @@ export function routePolylinesByFloor(nodes: NavNode[]): Record<string, Point[][
 }
 
 /**
- * Turn-by-turn cues in patient language. Runs of corridor walking collapse
- * into one cue; every floor change through a lift or stairs becomes its own
- * cue naming the floor it lands on. Domain vocabulary (CORRIDOR, ELEVATOR,
- * node ids) never reaches the patient (DESIGN.md).
+ * Turn-by-turn cues in the patient's language. Runs of corridor walking
+ * collapse into one cue; every floor change through a lift or stairs becomes
+ * its own cue naming the floor it lands on. Domain vocabulary (CORRIDOR,
+ * ELEVATOR, node ids) never reaches the patient (DESIGN.md).
  */
 export function turnByTurnSteps(
   nodes: NavNode[],
   segments: NavEdge[],
   destinationName: string,
   floorLabel: (floorId: string) => string,
+  locale: Locale,
 ): string[] {
   if (nodes.length === 0) return []
+  const catalog = messagesFor(locale)
 
   const cues: string[] = []
   let walked = false
@@ -94,16 +95,16 @@ export function turnByTurnSteps(
 
     // A floor change: cue the corridor walk that reached the lift/stairs,
     // then the vertical move itself, named by the floor it lands on.
-    if (walked) cues.push('เดินตามเส้นสายส้มบนผัง')
+    if (walked) cues.push(catalog['navigate.cue.followLine'])
     walked = false
     const target = nodes[i + 1]
-    const vehicle = segment.edgeType === 'ELEVATOR' ? 'ลิฟต์' : 'บันได'
-    cues.push(`ใช้${vehicle}ไป${floorLabel(target.floorId)}`)
+    const key = segment.edgeType === 'ELEVATOR' ? 'navigate.cue.elevator' : 'navigate.cue.stairs'
+    cues.push(format(catalog, key, { floor: floorLabel(target.floorId) }))
   }
   // Same-floor routes (and origin == destination) still get one walking cue
   // plus the arrival, so the panel is never empty when a route exists.
-  if (walked || cues.length === 0) cues.push('เดินตามเส้นสายส้มบนผัง')
-  cues.push(`ถึง${destinationName} — จุดหมายของคุณ`)
+  if (walked || cues.length === 0) cues.push(catalog['navigate.cue.followLine'])
+  cues.push(format(catalog, 'navigate.cue.arrive', { name: destinationName }))
   return cues
 }
 

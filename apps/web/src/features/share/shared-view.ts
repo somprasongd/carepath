@@ -1,4 +1,5 @@
 import type { ApiError } from '@/api/client'
+import { format, messagesFor, type Locale } from '@/i18n'
 import type { SharedJourney, SharedStep } from './queries'
 
 /**
@@ -6,46 +7,58 @@ import type { SharedJourney, SharedStep } from './queries'
  * ADR-0011. Everything the screen renders as text is produced here so it is
  * testable without a DOM, following features/visit/journey.ts.
  *
- * The API payload is already redacted server-side (ADR-0011 §3); this layer's
- * job is language: plain Thai, no domain vocabulary, honest states.
+ * The API payload is already redacted server-side (ADR-0011 §3) and carries
+ * display strings, not codes — `title`, `servicePointName` and `floorName`
+ * are authored server-side in Thai and stay as-is in every locale until the
+ * contract learns to carry codes (the ADR-0012 server-side trigger). This
+ * layer's job is everything else: the patient language, no domain
+ * vocabulary, honest states.
  */
 
 /** Coarse status → what a relative reads. Exhaustive over the contract enum. */
-export function sharedStatusLabel(status: SharedJourney['status'] | SharedStep['status']): string {
+export function sharedStatusLabel(
+  status: SharedJourney['status'] | SharedStep['status'],
+  locale: Locale,
+): string {
+  const catalog = messagesFor(locale)
   switch (status) {
     case 'WAITING':
-      return 'กำลังรอคิว'
+      return catalog['shared.status.waiting']
     case 'IN_SERVICE':
-      return 'กำลังรับบริการ'
+      return catalog['shared.status.inService']
     case 'DONE':
-      return 'เสร็จเรียบร้อย'
+      return catalog['shared.status.done']
     default:
-      return 'รออัปเดต'
+      return catalog['shared.status.awaiting']
   }
 }
 
-/** "14:05 น." — the only clock format the share surface uses. */
-export function thaiClock(iso: string): string {
+/** The share surface's only clock — the Thai clock marker rides the catalog. */
+export function clockLabel(iso: string, locale: Locale): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
-  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')} น.`
+  const clock = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+  return format(messagesFor(locale), 'shared.clock', { time: clock })
 }
 
-export function shareExpiryLabel(expiresAt: string): string {
-  return `ใช้ได้ถึง ${thaiClock(expiresAt)}`
+export function shareExpiryLabel(expiresAt: string, locale: Locale): string {
+  return format(messagesFor(locale), 'share.validUntil', { time: clockLabel(expiresAt, locale) })
 }
 
-export function sharedUpdatedLabel(updatedAt: string): string {
-  return `อัปเดตล่าสุด ${thaiClock(updatedAt)}`
+export function sharedUpdatedLabel(updatedAt: string, locale: Locale): string {
+  return format(messagesFor(locale), 'shared.updatedAt', { time: clockLabel(updatedAt, locale) })
 }
 
 /** Where the patient is, as one quiet line; never a code or an id. */
-export function sharedWhereLine(step: SharedStep | null | undefined): string {
-  if (!step?.servicePointName) return 'รอยืนยันจุดบริการ'
+export function sharedWhereLine(
+  step: SharedStep | null | undefined,
+  locale: Locale,
+): string {
+  if (!step?.servicePointName) return messagesFor(locale)['shared.awaitingServicePoint']
   return step.floorName ? `${step.servicePointName} · ${step.floorName}` : step.servicePointName
 }
 
-/** The five states the screen can be in (issue #90 §หน้า /shared). */
+/** The five states the screen can be in (issue #90, the /shared screen). */
 export type SharedScreenModel =
   | { kind: 'loading' }
   | {
@@ -75,6 +88,7 @@ export function sharedScreenModel(input: {
   isPending: boolean
   data?: SharedJourney
   error: ApiError | null
+  locale: Locale
 }): SharedScreenModel {
   if (!input.hasToken) return { kind: 'invalid' }
   if (input.isPending) return { kind: 'loading' }
@@ -90,10 +104,10 @@ export function sharedScreenModel(input: {
   const step = data.currentStep
   return {
     kind: 'active',
-    title: step?.title ?? 'ระหว่างเตรียมขั้นตอนถัดไป',
-    where: sharedWhereLine(step),
-    statusLabel: sharedStatusLabel(step?.status ?? data.status),
-    updatedLabel: sharedUpdatedLabel(data.updatedAt),
-    expiryLabel: shareExpiryLabel(data.expiresAt),
+    title: step?.title ?? messagesFor(input.locale)['shared.preparingNextStep'],
+    where: sharedWhereLine(step, input.locale),
+    statusLabel: sharedStatusLabel(step?.status ?? data.status, input.locale),
+    updatedLabel: sharedUpdatedLabel(data.updatedAt, input.locale),
+    expiryLabel: shareExpiryLabel(data.expiresAt, input.locale),
   }
 }

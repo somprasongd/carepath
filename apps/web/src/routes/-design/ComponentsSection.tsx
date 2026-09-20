@@ -163,7 +163,10 @@ export function ComponentsSection() {
           paper
           block
         >
-          <JourneyRail steps={journeySteps} />
+          <JourneyRail
+            steps={journeySteps}
+            labels={{ currentStep: 'ขั้นตอนปัจจุบัน', nextStep: 'ขั้นตอนถัดไป' }}
+          />
         </Specimen>
 
         <div>
@@ -179,6 +182,7 @@ export function ComponentsSection() {
               route={pharmacyRoute}
               routeEnd={pharmacyRouteEnd}
               you={currentLocation}
+              ariaLabel={`ผังเส้นทางจาก${currentLocation.label}ไปยังจุดหมาย`}
             />
           </Specimen>
           <div className="h-4" />

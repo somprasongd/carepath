@@ -24,6 +24,8 @@ export type SchematicMapProps = {
   /** Current location from the active location provider (ADR-0004). */
   you: { x: number; y: number; label: string }
   viewBox?: string
+  /** Spoken label for the whole schematic; the caller composes it translated. */
+  ariaLabel?: string
 }
 
 /**
@@ -38,13 +40,14 @@ export function SchematicMap({
   routeEnd,
   you,
   viewBox = '0 0 340 190',
+  ariaLabel,
 }: SchematicMapProps) {
   return (
     <svg
       className="block h-auto w-full"
       viewBox={viewBox}
       role="img"
-      aria-label={`ผังเส้นทางจาก${you.label}ไปยังจุดหมาย`}
+      aria-label={ariaLabel}
     >
       {rooms.map((room) => {
         const zone = zones[room.zone]

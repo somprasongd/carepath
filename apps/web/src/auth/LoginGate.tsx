@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useT } from '@/i18n'
 import { Button, Card, Meta, Screen, ScreenBody, SectionTitle, Stack } from '@/design-system'
 import { useAuth } from './AuthContext'
 
@@ -9,13 +10,14 @@ import { useAuth } from './AuthContext'
  */
 export function LoginGate({ children }: { children: ReactNode }) {
   const { status, error, retry } = useAuth()
+  const t = useT()
 
   if (status === 'loading') {
     return (
       <Screen variant="patient">
         <ScreenBody className="flex flex-1 items-center justify-center text-center">
           <div role="status" aria-live="polite">
-            <Meta>กำลังตรวจสอบสิทธิ์การเข้าใช้งาน...</Meta>
+            <Meta>{t('auth.checking')}</Meta>
           </div>
         </ScreenBody>
       </Screen>
@@ -27,7 +29,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
       <Screen variant="patient">
         <ScreenBody className="flex flex-1 items-center justify-center text-center">
           <div role="status" aria-live="polite">
-            <Meta>กำลังนำท่านไปยังหน้าเข้าสู่ระบบ LINE...</Meta>
+            <Meta>{t('auth.redirecting')}</Meta>
           </div>
         </ScreenBody>
       </Screen>
@@ -40,10 +42,10 @@ export function LoginGate({ children }: { children: ReactNode }) {
         <ScreenBody className="flex flex-1 items-center justify-center">
           <Card radius="md" padding="md" role="alert" className="w-full">
             <Stack>
-              <SectionTitle>เข้าสู่ระบบไม่สำเร็จ</SectionTitle>
-              <Meta>{error ?? 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ'}</Meta>
+              <SectionTitle>{t('auth.errorTitle')}</SectionTitle>
+              <Meta>{error ?? t('auth.errorUnknown')}</Meta>
               <Button variant="ghost" onClick={retry}>
-                ลองอีกครั้ง
+                {t('auth.retry')}
               </Button>
             </Stack>
           </Card>

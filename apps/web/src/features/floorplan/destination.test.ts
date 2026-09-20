@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { format, messagesFor } from '@/i18n'
 import type { Journey, JourneyStep } from '@/features/visit'
 import { navigatePlanForJourney } from './destination'
 
@@ -32,14 +33,15 @@ function journeyWithRecommended(recommended: JourneyStep | null): Journey {
 
 describe('navigatePlanForJourney', () => {
   it('stays pending while the journey loads', () => {
-    expect(navigatePlanForJourney(undefined, true)).toEqual({ state: 'pending' })
+    expect(navigatePlanForJourney(undefined, true, 'th')).toEqual({ state: 'pending' })
+    expect(navigatePlanForJourney(undefined, true, 'en')).toEqual({ state: 'pending' })
   })
 
   it('has no destination when nothing is recommended', () => {
-    expect(navigatePlanForJourney(undefined, false)).toEqual({ state: 'no-destination' })
+    expect(navigatePlanForJourney(undefined, false, 'th')).toEqual({ state: 'no-destination' })
 
     const finished = journeyWithRecommended(null)
-    expect(navigatePlanForJourney(finished, false)).toEqual({ state: 'no-destination' })
+    expect(navigatePlanForJourney(finished, false, 'en')).toEqual({ state: 'no-destination' })
   })
 
   it('plans a mapped ground-floor destination from the journey (#25 AC2/AC3)', () => {
@@ -68,15 +70,66 @@ describe('navigatePlanForJourney', () => {
         },
       }),
       false,
+      'th',
+    )
+
+    // Thai expectations come from the catalog so copy tweaks do not rot the
+    // test (the default-Thai screen itself is the thing pinned below in en).
+    const th = messagesFor('th')
+    expect(plan).toEqual({
+      state: 'plan',
+      title: format(th, 'navigate.routeTitle', { name: th['step.title.PHARMACY'] }),
+      name: 'Pharmacy',
+      subtitle: format(th, 'navigate.subtitle', {
+        floor: format(th, 'common.floor', { code: '1' }),
+        name: 'Pharmacy',
+        place: 'PHARMACY-01',
+      }),
+      floorId: 'I-1301',
+      floorLabel: format(th, 'common.floor', { code: '1' }),
+      placeId: 'PHARMACY-01',
+      servicePointCode: 'PHARMACY',
+      x: 885,
+      y: 190,
+    })
+  })
+
+  it('composes the same plan in real English for the en locale', () => {
+    const plan = navigatePlanForJourney(
+      journeyWithRecommended({
+        stepKey: 'PHARMACY',
+        sequence: 2,
+        kind: 'PHARMACY',
+        status: 'READY',
+        servicePointId: 'SP-PHARMACY',
+        servicePoint: {
+          id: 'SP-PHARMACY',
+          code: 'PHARMACY',
+          name: 'Pharmacy',
+          placeId: 'PHARMACY-01',
+          place: {
+            id: 'PHARMACY-01',
+            floorId: 'I-1301',
+            name: 'Pharmacy',
+            type: 'ROOM',
+            x: 885,
+            y: 190,
+            entryNodeId: 'I-1301/node-pharmacy',
+            floor: FLOOR_1,
+          },
+        },
+      }),
+      false,
+      'en',
     )
 
     expect(plan).toEqual({
       state: 'plan',
-      title: 'เส้นทางไปรับยา',
+      title: 'Directions to Medication pickup',
       name: 'Pharmacy',
-      subtitle: 'ชั้น 1 · Pharmacy · PHARMACY-01',
+      subtitle: 'Floor 1 · Pharmacy · PHARMACY-01',
       floorId: 'I-1301',
-      floorLabel: 'ชั้น 1',
+      floorLabel: 'Floor 1',
       placeId: 'PHARMACY-01',
       servicePointCode: 'PHARMACY',
       x: 885,
@@ -110,13 +163,15 @@ describe('navigatePlanForJourney', () => {
         },
       }),
       false,
+      'th',
     )
 
+    const th = messagesFor('th')
     expect(plan).toMatchObject({
       state: 'plan',
-      title: 'เส้นทางไปเจาะเลือด',
+      title: format(th, 'navigate.routeTitle', { name: th['step.title.LAB'] }),
       floorId: 'I-1302',
-      floorLabel: 'ชั้น 2',
+      floorLabel: format(th, 'common.floor', { code: '2' }),
       placeId: 'LAB-01',
     })
   })
@@ -132,9 +187,15 @@ describe('navigatePlanForJourney', () => {
         servicePoint: { id: 'SP-X', code: 'X', name: 'Somewhere', placeId: 'NOPE-01' },
       }),
       false,
+      'th',
     )
 
-    expect(plan).toEqual({ state: 'unsupported', title: 'เส้นทางไปเอกซเรย์', name: 'Somewhere' })
+    const th = messagesFor('th')
+    expect(plan).toEqual({
+      state: 'unsupported',
+      title: format(th, 'navigate.routeTitle', { name: th['step.title.XRAY'] }),
+      name: 'Somewhere',
+    })
   })
 
   it('falls back to the honest unsupported state for a floor with no plan asset', () => {
@@ -160,8 +221,13 @@ describe('navigatePlanForJourney', () => {
         },
       }),
       false,
+      'en',
     )
 
-    expect(plan).toEqual({ state: 'unsupported', title: 'เส้นทางไปรับยา', name: 'Somewhere' })
+    expect(plan).toEqual({
+      state: 'unsupported',
+      title: 'Directions to Medication pickup',
+      name: 'Somewhere',
+    })
   })
 })

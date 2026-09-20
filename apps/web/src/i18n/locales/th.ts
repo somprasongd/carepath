@@ -4,7 +4,7 @@
  * (and the parity test in `../i18n.test.ts` fails `npm run test` first).
  *
  * Keys are named after what they are for, grouped by feature prefix
- * (`step.*`, `sp.*`, later `journey.*`, `navigate.*`, `auth.*`).
+ * (`step.*`, `sp.*`, `journey.*`, `navigate.*`, `auth.*`).
  */
 export const th = {
   // Step titles — keyed by the step `kind` (ADR-0009 step identity).
@@ -22,6 +22,13 @@ export const th = {
   'step.seeDoctor': 'พบแพทย์',
   'step.seeDoctorAgain': 'กลับไปพบแพทย์',
 
+  // Rail meta lines under a step title (features/visit/journey.ts stepMeta).
+  'step.meta.cancelled': 'ยกเลิกแล้ว',
+  'step.meta.completed': 'เสร็จสิ้นแล้ว',
+  'step.meta.waitingResult': 'รอผลตรวจ',
+  'step.meta.ready': 'พร้อมให้บริการ',
+  'step.meta.pending': 'รอดำเนินการ',
+
   // Service point names — keyed by ServicePoint.code (contract §ServicePoint);
   // unmapped codes fall back to the server's `name` (ADR-0012 §1).
   'sp.REGISTRATION': 'จุดลงทะเบียน',
@@ -33,6 +40,122 @@ export const th = {
   'sp.CASHIER': 'จุดชำระเงิน',
   'sp.CLINIC:MED': 'อายุรกรรม',
   'sp.DOCTOR': 'ห้องตรวจโรค',
+
+  // Shared composition.
+  'common.floor': 'ชั้น {code}',
+
+  // LINE LIFF login gate (auth/LoginGate.tsx).
+  'auth.checking': 'กำลังตรวจสอบสิทธิ์การเข้าใช้งาน…',
+  'auth.redirecting': 'กำลังนำท่านไปยังหน้าเข้าสู่ระบบ LINE…',
+  'auth.errorTitle': 'เข้าสู่ระบบไม่สำเร็จ',
+  'auth.errorUnknown': 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ',
+  'auth.retry': 'ลองอีกครั้ง',
+
+  // VN front door (routes/patient/-VisitEntryScreen.tsx).
+  'entry.role': 'ผู้ป่วย',
+  'entry.title': 'ค้นหาการนัดหมาย',
+  'entry.lead': 'กรอกหมายเลขการรักษา (VN) จากสลิกของโรงพยาบาลเพื่อดูแผนการรักษาของคุณ',
+  'entry.vnLabel': 'หมายเลขการรักษา (VN)',
+  'entry.vnPlaceholder': 'เช่น VISIT-001',
+  'entry.required': 'กรุณากรอกหมายเลขการรักษา',
+  'entry.submit': 'ดูแผนการรักษา',
+
+  // Patient journey home (routes/patient/-JourneyScreen.tsx).
+  'journey.title': 'การมาโรงพยาบาลของคุณวันนี้',
+  'journey.lead': 'ติดตามขั้นตอนของคุณ แล้วไปยังจุดบริการถัดไปได้จากปุ่มด้านล่าง',
+  'journey.signedInWithLine': 'เข้าสู่ระบบด้วยไลน์ · {name}',
+  'journey.loading': 'กำลังโหลดขั้นตอนของคุณ…',
+  'journey.retry': 'ลองใหม่',
+  'journey.error.notFound': 'ไม่พบข้อมูลการมาโรงพยาบาลของคุณ',
+  'journey.error.hisUnavailable': 'ระบบข้อมูลของโรงพยาบาลไม่พร้อมใช้งาน',
+  'journey.error.unreachable': 'เชื่อมต่อระบบไม่สำเร็จ',
+  'journey.progress': 'ความคืบหน้า · เสร็จแล้ว {done} จาก {total} ขั้นตอน',
+  'journey.nextStep': 'ขั้นตอนถัดไป',
+  'journey.navigateCta': 'นำทางไป{title}',
+  'journey.shareWithFamily': 'แชร์ความคืบหน้าให้ญาติ',
+  'journey.shareDemoHint': 'โหมดสาธิต: ยังขอสิทธิ์แชร์ไม่สำเร็จ',
+
+  // End-of-visit summary card (features/visit/components/VisitOutcomeCard.tsx).
+  'outcome.cancelled.label': 'การมาโรงพยาบาลนี้',
+  'outcome.cancelled.title': 'ถูกยกเลิก',
+  'outcome.cancelled.body': 'หากคุณมีข้อสงสัย โปรดติดต่อเจ้าหน้าที่ที่จุดบริการ',
+  'outcome.completed.title': 'เสร็จสิ้นทุกขั้นตอนแล้ว',
+  'outcome.completed.body': 'ขอบคุณที่ใช้บริการวันนี้ ขอให้คุณมีสุขภาพแข็งแรง',
+
+  // Navigate screen chrome (routes/patient/-NavigateScreen.tsx).
+  'navigate.back': 'ย้อนกลับไปหน้าเส้นทาง',
+  'navigate.loadingTitle': 'กำลังโหลดจุดหมาย…',
+  'navigate.noDestinationTitle': 'จุดบริการของคุณ',
+  'navigate.pendingNotice': 'กำลังโหลดจุดหมายของคุณ…',
+  'navigate.noDestinationNotice': 'ยังไม่มีจุดบริการถัดไปในการมาโรงพยาบาลครั้งนี้',
+  'navigate.unsupportedNotice':
+    'ระบบยังไม่รองรับเส้นทางในอาคารสำหรับจุดบริการนี้ — โปรดถามเจ้าหน้าที่ที่จุดรับลงทะเบียน',
+  'navigate.waitingLocation':
+    'เส้นทางจะปรากฏเมื่อทราบตำแหน่งปัจจุบันของคุณ — สแกน QR ที่จุดบริการเพื่อเริ่มนำทาง',
+  'navigate.askStaffIfLost': 'แจ้งเจ้าหน้าที่หากหลงทาง',
+
+  // Destination plan text (features/floorplan/destination.ts).
+  'navigate.routeTitle': 'เส้นทางไป{name}',
+  'navigate.subtitle': '{floor} · {name} · {place}',
+
+  // Current-location line and turn cues (features/navigation/route.ts).
+  'navigate.locationNowAt': 'ตำแหน่งปัจจุบัน · {floor}',
+  'navigate.zone': 'โซน {zone}',
+  'navigate.source.QR': 'สแกน QR',
+  'navigate.source.ZIGBEE': 'Zigbee',
+  'navigate.source.MANUAL': 'ระบุเอง',
+  'navigate.cue.followLine': 'เดินตามเส้นสายส้มบนผัง',
+  'navigate.cue.elevator': 'ใช้ลิฟต์ไป{floor}',
+  'navigate.cue.stairs': 'ใช้บันไดไป{floor}',
+  'navigate.cue.arrive': 'ถึง{name} — จุดหมายของคุณ',
+
+  // Floor plan map controls (design-system/FloorPlanMap.tsx labels).
+  'map.viewFullFloor': 'ดูทั้งชั้น',
+  'map.viewRoute': 'ดูเส้นทาง',
+  'map.viewDestination': 'ดูจุดหมาย',
+  'map.youAreHere': 'คุณอยู่ที่นี่',
+  'map.planAria': 'ผัง{floor} — จุดหมาย {name}',
+  'map.routeAria': 'ผัง{floor} — เส้นทางจากตำแหน่งปัจจุบันไป{name}',
+
+  // Journey rail captions (design-system/JourneyRail.tsx labels).
+  'rail.currentStep': 'ขั้นตอนปัจจุบัน',
+  'rail.nextStep': 'ขั้นตอนถัดไป',
+  'rail.queue': 'คิวที่ {number}',
+
+  // Share sheet, patient side (features/share/components/ShareSheet.tsx).
+  'share.title': 'แชร์ความคืบหน้าให้ญาติ',
+  'share.privacyNote': 'ญาติเปิดลิงก์นี้เห็นเฉพาะขั้นตอนที่กำลังอยู่ ไม่เห็นข้อมูลอื่นของคุณ',
+  'share.creating': 'กำลังสร้างลิงก์…',
+  'share.stopOldFirst': 'หยุดแชร์ลิงก์เดิมก่อน',
+  'share.stopping': 'กำลังหยุดแชร์…',
+  'share.recreate': 'ลองสร้างใหม่',
+  'share.copied': 'คัดลอกแล้ว',
+  'share.copyLink': 'คัดลอกลิงก์',
+  'share.stop': 'หยุดแชร์',
+  'share.stoppedNote': 'หยุดแชร์ลิงก์เดิมแล้ว — ลิงก์ด้านบนคือลิงก์ใหม่',
+  'share.validUntil': 'ใช้ได้ถึง {time}',
+  'share.error.tooMany': 'มีลิงก์ที่ยังใช้ได้มากเกินไป — หยุดแชร์ลิงก์เดิมก่อนแล้วลองใหม่',
+  'share.error.signInFirst': 'เข้าสู่ระบบใหม่ก่อนจึงจะแชร์ได้',
+  'share.error.generic': 'สร้างลิงก์ไม่สำเร็จ — ลองอีกครั้ง',
+  'share.close': 'ปิด',
+
+  // Shared view, relative side (features/share/shared-view.ts, routes/-SharedScreen.tsx).
+  'shared.title': 'ติดตามการรักษา',
+  'shared.checkingLink': 'กำลังตรวจสอบลิงก์…',
+  'shared.autoRefresh': 'หน้านี้อัปเดตอัตโนมัติทุก 15 วินาที',
+  'shared.done': 'ผู้ป่วยเสร็จการรักษาแล้ว — กลับบ้านได้เลย',
+  'shared.expired': 'ลิงก์นี้หมดอายุแล้ว — ขอลิงก์ใหม่จากผู้ป่วยได้เลย',
+  'shared.invalid': 'เปิดหน้านี้ด้วยลิงก์ที่ผู้ป่วยแชร์มาเท่านั้น — ขอลิงก์จากผู้ป่วยได้เลย',
+  'shared.unreachable': 'เชื่อมต่อไม่สำเร็จ — ลองปิดแล้วเปิดหน้านี้ใหม่อีกครั้ง',
+  'shared.clock': '{time} น.',
+  'shared.status.waiting': 'กำลังรอคิว',
+  'shared.status.inService': 'กำลังรับบริการ',
+  'shared.status.done': 'เสร็จเรียบร้อย',
+  'shared.status.awaiting': 'รออัปเดต',
+  'shared.updatedAt': 'อัปเดตล่าสุด {time}',
+  'shared.validUntil': 'ใช้ได้ถึง {time}',
+  'shared.preparingNextStep': 'ระหว่างเตรียมขั้นตอนถัดไป',
+  'shared.awaitingServicePoint': 'รอยืนยันจุดบริการ',
 } satisfies Record<string, string>
 
 export type Catalog = typeof th

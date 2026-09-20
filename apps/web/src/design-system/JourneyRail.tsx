@@ -7,12 +7,18 @@ export type JourneyStepState = 'done' | 'current' | 'next' | 'pending'
 export type JourneyStep = {
   id: string
   state: JourneyStepState
-  /** Plain-Thai step name — never a domain enum or `ServicePoint`. */
+  /** Step name in the patient's language — never a domain enum or `ServicePoint`. */
   title: string
-  /** Place + code line, e.g. "ห้องเจาะเลือด · ชั้น 2 · LAB-01". */
+  /** Place + code line, e.g. "Laboratory · LAB-01". */
   meta: string
   /** Current step only: the ticket card's queue number and wait estimate. */
-  queue?: { number: string; wait: string }
+  queue?: { label: string; wait: string }
+}
+
+/** Captions the rail owns, supplied translated by the caller (ADR-0012). */
+export type JourneyRailLabels = {
+  currentStep: string
+  nextStep: string
 }
 
 const nodeClass: Record<JourneyStepState, string> = {
@@ -26,8 +32,16 @@ const nodeClass: Record<JourneyStepState, string> = {
 /**
  * The patient's visit as a vertical rail. The connector turns orange one step
  * ahead of "current", echoing the route line painted on the floor plan.
+ * Captions arrive translated — the rail renders props, it does not own text
+ * (apps/web AGENTS.md design-system rule, ADR-0012).
  */
-export function JourneyRail({ steps }: { steps: JourneyStep[] }) {
+export function JourneyRail({
+  steps,
+  labels,
+}: {
+  steps: JourneyStep[]
+  labels: JourneyRailLabels
+}) {
   return (
     <ol className="m-0 flex list-none flex-col p-0">
       {steps.map((step, i) => (
@@ -37,7 +51,7 @@ export function JourneyRail({ steps }: { steps: JourneyStep[] }) {
             {i < steps.length - 1 && <Connector step={step} nextStep={steps[i + 1]} />}
           </div>
           <div className="min-w-0 flex-1 pb-5">
-            <StepBody step={step} />
+            <StepBody step={step} labels={labels} />
           </div>
         </li>
       ))}
@@ -67,16 +81,16 @@ function StepNode({ state }: { state: JourneyStepState }) {
   )
 }
 
-function StepBody({ step }: { step: JourneyStep }) {
+function StepBody({ step, labels }: { step: JourneyStep; labels: JourneyRailLabels }) {
   if (step.state === 'current') {
     return (
       <Card radius="ticket" padding="md">
-        <div className="mb-1 font-sans text-caption text-ink-muted">ขั้นตอนปัจจุบัน</div>
+        <div className="mb-1 font-sans text-caption text-ink-muted">{labels.currentStep}</div>
         <div className="mb-1 text-[18px] font-bold text-ink">{step.title}</div>
         <div className="mb-3 font-sans text-body-sm text-ink-muted">{step.meta}</div>
         {step.queue && (
           <div className="flex items-center gap-2.5">
-            <QueuePill>คิวที่ {step.queue.number}</QueuePill>
+            <QueuePill>{step.queue.label}</QueuePill>
             <span className="font-sans text-body-sm text-ink-muted">{step.queue.wait}</span>
           </div>
         )}
@@ -87,7 +101,9 @@ function StepBody({ step }: { step: JourneyStep }) {
   if (step.state === 'next') {
     return (
       <>
-        <div className="mb-0.5 font-sans text-caption font-bold text-primary">ขั้นตอนถัดไป</div>
+        <div className="mb-0.5 font-sans text-caption font-bold text-primary">
+          {labels.nextStep}
+        </div>
         <div className="font-sans text-h2 text-ink">{step.title}</div>
         <StepMeta>{step.meta}</StepMeta>
       </>

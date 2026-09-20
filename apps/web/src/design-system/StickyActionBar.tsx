@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
 
 export type StickyActionBarProps = {
-  /** Small label above the action, e.g. "ขั้นตอนถัดไป". */
+  /** Small label above the action, e.g. "Next step". */
   label: string
-  /** What the action leads to, e.g. "รับยา · ห้องยา ชั้น 1". */
+  /** What the action leads to, e.g. "Medication pickup · Pharmacy, Floor 1". */
   value: string
   /** Exactly one primary action — this is the one-thumb zone. */
   children: ReactNode
