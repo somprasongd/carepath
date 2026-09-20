@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { Navigate, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { navigatePlanForJourney, floorLabelFor } from '@/features/floorplan'
 import type { FloorPlanRoute } from '@/design-system'
 import {
@@ -9,10 +9,10 @@ import {
   useCurrentLocation,
   useNavigationRoute,
 } from '@/features/navigation'
-import { DEFAULT_VISIT_ID, useJourney } from '@/features/visit'
+import { useJourney } from '@/features/visit'
 import { NavigateScreen } from './-NavigateScreen'
 
-/** `?visit=<id>` — same parameter as the journey screen, forwarded by its CTA. */
+/** `?visit=<VN>` — same parameter as the journey screen, forwarded by its CTA. */
 export const Route = createFileRoute('/patient/navigate')({
   validateSearch: (search: Record<string, unknown>): { visit?: string } => ({
     visit: typeof search.visit === 'string' && search.visit !== '' ? search.visit : undefined,
@@ -23,7 +23,13 @@ export const Route = createFileRoute('/patient/navigate')({
 function PatientNavigateRoute() {
   const navigate = useNavigate()
   const { visit } = Route.useSearch()
-  const visitId = visit ?? DEFAULT_VISIT_ID
+
+  // Reached without a visit (bookmark, stale link): send them to the VN
+  // entry screen rather than guessing a journey for them.
+  if (visit === undefined) {
+    return <Navigate to="/patient/journey" replace />
+  }
+  const visitId = visit
 
   // Same query key as the journey screen, so this is a cache read, not a
   // second round trip. The plan resolves the destination's place and floor

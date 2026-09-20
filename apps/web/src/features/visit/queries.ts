@@ -13,12 +13,6 @@ export type Journey = components['schemas']['Journey']
 export type JourneyStep = components['schemas']['JourneyStep']
 
 /**
- * The visit until the LINE LIFF hand-off exists: the demo visit seeded in
- * Mock HIS. Override per session with ?visit=<id> on the patient routes.
- */
-export const DEFAULT_VISIT_ID = 'VISIT-001'
-
-/**
  * Staff visit monitor (#37): every projected journey, freshest sync first —
  * the CarePath projection, so a visit not yet ingested is simply absent.
  */

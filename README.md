@@ -612,7 +612,7 @@ curl -s localhost:8080/api/v1/journeys/VISIT-001 | jq '.steps[] | {stepKey, stat
 | เจ้าหน้าที่ | `http://localhost:5173/staff/floor-plan` | ผังอาคาร (placeholder) |
 | เจ้าหน้าที่ | `http://localhost:5173/staff/pathway-templates` | กติกาการวางแผนเส้นทาง |
 
-`http://localhost:5173/` จะ redirect ไปหน้าผู้ป่วย (`/patient/journey`) โดย default — ไม่มีหน้ากลางให้เลือกบทบาทเอง เจ้าหน้าที่ต้องเข้าที่ `/login` ตรง ๆ
+`http://localhost:5173/` จะ redirect ไปหน้า login ของเจ้าหน้าที่ (`/login`) — หน้าแรกคือคอนโซลเจ้าหน้าที่ ไม่มีการเข้าหน้าผู้ป่วยแบบ demo อัตโนมัติ ผู้ป่วยเข้าถึงแผนการรักษาได้โดยระบุหมายเลขการรักษา (VN) ที่ `/patient/journey` (หน้าค้นหาการนัดหมาย) หรือตรง ๆ ด้วย `?visit=<visitId>` เช่นจากลิงก์ LINE
 
 ### Reset ข้อมูล demo ให้เหมือนเดิมทุกครั้ง
 
