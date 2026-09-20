@@ -1,43 +1,42 @@
 import type { JourneyStep as RailStep, JourneyStepState } from '@/design-system'
 import type { ApiError } from '@/api/client'
+import { lookup, messagesFor, type Locale } from '@/i18n'
 import type { Journey, JourneyStep } from './queries'
 
 /**
- * Clinic codes → plain-Thai clinic names (DESIGN.md: never surface domain
- * vocabulary like a raw clinic code). An unmapped code falls back to itself.
+ * Patient-facing title for a journey step (ADR-0012: display text is owned
+ * by the client, keyed by the stable codes of ADR-0009). A round above 1
+ * means the patient is returning to a doctor they already saw this visit.
+ * `kind` is typed as a plain string, not the schema enum, so an unmapped
+ * kind still renders instead of being a type error — the fallback is the
+ * point.
  */
-const CLINIC_NAMES: Record<string, string> = {
-  MED: 'อายุรกรรม',
-  SURG: 'ศัลยกรรม',
-}
-
-/** Step kind → plain-Thai title for every kind except CLINIC (handled below). */
-const KIND_TITLES: Record<string, string> = {
-  REGISTRATION: 'ลงทะเบียน',
-  LAB: 'เจาะเลือด',
-  XRAY: 'เอกซเรย์',
-  EKG: 'ตรวจคลื่นไฟฟ้าหัวใจ',
-  ULTRASOUND: 'อัลตราซาวด์',
-  CASHIER: 'ชำระเงิน',
-  PHARMACY: 'รับยา',
+export function stepTitle(
+  step: Pick<JourneyStep, 'clinicCode' | 'round'> & { kind: string },
+  locale: Locale,
+): string {
+  const catalog = messagesFor(locale)
+  if (step.kind === 'CLINIC') {
+    const clinic = step.clinicCode
+      ? lookup(catalog, `step.clinic.${step.clinicCode}`) ?? step.clinicCode
+      : ''
+    const suffix = clinic ? ` · ${clinic}` : ''
+    const base = step.round && step.round > 1 ? catalog['step.seeDoctorAgain'] : catalog['step.seeDoctor']
+    return `${base}${suffix}`
+  }
+  return lookup(catalog, `step.title.${step.kind}`) ?? step.kind
 }
 
 /**
- * Plain-Thai title for a journey step (ADR-0009 — steps are addressed by
- * kind/clinicCode now, not an HIS serviceCode). A round above 1 means the
- * patient is returning to a doctor they already saw this visit. `kind` is
- * typed as a plain string, not the schema enum, so an unmapped kind still
- * renders instead of being a type error — the fallback is the point.
+ * Patient-facing service point name (ADR-0012 §1): the stable `code` maps
+ * into the locale catalog; an unmapped code falls back to the server's
+ * `name` — whatever language the admin set — instead of breaking the screen.
  */
-export function thaiStepTitle(
-  step: Pick<JourneyStep, 'clinicCode' | 'round'> & { kind: string },
+export function servicePointLabel(
+  servicePoint: Pick<NonNullable<JourneyStep['servicePoint']>, 'code' | 'name'>,
+  locale: Locale,
 ): string {
-  if (step.kind === 'CLINIC') {
-    const clinic = step.clinicCode ? (CLINIC_NAMES[step.clinicCode] ?? step.clinicCode) : ''
-    const suffix = clinic ? ` · ${clinic}` : ''
-    return step.round && step.round > 1 ? `กลับไปพบแพทย์${suffix}` : `พบแพทย์${suffix}`
-  }
-  return KIND_TITLES[step.kind] ?? step.kind
+  return lookup(messagesFor(locale), `sp.${servicePoint.code}`) ?? servicePoint.name
 }
 
 /**
@@ -46,7 +45,7 @@ export function thaiStepTitle(
  * gets the rail's `current` emphasis, every other actionable step is `next`,
  * everything else stays `pending`.
  */
-export function toJourneySteps(journey: Journey): RailStep[] {
+export function toJourneySteps(journey: Journey, locale: Locale): RailStep[] {
   const actionableKeys = new Set(journey.actionable.map((s) => s.stepKey))
   const recommendedKey = journey.recommended?.stepKey
   const startedKey = journey.steps.find((s) => s.status === 'STARTED')?.stepKey
@@ -66,18 +65,20 @@ export function toJourneySteps(journey: Journey): RailStep[] {
     return {
       id: step.stepKey,
       state,
-      title: thaiStepTitle(step),
-      meta: stepMeta(step, state),
+      title: stepTitle(step, locale),
+      meta: stepMeta(step, state, locale),
     }
   })
 }
 
-function stepMeta(step: JourneyStep, state: JourneyStepState): string {
+function stepMeta(step: JourneyStep, state: JourneyStepState, locale: Locale): string {
   if (step.status === 'CANCELLED') return 'ยกเลิกแล้ว'
   if (step.status === 'COMPLETED') return 'เสร็จสิ้นแล้ว'
   if (step.status === 'WAITING') return 'รอผลตรวจ'
   if (state === 'current' || state === 'next') {
-    return step.servicePoint ? `${step.servicePoint.name} · ${step.servicePoint.placeId}` : 'พร้อมให้บริการ'
+    return step.servicePoint
+      ? `${servicePointLabel(step.servicePoint, locale)} · ${step.servicePoint.placeId}`
+      : 'พร้อมให้บริการ'
   }
   return 'รอดำเนินการ'
 }

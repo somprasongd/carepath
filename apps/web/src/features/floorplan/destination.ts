@@ -1,4 +1,4 @@
-import { thaiStepTitle, type Journey } from '@/features/visit'
+import { stepTitle, type Journey } from '@/features/visit'
 import { floorPlanFor, floorPlanHasPlace } from './plans'
 
 export type DestinationPlan = {
@@ -44,7 +44,7 @@ export function navigatePlanForJourney(
   const recommended = journey?.recommended
   if (!journey || !recommended) return { state: 'no-destination' }
 
-  const title = `เส้นทางไป${thaiStepTitle(recommended)}`
+  const title = `เส้นทางไป${stepTitle(recommended, 'th')}`
   const servicePoint = recommended.servicePoint
   const place = servicePoint?.place ?? null
   const svg = place ? floorPlanFor(place.floorId) : null

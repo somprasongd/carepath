@@ -4,7 +4,8 @@ import type { Journey, JourneyStep } from './queries'
 import {
   journeyProgress,
   journeyProgressLabel,
-  thaiStepTitle,
+  servicePointLabel,
+  stepTitle,
   toJourneySteps,
   visitLoadErrorMessage,
   visitOutcome,
@@ -55,7 +56,7 @@ describe('toJourneySteps', () => {
     j.actionable = j.steps.filter((s) => s.status === 'READY')
     j.recommended = j.actionable[0]
 
-    const rail = toJourneySteps(j)
+    const rail = toJourneySteps(j, 'th')
     expect(rail.map((s) => s.state)).toEqual(['done', 'current', 'pending', 'next'])
   })
 
@@ -68,16 +69,23 @@ describe('toJourneySteps', () => {
       actionable: [],
       recommended: null,
     })
-    expect(toJourneySteps(j).map((s) => s.state)).toEqual(['done', 'current'])
+    expect(toJourneySteps(j, 'th').map((s) => s.state)).toEqual(['done', 'current'])
   })
 
   it('translates step kinds to plain-Thai titles', () => {
-    const titles = toJourneySteps(journey()).map((s) => s.title)
+    const titles = toJourneySteps(journey(), 'th').map((s) => s.title)
     expect(titles).toEqual(['ลงทะเบียน', 'เจาะเลือด', 'พบแพทย์ · อายุรกรรม'])
   })
 
   it('carries the service point place into the actionable step meta', () => {
-    const current = toJourneySteps(journey()).find((s) => s.state === 'current')
+    const current = toJourneySteps(journey(), 'th').find((s) => s.state === 'current')
+    expect(current?.meta).toBe('ห้องเจาะเลือด · LAB-01')
+  })
+
+  it('localizes the rail for English too (ADR-0012)', () => {
+    const titles = toJourneySteps(journey(), 'en').map((s) => s.title)
+    expect(titles).toEqual(['Check-in', 'Blood draw', 'See the doctor · Internal Medicine'])
+    const current = toJourneySteps(journey(), 'en').find((s) => s.state === 'current')
     expect(current?.meta).toBe('Laboratory · LAB-01')
   })
 
@@ -87,7 +95,7 @@ describe('toJourneySteps', () => {
       actionable: [step({ stepKey: 'LAB:1', kind: 'LAB', status: 'READY' })],
       recommended: step({ stepKey: 'LAB:1', kind: 'LAB', status: 'READY' }),
     })
-    expect(toJourneySteps(j)[0].meta).toBe('พร้อมให้บริการ')
+    expect(toJourneySteps(j, 'th')[0].meta).toBe('พร้อมให้บริการ')
   })
 
   it('shows a waiting meta for a step gated on a pending result', () => {
@@ -96,7 +104,7 @@ describe('toJourneySteps', () => {
       actionable: [],
       recommended: null,
     })
-    expect(toJourneySteps(j)[0].meta).toBe('รอผลตรวจ')
+    expect(toJourneySteps(j, 'th')[0].meta).toBe('รอผลตรวจ')
   })
 
   it('shows no current or next emphasis when the visit has no actionable step', () => {
@@ -108,7 +116,7 @@ describe('toJourneySteps', () => {
       actionable: [],
       recommended: null,
     })
-    expect(toJourneySteps(j).map((s) => s.state)).toEqual(['done', 'pending'])
+    expect(toJourneySteps(j, 'th').map((s) => s.state)).toEqual(['done', 'pending'])
   })
 
   it('labels a return-to-clinic round with the round-2 phrasing', () => {
@@ -117,7 +125,7 @@ describe('toJourneySteps', () => {
       actionable: [step({ stepKey: 'CLINIC:MED:2', kind: 'CLINIC', clinicCode: 'MED', round: 2, status: 'READY' })],
       recommended: step({ stepKey: 'CLINIC:MED:2', kind: 'CLINIC', clinicCode: 'MED', round: 2, status: 'READY' }),
     })
-    expect(toJourneySteps(j)[0].title).toBe('กลับไปพบแพทย์ · อายุรกรรม')
+    expect(toJourneySteps(j, 'th')[0].title).toBe('กลับไปพบแพทย์ · อายุรกรรม')
   })
 
   it('keeps an unknown clinic code readable instead of hiding the step', () => {
@@ -126,16 +134,47 @@ describe('toJourneySteps', () => {
       actionable: [step({ stepKey: 'CLINIC:PED:1', kind: 'CLINIC', clinicCode: 'PED', round: 1, status: 'READY' })],
       recommended: step({ stepKey: 'CLINIC:PED:1', kind: 'CLINIC', clinicCode: 'PED', round: 1, status: 'READY' }),
     })
-    expect(toJourneySteps(j)[0].title).toBe('พบแพทย์ · PED')
+    expect(toJourneySteps(j, 'th')[0].title).toBe('พบแพทย์ · PED')
   })
 })
 
-describe('thaiStepTitle', () => {
-  it('falls back to the raw kind for an unmapped kind', () => {
+describe('stepTitle', () => {
+  it('falls back to the raw kind for an unmapped kind, in either locale', () => {
     // A plain object, not the `step()` factory: `kind` here is intentionally
     // outside the schema's StepKind union, exercising the fallback for a
     // kind the client's type does not yet know about.
-    expect(thaiStepTitle({ kind: 'UNKNOWN', clinicCode: null, round: null })).toBe('UNKNOWN')
+    expect(stepTitle({ kind: 'UNKNOWN', clinicCode: null, round: null }, 'th')).toBe('UNKNOWN')
+    expect(stepTitle({ kind: 'UNKNOWN', clinicCode: null, round: null }, 'en')).toBe('UNKNOWN')
+  })
+
+  it('translates a plain kind into English', () => {
+    expect(stepTitle({ kind: 'PHARMACY', clinicCode: null, round: null }, 'en')).toBe('Medication pickup')
+  })
+
+  it('keeps the Thai phrasing unchanged for the Thai locale', () => {
+    expect(stepTitle({ kind: 'CLINIC', clinicCode: 'MED', round: 1 }, 'th')).toBe('พบแพทย์ · อายุรกรรม')
+    expect(stepTitle({ kind: 'CLINIC', clinicCode: 'MED', round: 2 }, 'th')).toBe('กลับไปพบแพทย์ · อายุรกรรม')
+  })
+
+  it('phrases the clinic rounds for English', () => {
+    expect(stepTitle({ kind: 'CLINIC', clinicCode: 'MED', round: 1 }, 'en')).toBe('See the doctor · Internal Medicine')
+    expect(stepTitle({ kind: 'CLINIC', clinicCode: 'MED', round: 2 }, 'en')).toBe('Return to the doctor · Internal Medicine')
+    expect(stepTitle({ kind: 'CLINIC', clinicCode: 'PED', round: 1 }, 'en')).toBe('See the doctor · PED')
+  })
+})
+
+describe('servicePointLabel', () => {
+  const lab = { code: 'ORDERTYPE:LAB', name: 'Laboratory', placeId: 'LAB-01' }
+
+  it('maps the code in both locales, colon codes included', () => {
+    expect(servicePointLabel(lab, 'th')).toBe('ห้องเจาะเลือด')
+    expect(servicePointLabel(lab, 'en')).toBe('Laboratory')
+  })
+
+  it('falls back to the server name for an unmapped code instead of breaking', () => {
+    const nursery = { code: 'NURSERY', name: 'Nurse Station', placeId: 'NS-01' }
+    expect(servicePointLabel(nursery, 'th')).toBe('Nurse Station')
+    expect(servicePointLabel(nursery, 'en')).toBe('Nurse Station')
   })
 })
 
