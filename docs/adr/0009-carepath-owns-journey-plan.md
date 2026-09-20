@@ -63,6 +63,7 @@ retired. The canonical inbound events become:
 | `order.performed` | `orderRef`, `performedAt` — the procedure is done (blood drawn, film taken) |
 | `order.resulted` | `orderRef`, `resultedAt` — the result is reported and readable by the doctor |
 | `order.cancelled` | `orderRef` |
+| `encounter.started` | `clinicCode`, `startedAt` — this clinic is calling the patient in |
 | `encounter.completed` | `clinicCode`, `completedAt` — this doctor is finished with this patient for this round |
 
 The envelope (`eventId`, `occurredAt`, `visitId`, `patientRef`, `type`,
@@ -70,7 +71,9 @@ The envelope (`eventId`, `occurredAt`, `visitId`, `patientRef`, `type`,
 ADR-0008 §3. A real HIS adapter maps whatever it has onto these facts
 (ADR-0005); `encounter.completed`, for example, may come from the doctor
 closing the visit note, from the clinic worklist status, or from staff
-confirming in CarePath.
+confirming in CarePath. `encounter.started` maps onto whatever says "the
+clinic called this patient in" — the queue system, an exam-room display, or
+the staff console.
 
 ### 3. The plan is a pure function, recomputed on every fact
 
@@ -97,6 +100,14 @@ A diagnostic order (`LAB`, `XRAY`, `EKG`, `US`) placed while a clinic's
 encounter is still open implies the doctor intends to read the result:
 the planner emits the investigation steps and a follow-up
 `CLINIC:<code>#n+1` step after them. A `DRUG` order never implies a return.
+
+An encounter is open when its round is in progress. The round starts either
+from the staff console or from the `encounter.started` fact; on ingest the
+fact starts the clinic's highest actionable round, and implicitly finishes
+any round of the same clinic still in progress — calling the patient in for
+the next round means the previous one ended when they were sent out for the
+diagnostics it ordered. A call-in with no actionable round (results not yet
+back) is a no-op: the patient cannot be in a round that is not actionable.
 
 `encounter.completed` closes the round: any follow-up clinic step still in a
 non-started state is dropped from the plan. Clinic staff can force either

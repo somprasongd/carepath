@@ -119,6 +119,15 @@ func (s *scriptedHIS) resultOrder() {
 	s.append(his.EventOrderResulted, map[string]any{"orderRef": o.OrderRef})
 }
 
+// startEncounter is the clinic calling the patient in — the console's "Call
+// patient in" button. CarePath opens the clinic's next actionable round with
+// it, implicitly finishing a round still in progress.
+func (s *scriptedHIS) startEncounter() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.append(his.EventEncounterStarted, map[string]any{"clinicCode": "MED", "startedAt": time.Now().UTC()})
+}
+
 // placeDrug is the doctor prescribing at the return visit — the fact that
 // adds the pharmacy step to the plan.
 func (s *scriptedHIS) placeDrug() {
@@ -239,12 +248,15 @@ func TestHappyPath(t *testing.T) {
 		t.Fatalf("route distance = %v, want a walkable path", route.TotalDistance)
 	}
 
-	// The doctor's round opens (staff command) — this is what spawns the
-	// return round while diagnostics are pending (ADR-0009 §3). It also
-	// changes the patient's next destination: the in-progress consult is
-	// no longer actionable, so the X-ray becomes the recommendation.
-	transition(t, journeys, "CLINIC:MED:1", journey.CommandToStarted)
+	// The clinic calls the patient in (HIS fact, the console's "Call patient
+	// in") — this is what spawns the return round while diagnostics are
+	// pending (ADR-0009 §3/§4). It also changes the patient's next
+	// destination: the in-progress consult is no longer actionable, so the
+	// X-ray becomes the recommendation.
+	upstream.startEncounter()
+	applyAll(t, journeys, upstream)
 	view = getJourney(t, journeys)
+	assertStep(t, view, "CLINIC:MED:1", "STARTED")
 	assertStep(t, view, "CLINIC:MED:2", "WAITING")
 	if view.Recommended == nil || view.Recommended.StepKey != "XRAY:1" {
 		t.Fatalf("recommended after round opens = %v, want XRAY:1", stepKeyOf(view.Recommended))
@@ -270,12 +282,25 @@ func TestHappyPath(t *testing.T) {
 		t.Fatalf("destination after x-ray resulted = %s, want the OPD entry node again", last.ID)
 	}
 
-	// The return visit happens, and the doctor prescribes at it → the
-	// pharmacy tail appears to close out the scenario.
-	transition(t, journeys, "CLINIC:MED:2", journey.CommandToStarted)
+	// The clinic calls the patient back in (HIS fact): round 1 — open since
+	// the first call — is implicitly finished and the return round starts.
+	// The doctor prescribes at it → the pharmacy tail appears.
+	upstream.startEncounter()
+	applyAll(t, journeys, upstream)
+	view = getJourney(t, journeys)
+	assertStep(t, view, "CLINIC:MED:1", "COMPLETED")
+	assertStep(t, view, "CLINIC:MED:2", "STARTED")
 	upstream.placeDrug()
 	applyAll(t, journeys, upstream)
 	assertStep(t, getJourney(t, journeys), "PHARMACY", "PENDING")
+
+	// The staff console stays a working override surface: a staff command
+	// (not an HIS fact) wraps up the return round, which opens the cashier.
+	transition(t, journeys, "CLINIC:MED:2", journey.CommandToCompleted)
+	view = getJourney(t, journeys)
+	assertStep(t, view, "CLINIC:MED:2", "COMPLETED")
+	assertStep(t, view, "CASHIER", "READY")
+	assertStep(t, view, "PHARMACY", "PENDING")
 }
 
 // applyAll feeds the scripted HIS's events through the same application

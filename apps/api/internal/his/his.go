@@ -26,6 +26,7 @@ const (
 	EventOrderPerformed     = "order.performed"
 	EventOrderResulted      = "order.resulted"
 	EventOrderCancelled     = "order.cancelled"
+	EventEncounterStarted   = "encounter.started"
 	EventEncounterCompleted = "encounter.completed"
 )
 

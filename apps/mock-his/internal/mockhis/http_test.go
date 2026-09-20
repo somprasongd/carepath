@@ -317,6 +317,32 @@ func TestCompleteEncounter(t *testing.T) {
 	}
 }
 
+func TestStartEncounter(t *testing.T) {
+	app := New(discardLogger(), "", "")
+	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics/MED/start-encounter", "")
+	if status != http.StatusOK || body["visitId"] != "VISIT-001" {
+		t.Fatalf("start-encounter = %d %v, want 200 VISIT-001", status, body)
+	}
+	if status, _ := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics/SURG/start-encounter", ""); status != http.StatusNotFound {
+		t.Fatalf("unassigned clinic status = %d, want 404", status)
+	}
+	if status, _ := do(t, app, http.MethodPost, "/api/v1/demo/visits/NOPE/clinics/MED/start-encounter", ""); status != http.StatusNotFound {
+		t.Fatalf("unknown visit status = %d, want 404", status)
+	}
+
+	// The press must surface as one canonical event carrying the clinic and
+	// a timestamp, like encounter.completed does.
+	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000004&limit=10", "")
+	types := eventTypes(feed)
+	if len(types) != 1 || types[0] != "encounter.started" {
+		t.Fatalf("event types after start-encounter = %v, want [encounter.started]", types)
+	}
+	payload := feed["events"].([]any)[0].(map[string]any)["payload"].(map[string]any)
+	if payload["clinicCode"] != "MED" || payload["startedAt"] == nil {
+		t.Fatalf("encounter.started payload = %v, want clinicCode MED and startedAt", payload)
+	}
+}
+
 func TestCompleteVisit(t *testing.T) {
 	app := New(discardLogger(), "", "")
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/complete", "")
@@ -383,19 +409,23 @@ func TestListDemoVisits(t *testing.T) {
 // order inferring a return, encounter completed, cashier, done.
 func TestDemoActionsSurfaceAsCanonicalEvents(t *testing.T) {
 	app := New(discardLogger(), "", "")
+	do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics/MED/start-encounter", "")
 	_, xray := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/orders",
 		`{"orderType":"XRAY","orderName":"Chest X-Ray","orderedByClinic":"MED"}`)
 	ref := xray["orderRef"].(string)
 	do(t, app, http.MethodPost, "/api/v1/demo/orders/"+ref+"/performed", "")
 	do(t, app, http.MethodPost, "/api/v1/demo/orders/"+ref+"/resulted", "")
+	do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics/MED/start-encounter", "")
 	do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics/MED/complete-encounter", "")
 	do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/complete", "")
 
 	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000004&limit=100", "")
 	want := []string{
+		"encounter.started",   // MED calls the patient in
 		"order.placed",        // xray ordered
 		"order.performed",     // xray performed
 		"order.resulted",      // xray resulted
+		"encounter.started",   // MED calls the patient back in
 		"encounter.completed", // MED confirms done
 		"visit.closed",        // visit completed
 	}

@@ -11,7 +11,7 @@ Per [ADR-0009](../adr/0009-carepath-owns-journey-plan.md), the HIS has no concep
 - patient/visit reference (HN/VN), patient display name, walk-in vs appointment
 - which clinic(s) the visit is assigned to
 - orders (lab, x-ray, EKG, ultrasound, drug) and their lifecycle: placed → performed → resulted
-- when a clinic finishes examining the patient for a round (`encounter.completed`)
+- when a clinic calls the patient in for a round (`encounter.started`) and finishes examining them (`encounter.completed`)
 - visit status (open/completed/cancelled)
 
 It does **not** decide step order, own step status, or calculate indoor routes — those are CarePath's (journey planner and navigation module respectively).
@@ -44,7 +44,7 @@ such as `LAB-01` (the `servicepoint` module).
 The canonical HIS↔CarePath contract lives in [`packages/contracts/openapi/mock-his.yaml`](../../packages/contracts/openapi/mock-his.yaml) (source of truth per ADR-0006) and has two surfaces:
 
 - **Snapshot read (pull):** `GET /api/v1/visits/{visitId}` — the visit, its clinics, and its orders, as the HIS currently has them.
-- **Event feed (pull):** `GET /api/v1/events?after={eventId}` — append-only canonical facts (`visit.opened/updated/closed`, `order.placed/performed/resulted/cancelled`, `encounter.completed`) that CarePath's journey planner consumes to (re)build the plan.
+- **Event feed (pull):** `GET /api/v1/events?after={eventId}` — append-only canonical facts (`visit.opened/updated/closed`, `order.placed/performed/resulted/cancelled`, `encounter.started/completed`) that CarePath's journey planner consumes to (re)build the plan.
 
 There is no push-command surface from CarePath back to the HIS: CarePath owns
 step status itself (ADR-0009 §1), so nothing about a journey step is ever
@@ -131,7 +131,7 @@ sequenceDiagram
     Pt->>Pt: does the blood draw
     HIS->>CP: order.performed (LAB "CBC")
     CP-->>CP: LAB:1 → COMPLETED<br/>CLINIC:MED:1 → READY (phase gate clear)
-    Pt->>Pt: sees the doctor — staff starts CLINIC:MED:1
+    HIS->>CP: encounter.started (clinic MED)<br/>— the clinic calls the patient in
     CP-->>CP: CLINIC:MED:1 → STARTED
     HIS->>CP: order.placed (XRAY "Chest X-Ray",<br/>ordered while MED round is STARTED)
     CP-->>CP: infer a return: add XRAY:1 READY<br/>and CLINIC:MED:2 WAITING (§4)
@@ -140,7 +140,10 @@ sequenceDiagram
     CP-->>CP: XRAY:1 → COMPLETED<br/>CLINIC:MED:2 stays WAITING — no result yet (§5)
     HIS->>CP: order.resulted (XRAY)
     CP-->>CP: CLINIC:MED:2 → READY — "กลับไปพบแพทย์" becomes actionable
-    Pt->>Pt: returns, doctor finishes
+    Pt->>Pt: returns
+    HIS->>CP: encounter.started (clinic MED) again
+    CP-->>CP: CLINIC:MED:1 → COMPLETED (implicit —<br/>the patient left it for the X-ray)<br/>CLINIC:MED:2 → STARTED
+    Pt->>Pt: doctor finishes
     alt HIS reports it
         HIS->>CP: encounter.completed (clinic MED)
     else HIS can't, or staff acts first
@@ -176,6 +179,7 @@ must never be consumed by CarePath.
 - `POST /api/v1/demo/orders/{orderRef}/performed` — the procedure happened. Emits `order.performed`. `409` unless `PLACED`.
 - `POST /api/v1/demo/orders/{orderRef}/resulted` — the result is reported and readable. Emits `order.resulted`. `409` unless `PERFORMED` — a result cannot exist before the procedure did.
 - `POST /api/v1/demo/orders/{orderRef}/cancel` — Emits `order.cancelled`. `409` if already `RESULTED`/`CANCELLED`.
+- `POST /api/v1/demo/visits/{visitId}/clinics/{clinicCode}/start-encounter` — the clinic calls the patient in to see the doctor. Emits `encounter.started`: CarePath starts the clinic's next actionable round (round 1 on the first call, the inferred return once its diagnostics have resulted) and implicitly finishes any round of this clinic still in progress. A call with no actionable round yet (results not back) is a no-op on the CarePath side — nothing breaks, nothing changes.
 - `POST /api/v1/demo/visits/{visitId}/clinics/{clinicCode}/complete-encounter` — this doctor is done with this patient for this round. Emits `encounter.completed`; CarePath drops any not-yet-started "return to this clinic" step it had inferred.
 - `POST /api/v1/demo/visits/{visitId}/complete` — completes an `ACTIVE` visit. Emits `visit.closed` (status `COMPLETED`).
 - `POST /api/v1/demo/visits/{visitId}/cancel` — cancels an `ACTIVE` visit outright: every open order is cancelled and the visit becomes `CANCELLED`. Re-cancelling is a no-op; a `COMPLETED` visit cannot be cancelled (`409`). Emits `visit.closed` (status `CANCELLED`) plus `order.cancelled` per open order.

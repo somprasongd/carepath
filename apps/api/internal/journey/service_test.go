@@ -304,6 +304,169 @@ func TestApplyHISEventEncounterCompletedClosesRound(t *testing.T) {
 	}
 }
 
+// encounter.started (the HIS's call-in fact) starts the clinic's actionable
+// round; a repeat call while it is already in progress changes nothing.
+func TestApplyHISEventEncounterStartedOpensRound(t *testing.T) {
+	repo := newFakeRepo()
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": snapshot()}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	startEvent := func(id string) his.Event {
+		return his.Event{
+			EventID: id, VisitID: "VISIT-001", PatientRef: "PAT-001", Type: his.EventEncounterStarted,
+			Payload: map[string]any{"clinicCode": "MED"},
+		}
+	}
+	if err := svc.ApplyHISEvent(context.Background(), startEvent("EVT-000002")); err != nil {
+		t.Fatalf("encounter.started: %v", err)
+	}
+	view, _ := svc.GetJourney(context.Background(), "VISIT-001")
+	if s, _ := stepByViewKey(view.Steps, "CLINIC:MED:1"); s.Status != StepStarted {
+		t.Fatalf("round 1 after call-in = %s, want STARTED", s.Status)
+	}
+
+	// The clinic calls again while the round is already in progress (no
+	// actionable round exists): a no-op, not an error.
+	if err := svc.ApplyHISEvent(context.Background(), startEvent("EVT-000003")); err != nil {
+		t.Fatalf("repeat encounter.started: %v", err)
+	}
+	view, _ = svc.GetJourney(context.Background(), "VISIT-001")
+	if s, _ := stepByViewKey(view.Steps, "CLINIC:MED:1"); s.Status != StepStarted {
+		t.Fatalf("round 1 after repeat call-in = %s, want STARTED (no-op)", s.Status)
+	}
+	if _, marked := repo.applied["EVT-000003"]; !marked {
+		t.Fatal("the no-op fact must still be marked applied")
+	}
+}
+
+// The HIS-driven return-to-doctor story: call in (round 1 starts), order
+// mid-visit (round 2 inferred WAITING), results arrive (round 2 READY), call
+// in again (round 1 implicitly finished, round 2 STARTED), complete the
+// encounter (round 2 COMPLETED, cashier actionable). No staff command anywhere.
+func TestApplyHISEventEncounterStartedReturnRound(t *testing.T) {
+	repo := newFakeRepo()
+	visit := snapshot()
+	visit.Orders = []his.Order{
+		{OrderRef: "ORD-1", OrderType: his.OrderTypeLab, OrderedByClinic: "MED", OrderedAt: openedAt.Add(10 * time.Minute), Status: his.OrderPlaced},
+	}
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": visit}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	view, _ := svc.GetJourney(context.Background(), "VISIT-001")
+	if _, ok := stepByViewKey(view.Steps, "CLINIC:MED:2"); ok {
+		t.Fatal("no return may be inferred before the round is in progress")
+	}
+
+	apply := func(id, typ string) {
+		t.Helper()
+		ev := his.Event{EventID: id, VisitID: "VISIT-001", PatientRef: "PAT-001", Type: typ}
+		if typ == his.EventEncounterStarted || typ == his.EventEncounterCompleted {
+			ev.Payload = map[string]any{"clinicCode": "MED"}
+		}
+		if err := svc.ApplyHISEvent(context.Background(), ev); err != nil {
+			t.Fatalf("%s: %v", typ, err)
+		}
+	}
+
+	// Call in: round 1 starts, the mid-visit lab infers the return.
+	apply("EVT-000002", his.EventEncounterStarted)
+	view, _ = svc.GetJourney(context.Background(), "VISIT-001")
+	if s, _ := stepByViewKey(view.Steps, "CLINIC:MED:1"); s.Status != StepStarted {
+		t.Fatalf("round 1 after call-in = %s, want STARTED", s.Status)
+	}
+	if s, _ := stepByViewKey(view.Steps, "CLINIC:MED:2"); s.Status != StepWaiting {
+		t.Fatalf("inferred round 2 = %s, want WAITING", s.Status)
+	}
+
+	// The lab happens; results are not back yet, so the return stays WAITING.
+	visit.Orders[0].Status = his.OrderPerformed
+	visit.Orders[0].PerformedAt = timePtr(openedAt.Add(20 * time.Minute))
+	hisClient.getVisits["VISIT-001"] = visit
+	apply("EVT-000003", his.EventOrderPerformed)
+	view, _ = svc.GetJourney(context.Background(), "VISIT-001")
+	if s, _ := stepByViewKey(view.Steps, "LAB:1"); s.Status != StepCompleted {
+		t.Fatalf("lab after performed = %s, want COMPLETED", s.Status)
+	}
+	if s, _ := stepByViewKey(view.Steps, "CLINIC:MED:2"); s.Status != StepWaiting {
+		t.Fatalf("round 2 before results = %s, want WAITING", s.Status)
+	}
+
+	// Results arrive: the return becomes actionable.
+	visit.Orders[0].Status = his.OrderResulted
+	visit.Orders[0].ResultedAt = timePtr(openedAt.Add(30 * time.Minute))
+	hisClient.getVisits["VISIT-001"] = visit
+	apply("EVT-000004", his.EventOrderResulted)
+	view, _ = svc.GetJourney(context.Background(), "VISIT-001")
+	if s, _ := stepByViewKey(view.Steps, "CLINIC:MED:2"); s.Status != StepReady {
+		t.Fatalf("round 2 after results = %s, want READY", s.Status)
+	}
+
+	// Call in again: the patient is returning, so round 1 — open since the
+	// first call — is implicitly finished and round 2 starts.
+	apply("EVT-000005", his.EventEncounterStarted)
+	view, _ = svc.GetJourney(context.Background(), "VISIT-001")
+	if s, _ := stepByViewKey(view.Steps, "CLINIC:MED:1"); s.Status != StepCompleted {
+		t.Fatalf("round 1 after the return call-in = %s, want COMPLETED (implicitly finished)", s.Status)
+	}
+	if s, _ := stepByViewKey(view.Steps, "CLINIC:MED:2"); s.Status != StepStarted {
+		t.Fatalf("round 2 after the return call-in = %s, want STARTED", s.Status)
+	}
+
+	// The doctor wraps up: the encounter completes the round in progress,
+	// and with everything else terminal the cashier opens.
+	apply("EVT-000006", his.EventEncounterCompleted)
+	view, _ = svc.GetJourney(context.Background(), "VISIT-001")
+	if s, _ := stepByViewKey(view.Steps, "CLINIC:MED:2"); s.Status != StepCompleted {
+		t.Fatalf("round 2 after encounter.completed = %s, want COMPLETED", s.Status)
+	}
+	if s, _ := stepByViewKey(view.Steps, "CASHIER"); s.Status != StepReady {
+		t.Fatalf("cashier at the end = %s, want READY", s.Status)
+	}
+}
+
+// A call-in with no actionable round to open (results not back yet) is a
+// no-op: the patient cannot be called into a return that is still WAITING.
+func TestApplyHISEventEncounterStartedBeforeResultsIsNoOp(t *testing.T) {
+	repo := newFakeRepo()
+	visit := snapshot()
+	visit.Orders = []his.Order{
+		{OrderRef: "ORD-1", OrderType: his.OrderTypeLab, OrderedByClinic: "MED", OrderedAt: openedAt.Add(10 * time.Minute), Status: his.OrderPlaced},
+	}
+	hisClient := &fakeHIS{getVisits: map[string]his.Visit{"VISIT-001": visit}}
+	svc := newTestService(hisClient, repo)
+	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := svc.ApplyHISEvent(context.Background(), his.Event{
+		EventID: "EVT-000002", VisitID: "VISIT-001", PatientRef: "PAT-001", Type: his.EventEncounterStarted,
+		Payload: map[string]any{"clinicCode": "MED"},
+	}); err != nil {
+		t.Fatalf("first call-in: %v", err)
+	}
+	before := len(repo.events)
+	if err := svc.ApplyHISEvent(context.Background(), his.Event{
+		EventID: "EVT-000003", VisitID: "VISIT-001", PatientRef: "PAT-001", Type: his.EventEncounterStarted,
+		Payload: map[string]any{"clinicCode": "MED"},
+	}); err != nil {
+		t.Fatalf("premature call-in: %v", err)
+	}
+	view, _ := svc.GetJourney(context.Background(), "VISIT-001")
+	if s, _ := stepByViewKey(view.Steps, "CLINIC:MED:1"); s.Status != StepStarted {
+		t.Fatalf("round 1 = %s, want still STARTED", s.Status)
+	}
+	if s, _ := stepByViewKey(view.Steps, "CLINIC:MED:2"); s.Status != StepWaiting {
+		t.Fatalf("round 2 = %s, want still WAITING", s.Status)
+	}
+	if got := len(repo.events); got != before {
+		t.Fatalf("timeline grew by %d rows on a no-op call-in, want 0: %+v", got-before, repo.events[before:])
+	}
+}
+
 func stepByViewKey(steps []StepView, key string) (StepView, bool) {
 	for _, s := range steps {
 		if s.StepKey == key {

@@ -60,8 +60,8 @@ func has(items []string, want string) bool {
 func TestContractDefinesCanonicalModel(t *testing.T) {
 	c := loadContract(t)
 
-	if c.Info.Version != "0.3.0" {
-		t.Fatalf("contract version = %q, want 0.3.0", c.Info.Version)
+	if c.Info.Version != "0.4.0" {
+		t.Fatalf("contract version = %q, want 0.4.0", c.Info.Version)
 	}
 
 	// The two canonical read surfaces exist (ADR-0009): snapshot read, event
@@ -82,9 +82,9 @@ func TestContractDefinesCanonicalModel(t *testing.T) {
 		!has(got, "PLACED") || !has(got, "RESULTED") {
 		t.Fatalf("OrderStatus enum = %v, want the 4 canonical statuses", got)
 	}
-	if got := c.Components.Schemas["EventType"].Enum; len(got) != 8 ||
-		!has(got, "visit.opened") || !has(got, "encounter.completed") || !has(got, "order.resulted") {
-		t.Fatalf("EventType enum = %v, want the 8 canonical event types", got)
+	if got := c.Components.Schemas["EventType"].Enum; len(got) != 9 ||
+		!has(got, "visit.opened") || !has(got, "encounter.started") || !has(got, "encounter.completed") || !has(got, "order.resulted") {
+		t.Fatalf("EventType enum = %v, want the 9 canonical event types", got)
 	}
 	if got := c.Components.Schemas["Visit"].Required; !has(got, "visitId") || !has(got, "patientRef") {
 		t.Fatalf("Visit required = %v, want external ids visitId and patientRef", got)

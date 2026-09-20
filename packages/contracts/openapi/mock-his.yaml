@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath Mock HIS API
-  version: 0.3.0
+  version: 0.4.0
   description: >
     Canonical HIS↔CarePath fact contract (ADR-0008, amended by ADR-0009). The
     Mock HIS implements it for development and demo; a real HIS adapter maps
@@ -275,6 +275,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/demo/visits/{visitId}/clinics/{clinicCode}/start-encounter:
+    post:
+      description: >
+        The clinic calls the patient in to see the doctor. Emits
+        `encounter.started` (ADR-0009 §4): CarePath starts the clinic's next
+        actionable round (round 1 on the first call, the inferred return round
+        once its diagnostics have resulted) and implicitly closes any round of
+        this clinic still STARTED — the patient has already left that exam
+        room. A call with no actionable round is a no-op on the CarePath side.
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: clinicCode
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The visit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Visit'
+        '404':
+          description: Visit or clinic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/demo/visits/{visitId}/clinics/{clinicCode}/complete-encounter:
     post:
       description: >
@@ -421,6 +452,7 @@ components:
         - order.performed
         - order.resulted
         - order.cancelled
+        - encounter.started
         - encounter.completed
     Clinic:
       type: object
@@ -525,7 +557,8 @@ components:
             Typed per event. `visit.opened`/`visit.updated` carry `clinics`
             (and `patientName`/`visitType` on open); `visit.closed` carries
             `status`; `order.*` events carry the affected order's fields;
-            `encounter.completed` carries `clinicCode` and `completedAt`.
+            `encounter.started` and `encounter.completed` carry `clinicCode`
+            plus `startedAt`/`completedAt` respectively.
           properties:
             patientName: { type: string }
             visitType: { $ref: '#/components/schemas/VisitType' }

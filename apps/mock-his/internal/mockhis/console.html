@@ -368,6 +368,17 @@ function renderDetail(visit) {
     chip.className = "clinic";
     chip.innerHTML = '<span class="code">' + c.code + "</span>";
     if (visit.status === "ACTIVE") {
+      const call = document.createElement("button");
+      call.textContent = "Call patient in";
+      call.onclick = async () => {
+        try {
+          await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/clinics/" + encodeURIComponent(c.code) + "/start-encounter", {});
+          toast(c.code + " called patient in");
+          lastDetailJSON = "";
+          refresh(true);
+        } catch (err) { toast("Call patient in failed: " + err.message, true); }
+      };
+      chip.appendChild(call);
       const done = document.createElement("button");
       done.textContent = "Complete encounter";
       done.onclick = async () => {

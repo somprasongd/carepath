@@ -103,6 +103,13 @@ func (s *service) ApplyHISEvent(ctx context.Context, event his.Event) error {
 			return err
 		}
 
+		if event.Type == his.EventEncounterStarted {
+			if clinicCode, _ := event.Payload["clinicCode"].(string); clinicCode != "" {
+				if err := s.startNextRoundIn(ctx, event.VisitID, clinicCode, existing); err != nil {
+					return err
+				}
+			}
+		}
 		if event.Type == his.EventEncounterCompleted {
 			if clinicCode, _ := event.Payload["clinicCode"].(string); clinicCode != "" {
 				if _, _, err := s.closeLatestRoundIn(ctx, event.VisitID, clinicCode, existing); err != nil {
@@ -288,6 +295,43 @@ func (s *service) CloseRound(ctx context.Context, visitID, clinicCode, source st
 		"actor_user_id", actor.UserID, "actor_username", actor.Username,
 	)
 	return s.GetJourney(ctx, visitID)
+}
+
+// startNextRoundIn applies the HIS's encounter.started fact (ADR-0009 §4):
+// the clinic called the patient in, so the round that becomes actionable
+// starts. It targets the highest round of clinicCode whose status is READY —
+// round 1 on the first call, the inferred return once its diagnostics have
+// resulted. Any lower round of the same clinic still STARTED is closed
+// first: calling the patient in for the next round means the previous one
+// ended when the patient was sent out for those diagnostics, and closing it
+// there (rather than via encounter.completed) keeps exactly one round in
+// progress. Calling in with no READY round (results not back yet, pre-visit
+// gate still holding) is a no-op — the fact is still marked applied; the
+// patient cannot be in a round that is not actionable yet.
+func (s *service) startNextRoundIn(ctx context.Context, visitID, clinicCode string, existing Visit) error {
+	readyIdx, readyRound := -1, 0
+	startedKey, startedRound := "", 0
+	for i, st := range existing.Steps {
+		if st.Kind != KindClinic || st.ClinicCode == nil || *st.ClinicCode != clinicCode || st.Round == nil {
+			continue
+		}
+		if st.Status == StepReady && *st.Round > readyRound {
+			readyRound, readyIdx = *st.Round, i
+		}
+		if st.Status == StepStarted && *st.Round > startedRound {
+			startedRound, startedKey = *st.Round, st.StepKey
+		}
+	}
+	if readyIdx < 0 {
+		return nil
+	}
+	if startedKey != "" && startedRound < readyRound {
+		if err := s.repo.CloseRound(ctx, visitID, startedKey); err != nil {
+			return err
+		}
+	}
+	existing.Steps[readyIdx].Status = StepStarted
+	return nil
 }
 
 // closeLatestRoundIn resolves the round CLINIC step "in encounter" for

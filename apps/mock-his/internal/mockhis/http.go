@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/skip2/go-qrcode"
@@ -16,6 +17,17 @@ import (
 
 //go:embed console.html
 var consoleHTML []byte
+
+// param reads a route parameter as a string safe to keep beyond the request.
+// Fiber derives params as views over fasthttp's reusable request buffer, so a
+// raw c.Params value stored in the event log mutates when a later request on
+// the same connection rewrites that buffer (observed as a stored clinicCode
+// reading "SUR"/"tar" after subsequent requests). strings.Clone copies the
+// bytes out; use it for every param, including ones only used as lookup keys,
+// so the hazard cannot come back with a refactor.
+func param(c fiber.Ctx, name string) string {
+	return strings.Clone(c.Params(name))
+}
 
 // New builds the Mock HIS HTTP app implementing the contract in
 // packages/contracts/openapi/mock-his.yaml, plus the demo-driver surface
@@ -61,7 +73,7 @@ func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string) *fiber.
 	})
 
 	app.Get("/api/v1/visits/:visitId", func(c fiber.Ctx) error {
-		visit, ok := store.GetVisit(c.Params("visitId"))
+		visit, ok := store.GetVisit(param(c, "visitId"))
 		if !ok {
 			return errResponse(c, http.StatusNotFound, "visit not found")
 		}
@@ -130,7 +142,7 @@ func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string) *fiber.
 		if err := c.Bind().Body(&body); err != nil {
 			return errResponse(c, http.StatusBadRequest, "invalid request body")
 		}
-		visit, verr := store.AddClinic(c.Context(), c.Params("visitId"), body.ClinicCode, body.ClinicName)
+		visit, verr := store.AddClinic(c.Context(), param(c, "visitId"), body.ClinicCode, body.ClinicName)
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -146,7 +158,7 @@ func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string) *fiber.
 		if err := c.Bind().Body(&body); err != nil {
 			return errResponse(c, http.StatusBadRequest, "invalid request body")
 		}
-		order, verr := store.PlaceOrder(c.Context(), c.Params("visitId"), body.OrderType, body.OrderName, body.OrderedByClinic)
+		order, verr := store.PlaceOrder(c.Context(), param(c, "visitId"), body.OrderType, body.OrderName, body.OrderedByClinic)
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -154,7 +166,7 @@ func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string) *fiber.
 	})
 
 	app.Post("/api/v1/demo/orders/:orderRef/performed", func(c fiber.Ctx) error {
-		order, verr := store.MarkPerformed(c.Context(), c.Params("orderRef"))
+		order, verr := store.MarkPerformed(c.Context(), param(c, "orderRef"))
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -162,7 +174,7 @@ func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string) *fiber.
 	})
 
 	app.Post("/api/v1/demo/orders/:orderRef/resulted", func(c fiber.Ctx) error {
-		order, verr := store.MarkResulted(c.Context(), c.Params("orderRef"))
+		order, verr := store.MarkResulted(c.Context(), param(c, "orderRef"))
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -170,15 +182,23 @@ func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string) *fiber.
 	})
 
 	app.Post("/api/v1/demo/orders/:orderRef/cancel", func(c fiber.Ctx) error {
-		order, verr := store.CancelOrder(c.Context(), c.Params("orderRef"))
+		order, verr := store.CancelOrder(c.Context(), param(c, "orderRef"))
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
 		return c.JSON(order)
 	})
 
+	app.Post("/api/v1/demo/visits/:visitId/clinics/:clinicCode/start-encounter", func(c fiber.Ctx) error {
+		visit, verr := store.StartEncounter(c.Context(), param(c, "visitId"), param(c, "clinicCode"))
+		if verr != nil {
+			return storeErrResponse(c, verr)
+		}
+		return c.JSON(visit)
+	})
+
 	app.Post("/api/v1/demo/visits/:visitId/clinics/:clinicCode/complete-encounter", func(c fiber.Ctx) error {
-		visit, verr := store.CompleteEncounter(c.Context(), c.Params("visitId"), c.Params("clinicCode"))
+		visit, verr := store.CompleteEncounter(c.Context(), param(c, "visitId"), param(c, "clinicCode"))
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -186,7 +206,7 @@ func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string) *fiber.
 	})
 
 	app.Post("/api/v1/demo/visits/:visitId/complete", func(c fiber.Ctx) error {
-		visit, verr := store.CompleteVisit(c.Context(), c.Params("visitId"))
+		visit, verr := store.CompleteVisit(c.Context(), param(c, "visitId"))
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -197,7 +217,7 @@ func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string) *fiber.
 	// so every open order and the visit itself are cancelled and announced
 	// as canonical events.
 	app.Post("/api/v1/demo/visits/:visitId/cancel", func(c fiber.Ctx) error {
-		visit, verr := store.CancelVisit(c.Context(), c.Params("visitId"))
+		visit, verr := store.CancelVisit(c.Context(), param(c, "visitId"))
 		if verr != nil {
 			return storeErrResponse(c, verr)
 		}
@@ -208,7 +228,7 @@ func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string) *fiber.
 	// navigation slip's QR: encodes the patient-view URL for this visit, so
 	// scanning it (or clicking the console link) opens the journey directly.
 	app.Get("/api/v1/demo/visits/:visitId/qrcode.png", func(c fiber.Ctx) error {
-		visitID := c.Params("visitId")
+		visitID := param(c, "visitId")
 		if _, ok := store.GetVisit(visitID); !ok {
 			return errResponse(c, http.StatusNotFound, "visit not found")
 		}
