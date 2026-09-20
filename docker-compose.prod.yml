@@ -33,6 +33,9 @@ services:
     environment:
       PORT: 8090
       PATIENT_APP_BASE_URL: ${PATIENT_APP_BASE_URL:-}
+      # Empty = same-origin: the console reads /api/v1/service-points through
+      # the edge proxy alongside its own demo paths.
+      CAREPATH_API_BASE_URL: ${CAREPATH_API_BASE_URL:-}
 
   migrate:
     image: migrate/migrate:v4.18.1

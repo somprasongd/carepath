@@ -94,7 +94,7 @@
       <input id="new-patient-ref" placeholder="HN (optional)">
       <input id="new-patient-name" placeholder="patient name (optional)">
       <div class="picker-row">
-        <input id="new-clinic-code" placeholder="clinic code, e.g. MED">
+        <select id="new-clinic-code" aria-label="Clinic"></select>
         <button type="button" id="add-clinic">Add clinic</button>
       </div>
       <div id="chosen-clinics" class="chips"></div>
@@ -107,7 +107,7 @@
       <div id="chosen-orders" class="chips"></div>
       <button class="primary" type="submit">New visit</button>
     </form>
-    <div class="hint">Pre-visit orders are attributed to the first clinic added.</div>
+    <div class="hint">Pre-visit orders are attributed to the first clinic added. Clinic and order-type options mirror CarePath's service points (CLINIC:*/ORDERTYPE:*).</div>
   </section>
 
   <section class="panel" id="detail-panel">
@@ -125,9 +125,22 @@
 
 <script>
 "use strict";
-// Order types are a strict enum shared with the contract — a select instead
-// of free text so demo operators cannot typo one (ADR-0009).
-const ORDER_TYPES = ["LAB", "XRAY", "EKG", "US", "DRUG"];
+// Pickers list exactly what CarePath can resolve to a destination, so a
+// visit staged here can never name a clinic or order type CarePath has no
+// service point for. The live list is read browser-side from CarePath's
+// public GET /api/v1/service-points (CAREPATH_API_BASE_URL, same-origin
+// behind the prod proxy): CLINIC:<code> feeds the clinic pickers,
+// ORDERTYPE:<type> the order-type pickers. That read is console-only demo
+// tooling — the canonical HIS surface stays one-directional (ADR-0005).
+// The fallbacks below mirror CarePath's seed service points
+// (infra/postgres/migrations/000010) and only hold the pickers up until
+// the fetch lands; it is retried on the refresh tick while it fails.
+const FALLBACK_CLINICS = [{ code: "MED", name: "อายุรกรรม" }];
+const FALLBACK_ORDER_TYPES = ["LAB", "XRAY"];
+
+let clinicCatalog = FALLBACK_CLINICS;
+let orderTypeCatalog = FALLBACK_ORDER_TYPES;
+let catalogLoaded = false;
 
 let selectedVisit = null;
 let lastVisitsJSON = "";
@@ -154,6 +167,62 @@ async function api(method, path, body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
+}
+
+// Fetches CarePath's service-point list and narrows it to the picker
+// vocabularies. Throws (and keeps the fallbacks) unless both a CLINIC: and
+// an ORDERTYPE: entry came back, so a half-loaded answer never empties a
+// picker.
+async function loadCatalog() {
+  const base = window.CAREPATH_API_BASE_URL || "";
+  const points = await api("GET", base + "/api/v1/service-points");
+  const clinics = [];
+  const orderTypes = [];
+  points.forEach((p) => {
+    if (p.code.startsWith("CLINIC:")) clinics.push({ code: p.code.slice(7), name: p.name });
+    else if (p.code.startsWith("ORDERTYPE:")) orderTypes.push(p.code.slice(10));
+  });
+  if (!clinics.length || !orderTypes.length) throw new Error("no CLINIC:/ORDERTYPE: service points");
+  clinics.sort((a, b) => a.code.localeCompare(b.code));
+  orderTypes.sort();
+  clinicCatalog = clinics;
+  orderTypeCatalog = orderTypes;
+  catalogLoaded = true;
+  renderNewClinicPicker();
+  renderOrderTypePicker();
+  lastDetailJSON = ""; // rebuild the detail panel so its selects re-populate
+}
+
+function clinicName(code) {
+  const c = clinicCatalog.find((c) => c.code === code);
+  return (c && c.name) || code;
+}
+
+function clinicOptions(clinics) {
+  return clinics.map((c) => ({ value: c.code, label: c.code + (c.name && c.name !== c.code ? " · " + c.name : "") }));
+}
+
+// Replaces a select's options, keeping the current selection when it is
+// still among them and falling back to the first option otherwise.
+function setSelectOptions(sel, items) {
+  const prev = sel.value;
+  sel.replaceChildren(...items.map((it) => {
+    const opt = document.createElement("option");
+    opt.value = it.value;
+    opt.textContent = it.label;
+    return opt;
+  }));
+  if (items.length) sel.value = items.some((it) => it.value === prev) ? prev : items[0].value;
+}
+
+function renderNewClinicPicker() {
+  const available = clinicCatalog.filter((c) => !chosenClinics.some((ch) => ch.clinicCode === c.code));
+  setSelectOptions($("#new-clinic-code"), clinicOptions(available));
+  $("#add-clinic").disabled = !available.length;
+}
+
+function renderOrderTypePicker() {
+  setSelectOptions($("#new-order-type"), orderTypeCatalog.map((t) => ({ value: t, label: t })));
 }
 
 function tick() {
@@ -308,27 +377,36 @@ function renderDetail(visit) {
   });
   box.appendChild(clinics);
   if (visit.status === "ACTIVE") {
-    const addClinicForm = document.createElement("form");
-    const row = document.createElement("div");
-    row.className = "picker-row";
-    const input = document.createElement("input");
-    input.placeholder = "clinic code, e.g. SURG";
-    const btn = document.createElement("button");
-    btn.type = "submit";
-    btn.textContent = "Add clinic";
-    row.append(input, btn);
-    addClinicForm.appendChild(row);
-    addClinicForm.onsubmit = async (e) => {
-      e.preventDefault();
-      if (!input.value.trim()) return;
-      try {
-        await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/clinics", { clinicCode: input.value.trim() });
-        toast("Clinic " + input.value.trim() + " added");
-        lastDetailJSON = "";
-        refresh(true);
-      } catch (err) { toast("Add clinic failed: " + err.message, true); }
-    };
-    box.appendChild(addClinicForm);
+    const remaining = clinicCatalog.filter((c) => !visit.clinics.some((vc) => vc.code === c.code));
+    if (remaining.length) {
+      const addClinicForm = document.createElement("form");
+      const row = document.createElement("div");
+      row.className = "picker-row";
+      const select = document.createElement("select");
+      select.setAttribute("aria-label", "Clinic");
+      setSelectOptions(select, clinicOptions(remaining));
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      btn.textContent = "Add clinic";
+      row.append(select, btn);
+      addClinicForm.appendChild(row);
+      addClinicForm.onsubmit = async (e) => {
+        e.preventDefault();
+        if (!select.value) return;
+        try {
+          await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/clinics", { clinicCode: select.value, clinicName: clinicName(select.value) });
+          toast("Clinic " + select.value + " added");
+          lastDetailJSON = "";
+          refresh(true);
+        } catch (err) { toast("Add clinic failed: " + err.message, true); }
+      };
+      box.appendChild(addClinicForm);
+    } else {
+      const hint = document.createElement("div");
+      hint.className = "hint";
+      hint.textContent = "Every CarePath clinic is already assigned to this visit.";
+      box.appendChild(hint);
+    }
   }
 
   box.appendChild(document.createElement("h3")).textContent = "Orders";
@@ -354,12 +432,7 @@ function renderDetail(visit) {
     picker.className = "picker-row";
     const typeSelect = document.createElement("select");
     typeSelect.setAttribute("aria-label", "Order type");
-    ORDER_TYPES.forEach((t) => {
-      const opt = document.createElement("option");
-      opt.value = t;
-      opt.textContent = t;
-      typeSelect.appendChild(opt);
-    });
+    setSelectOptions(typeSelect, orderTypeCatalog.map((t) => ({ value: t, label: t })));
     const nameInput = document.createElement("input");
     nameInput.placeholder = "order name, e.g. CBC";
     const clinicSelect = document.createElement("select");
@@ -425,6 +498,7 @@ function renderChipList(box, items, labelOf, onRemove) {
 function renderChosenClinics() {
   renderChipList($("#chosen-clinics"), chosenClinics, (c) => c.clinicCode, (i) => {
     chosenClinics.splice(i, 1);
+    renderNewClinicPicker();
     renderChosenClinics();
   });
 }
@@ -437,11 +511,10 @@ function renderChosenOrders() {
 }
 
 $("#add-clinic").onclick = () => {
-  const code = $("#new-clinic-code").value.trim();
+  const code = $("#new-clinic-code").value;
   if (!code) return;
-  if (chosenClinics.some((c) => c.clinicCode === code)) { toast(code + " is already in the list"); return; }
-  chosenClinics.push({ clinicCode: code });
-  $("#new-clinic-code").value = "";
+  chosenClinics.push({ clinicCode: code, clinicName: clinicName(code) });
+  renderNewClinicPicker();
   renderChosenClinics();
 };
 
@@ -487,6 +560,9 @@ async function refresh(force) {
   if (refreshing && !force) return;
   refreshing = true;
   try {
+    // Retry the CarePath catalog until it answers — the API may still be
+    // booting when the console first loads.
+    if (!catalogLoaded) { try { await loadCatalog(); } catch { /* retried next tick */ } }
     const [visits, feed] = await Promise.all([
       api("GET", "/api/v1/demo/visits"),
       api("GET", "/api/v1/events?limit=15"),
@@ -507,12 +583,8 @@ async function refresh(force) {
 
 tick();
 setInterval(tick, 1000);
-$("#new-order-type").replaceChildren(...ORDER_TYPES.map((t) => {
-  const opt = document.createElement("option");
-  opt.value = t;
-  opt.textContent = t;
-  return opt;
-}));
+renderNewClinicPicker();
+renderOrderTypePicker();
 renderChosenClinics();
 renderChosenOrders();
 refresh();
