@@ -88,6 +88,9 @@ export const th = {
   'journey.navigateCta': 'นำทางไป{title}',
   'journey.shareWithFamily': 'แชร์ความคืบหน้าให้ญาติ',
   'journey.shareDemoHint': 'โหมดสาธิต: ยังขอสิทธิ์แชร์ไม่สำเร็จ',
+  'journey.recommendReason.nearest': 'แนะนำจุดที่ใกล้จากตำแหน่งล่าสุดของคุณ',
+  'journey.recommendReason.planOrder':
+    'แนะนำตามลำดับขั้นตอนของแผน — สแกน QR หน้าจุดบริการเพื่อให้ระบบเลือกจุดที่ใกล้ที่สุดจากตำแหน่งคุณ',
 
   // Next-step queue card (features/visit/components/QueueCard.tsx, FR-17).
   'queue.title': 'คิวขั้นตอนถัดไป',

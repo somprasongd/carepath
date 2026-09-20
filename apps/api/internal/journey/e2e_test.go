@@ -25,6 +25,10 @@ import (
 	hospitalmappostgres "carepath/apps/api/internal/hospitalmap/postgres"
 	"carepath/apps/api/internal/journey"
 	journeypostgres "carepath/apps/api/internal/journey/postgres"
+	"carepath/apps/api/internal/location"
+	locationpostgres "carepath/apps/api/internal/location/postgres"
+	"carepath/apps/api/internal/navigation"
+	navigationpostgres "carepath/apps/api/internal/navigation/postgres"
 	"carepath/apps/api/internal/platform/db"
 	"carepath/apps/api/internal/servicepoint"
 	servicepointpostgres "carepath/apps/api/internal/servicepoint/postgres"
@@ -125,7 +129,13 @@ func TestIngestToPlanEndToEnd(t *testing.T) {
 	hisClient := httpclient.New(server.URL, server.Client())
 	hospitalMap := hospitalmap.NewService(hospitalmappostgres.New(database))
 	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), hospitalMap)
-	journeys := journey.NewService(hisClient, servicePoints, journeypostgres.New(database), database, "Asia/Bangkok")
+	navigationGraph := navigation.NewService(navigationpostgres.New(database), servicePoints)
+	locations, err := location.NewService(locationpostgres.New(database), navigationGraph)
+	if err != nil {
+		t.Fatalf("location service: %v", err)
+	}
+	journeys := journey.NewService(hisClient, servicePoints, navigationGraph, locations,
+		journeypostgres.New(database), database, "Asia/Bangkok")
 	poller := ingest.New(hisClient, journeys, ingestpostgres.New(database),
 		slog.New(slog.NewTextHandler(&discard{}, &slog.HandlerOptions{Level: slog.LevelError})))
 

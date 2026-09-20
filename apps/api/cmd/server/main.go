@@ -101,7 +101,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	// (#101) share the analytics timezone — it is the hospital's timezone,
 	// not an analytics-specific knob.
 	analyticsTZ := envOrDefault("ANALYTICS_TIMEZONE", "Asia/Bangkok")
-	journeys := journey.NewService(hisClient, servicePoints, journeypostgres.New(database), database, analyticsTZ)
+	journeys := journey.NewService(hisClient, servicePoints, navigationGraph, locations, journeypostgres.New(database), database, analyticsTZ)
 	poller := ingest.New(hisClient, journeys, ingestpostgres.New(database), log)
 	interval := envDuration("HIS_INGEST_INTERVAL", 5*time.Second)
 	go poller.Run(context.Background(), interval)

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"carepath/apps/api/internal/his"
+	"carepath/apps/api/internal/location"
+	"carepath/apps/api/internal/navigation"
 	"carepath/apps/api/internal/platform/apperr"
 	"carepath/apps/api/internal/servicepoint"
 )
@@ -205,9 +207,67 @@ func openedEvent() his.Event {
 	}
 }
 
+// fakeLocation answers Current from a canned observation/error; the write
+// paths panic — the recommendation only reads (#103).
+type fakeLocation struct {
+	obs     location.Observation
+	err     error
+	current int
+}
+
+func (f *fakeLocation) Sources() []location.Source { return nil }
+func (f *fakeLocation) Resolve(context.Context, location.Source, string) (location.Observation, error) {
+	panic("not implemented in fake")
+}
+func (f *fakeLocation) Report(context.Context, string, location.Source, string) (location.Observation, error) {
+	panic("not implemented in fake")
+}
+func (f *fakeLocation) Current(context.Context, string) (location.Observation, error) {
+	f.current++
+	return f.obs, f.err
+}
+
+// fakeNavigation answers DistancesToServicePoints from a canned map and
+// records the call; everything else panics.
+type fakeNavigation struct {
+	distances   map[string]float64
+	err         error
+	gotOrigin   string
+	gotCodes    []string
+	distanceAsk int
+}
+
+func (f *fakeNavigation) GetNode(context.Context, string) (navigation.NavNode, error) {
+	panic("not implemented in fake")
+}
+func (f *fakeNavigation) ListNodes(context.Context) ([]navigation.NavNode, error) {
+	panic("not implemented in fake")
+}
+func (f *fakeNavigation) ListEdges(context.Context) ([]navigation.NavEdge, error) {
+	panic("not implemented in fake")
+}
+func (f *fakeNavigation) Route(context.Context, string, string, navigation.RouteOptions) (navigation.Route, error) {
+	panic("not implemented in fake")
+}
+func (f *fakeNavigation) RouteToServicePoint(context.Context, string, string, navigation.RouteOptions) (navigation.Route, error) {
+	panic("not implemented in fake")
+}
+func (f *fakeNavigation) DistancesToServicePoints(_ context.Context, fromNodeID string, codes []string, _ navigation.RouteOptions) (map[string]float64, error) {
+	f.distanceAsk++
+	f.gotOrigin, f.gotCodes = fromNodeID, append([]string{}, codes...)
+	return f.distances, f.err
+}
+
 func newTestService(hisClient his.Client, repo *fakeRepo) Service {
 	sp := &fakeServicepoint{known: map[string]bool{"REGISTRATION": true, "ORDERTYPE:LAB": true, "PHARMACY": true, "CLINIC:MED": true}}
-	return NewService(hisClient, sp, repo, &fakeTransactor{}, "Asia/Bangkok")
+	return NewService(hisClient, sp, nil, nil, repo, &fakeTransactor{}, "Asia/Bangkok")
+}
+
+// newRecommendingService wires the location and navigation fakes so
+// GetJourney's ranking (#103) is exercisable end to end.
+func newRecommendingService(hisClient his.Client, repo *fakeRepo, loc *fakeLocation, nav *fakeNavigation) Service {
+	sp := &fakeServicepoint{known: map[string]bool{"REGISTRATION": true, "ORDERTYPE:LAB": true, "PHARMACY": true, "CLINIC:MED": true}}
+	return NewService(hisClient, sp, nav, loc, repo, &fakeTransactor{}, "Asia/Bangkok")
 }
 
 func TestApplyHISEventProjectsJourney(t *testing.T) {
@@ -259,7 +319,7 @@ func TestDuplicateEventIsNoOp(t *testing.T) {
 func TestUnmappedBindingProjectsExplicitly(t *testing.T) {
 	repo := newFakeRepo()
 	sp := &fakeServicepoint{known: map[string]bool{}} // nothing mapped
-	svc := NewService(&fakeHIS{visit: snapshot()}, sp, repo, &fakeTransactor{}, "Asia/Bangkok")
+	svc := NewService(&fakeHIS{visit: snapshot()}, sp, nil, nil, repo, &fakeTransactor{}, "Asia/Bangkok")
 
 	if err := svc.ApplyHISEvent(context.Background(), openedEvent()); err != nil {
 		t.Fatalf("ApplyHISEvent: %v", err)
@@ -1074,5 +1134,140 @@ func TestTimelineCloseRoundAttributedToCommand(t *testing.T) {
 	}
 	if withdrawn := eventsOf(round, "CLINIC:MED:2"); len(withdrawn) != 1 || withdrawn[0].ToStatus != StepCancelled {
 		t.Fatalf("withdrawn round-2 event = %+v, want CANCELLED", withdrawn)
+	}
+}
+
+// readyVisit seeds a visit whose clinic (sequence 1) and lab (sequence 2)
+// steps are both actionable — the multi-choice state FR-30/ADR-0009 allows
+// and #103's recommendation must resolve.
+func readyVisit() Visit {
+	clinic := "CLINIC:MED:1"
+	lab := "LAB:1"
+	return Visit{
+		VisitID: "VISIT-001", PatientRef: "PAT-001", PatientName: "สมชาย", Status: his.VisitActive,
+		Steps: []Step{
+			{StepKey: clinic, Sequence: 1, Kind: KindClinic, ClinicCode: &clinic, Status: StepReady, ServicePointID: spID("SP-CLINIC:MED")},
+			{StepKey: lab, Sequence: 2, Kind: KindLab, Status: StepReady, ServicePointID: spID("SP-ORDERTYPE:LAB")},
+		},
+	}
+}
+
+// #103 AC1/AC2: with a known location, the recommendation is the actionable
+// step bound nearest by walking distance — even when plan order disagrees.
+func TestGetJourneyRecommendsNearestStep(t *testing.T) {
+	repo := newFakeRepo()
+	repo.visits["VISIT-001"] = readyVisit()
+	loc := &fakeLocation{obs: location.Observation{VisitID: "VISIT-001", NodeID: "I-1301/ENTRANCE", Source: location.SourceQR}}
+	nav := &fakeNavigation{distances: map[string]float64{"CLINIC:MED": 500, "ORDERTYPE:LAB": 100}}
+	svc := newRecommendingService(&fakeHIS{}, repo, loc, nav)
+
+	view, err := svc.GetJourney(context.Background(), "VISIT-001")
+	if err != nil {
+		t.Fatalf("GetJourney: %v", err)
+	}
+	if view.Recommended == nil || view.Recommended.StepKey != "LAB:1" {
+		t.Fatalf("recommended = %+v, want the nearer LAB:1", view.Recommended)
+	}
+	if view.RecommendationReason != RecommendNearest {
+		t.Fatalf("reason = %q, want NEAREST", view.RecommendationReason)
+	}
+	if nav.distanceAsk != 1 || nav.gotOrigin != "I-1301/ENTRANCE" {
+		t.Fatalf("distance calls = %d origin = %q, want 1 call from the observation's node", nav.distanceAsk, nav.gotOrigin)
+	}
+}
+
+// Equal distances keep the earlier plan sequence — the pick only moves when
+// the patient (or plan) does, never on a refetch race (#103's stability).
+func TestGetJourneyTieKeepsPlanOrderStep(t *testing.T) {
+	repo := newFakeRepo()
+	repo.visits["VISIT-001"] = readyVisit()
+	loc := &fakeLocation{obs: location.Observation{NodeID: "I-1301/ENTRANCE"}}
+	nav := &fakeNavigation{distances: map[string]float64{"CLINIC:MED": 100, "ORDERTYPE:LAB": 100}}
+	svc := newRecommendingService(&fakeHIS{}, repo, loc, nav)
+
+	view, err := svc.GetJourney(context.Background(), "VISIT-001")
+	if err != nil {
+		t.Fatalf("GetJourney: %v", err)
+	}
+	if view.Recommended == nil || view.Recommended.StepKey != "CLINIC:MED:1" {
+		t.Fatalf("recommended = %+v, want sequence-first CLINIC:MED:1 on the tie", view.Recommended)
+	}
+	if view.RecommendationReason != RecommendNearest {
+		t.Fatalf("reason = %q, want NEAREST", view.RecommendationReason)
+	}
+}
+
+// A step without a usable distance (unmapped or unreachable place) ranks
+// after every ranked one, keeping its plan order in that tail.
+func TestGetJourneyUnroutedStepRanksLast(t *testing.T) {
+	repo := newFakeRepo()
+	repo.visits["VISIT-001"] = readyVisit()
+	loc := &fakeLocation{obs: location.Observation{NodeID: "I-1301/ENTRANCE"}}
+	nav := &fakeNavigation{distances: map[string]float64{"ORDERTYPE:LAB": 999}}
+	svc := newRecommendingService(&fakeHIS{}, repo, loc, nav)
+
+	view, err := svc.GetJourney(context.Background(), "VISIT-001")
+	if err != nil {
+		t.Fatalf("GetJourney: %v", err)
+	}
+	if view.Recommended == nil || view.Recommended.StepKey != "LAB:1" {
+		t.Fatalf("recommended = %+v, want the ranked LAB:1 over the unrouted CLINIC:MED:1", view.Recommended)
+	}
+}
+
+// #103 AC3: no recorded location → the plan's own sequence decides, with
+// the reason saying so — an explainable fallback, never a silent
+// first-element grab. The same behavior covers an unroutable origin and a
+// graph error.
+func TestGetJourneyWithoutLocationFallsBackToPlanOrder(t *testing.T) {
+	repo := newFakeRepo()
+	repo.visits["VISIT-001"] = readyVisit()
+
+	cases := map[string]struct {
+		loc      *fakeLocation
+		nav      *fakeNavigation
+		wantAsks int
+	}{
+		"no observation":      {loc: &fakeLocation{err: location.ErrNoLocation}, nav: &fakeNavigation{}, wantAsks: 0},
+		"unknown origin node": {loc: &fakeLocation{obs: location.Observation{NodeID: "I-9999/X"}}, nav: &fakeNavigation{err: navigation.ErrNodeNotFound}, wantAsks: 1},
+		"graph read failure":  {loc: &fakeLocation{obs: location.Observation{NodeID: "I-1301/ENTRANCE"}}, nav: &fakeNavigation{err: apperr.New(apperr.KindInternal, "boom")}, wantAsks: 1},
+		"nothing routable":    {loc: &fakeLocation{obs: location.Observation{NodeID: "I-1301/ENTRANCE"}}, nav: &fakeNavigation{distances: map[string]float64{}}, wantAsks: 1},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc := newRecommendingService(&fakeHIS{}, repo, tc.loc, tc.nav)
+			view, err := svc.GetJourney(context.Background(), "VISIT-001")
+			if err != nil {
+				t.Fatalf("GetJourney: %v", err)
+			}
+			if view.Recommended == nil || view.Recommended.StepKey != "CLINIC:MED:1" {
+				t.Fatalf("recommended = %+v, want plan-order CLINIC:MED:1", view.Recommended)
+			}
+			if view.RecommendationReason != RecommendPlanOrder {
+				t.Fatalf("reason = %q, want PLAN_ORDER", view.RecommendationReason)
+			}
+			if tc.nav.distanceAsk != tc.wantAsks {
+				t.Fatalf("distance calls = %d, want %d", tc.nav.distanceAsk, tc.wantAsks)
+			}
+		})
+	}
+}
+
+// A finished visit stays recommendation-free regardless of location.
+func TestCompletedVisitHasNoRecommendation(t *testing.T) {
+	repo := newFakeRepo()
+	visit := readyVisit()
+	visit.Status = VisitCompleted
+	repo.visits["VISIT-001"] = visit
+	loc := &fakeLocation{obs: location.Observation{NodeID: "I-1301/ENTRANCE"}}
+	nav := &fakeNavigation{distances: map[string]float64{"CLINIC:MED": 1}}
+	svc := newRecommendingService(&fakeHIS{}, repo, loc, nav)
+
+	view, err := svc.GetJourney(context.Background(), "VISIT-001")
+	if err != nil {
+		t.Fatalf("GetJourney: %v", err)
+	}
+	if view.Recommended != nil || view.RecommendationReason != "" {
+		t.Fatalf("recommended = %+v reason = %q, want none for a completed visit", view.Recommended, view.RecommendationReason)
 	}
 }

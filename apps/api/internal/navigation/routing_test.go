@@ -163,3 +163,70 @@ func TestRouteRejectsNegativeEdgeDistance(t *testing.T) {
 		t.Fatalf("error = %v, want an internal-kind error for corrupt distance", err)
 	}
 }
+
+func TestShortestDistancesSettlesWholeGraph(t *testing.T) {
+	graph := routeGraph()
+	nodes := make([]NavNode, 0, len(graph.nodes))
+	for _, node := range graph.nodes {
+		nodes = append(nodes, node)
+	}
+
+	dist, err := shortestDistances(nodes, graph.edges, "F1/a", RouteOptions{})
+	if err != nil {
+		t.Fatalf("shortestDistances: %v", err)
+	}
+	want := map[string]float64{"F1/a": 0, "F1/b": 100, "F1/c": 150, "F1/d": 120}
+	if len(dist) != len(want) {
+		t.Fatalf("distances = %v, want exactly %v", dist, want)
+	}
+	for id, d := range want {
+		if dist[id] != d {
+			t.Fatalf("dist[%s] = %v, want %v", id, dist[id], d)
+		}
+	}
+}
+
+func TestShortestDistancesOmitsUnreachableNodes(t *testing.T) {
+	graph := routeGraph()
+	graph.nodes["F1/x"] = NavNode{ID: "F1/x", FloorID: "F1", NodeType: "CORRIDOR"} // no edges
+	nodes := make([]NavNode, 0, len(graph.nodes))
+	for _, node := range graph.nodes {
+		nodes = append(nodes, node)
+	}
+
+	dist, err := shortestDistances(nodes, graph.edges, "F1/a", RouteOptions{})
+	if err != nil {
+		t.Fatalf("shortestDistances: %v", err)
+	}
+	if _, ok := dist["F1/x"]; ok {
+		t.Fatalf("unreachable F1/x present with %v", dist["F1/x"])
+	}
+	if _, ok := dist["F1/c"]; !ok {
+		t.Fatal("reachable F1/c absent")
+	}
+}
+
+func TestShortestDistancesUnknownOriginIsNotFound(t *testing.T) {
+	graph := routeGraph()
+	nodes := make([]NavNode, 0, len(graph.nodes))
+	for _, node := range graph.nodes {
+		nodes = append(nodes, node)
+	}
+
+	if _, err := shortestDistances(nodes, graph.edges, "F1/nope", RouteOptions{}); !errors.Is(err, ErrNodeNotFound) {
+		t.Fatalf("error = %v, want ErrNodeNotFound", err)
+	}
+}
+
+func TestShortestDistancesRejectsNegativeEdgeDistance(t *testing.T) {
+	graph := routeGraph()
+	graph.edges = append(graph.edges, NavEdge{ID: "F1/a>F1/b-neg", FromNodeID: "F1/a", ToNodeID: "F1/b", Distance: -1})
+	nodes := make([]NavNode, 0, len(graph.nodes))
+	for _, node := range graph.nodes {
+		nodes = append(nodes, node)
+	}
+
+	if _, err := shortestDistances(nodes, graph.edges, "F1/a", RouteOptions{}); apperr.KindOf(err) != apperr.KindInternal {
+		t.Fatalf("error = %v, want KindInternal for a negative edge", err)
+	}
+}

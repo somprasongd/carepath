@@ -85,6 +85,23 @@ function stepMeta(step: JourneyStep, state: JourneyStepState, locale: Locale): s
 }
 
 /**
+ * Why `recommended` is what it is (#103, FR-04): the API sends the criterion
+ * as a stable code (ADR-0012); this maps it to the patient's language. The
+ * plan-order line also nudges the patient to scan a QR — the one act that
+ * upgrades the next pick to the distance criterion. An unknown code (a newer
+ * API) renders nothing rather than a wrong promise.
+ */
+export function recommendationReasonLabel(
+  reason: Journey['recommendationReason'],
+  locale: Locale,
+): string | undefined {
+  const catalog = messagesFor(locale)
+  if (reason === 'NEAREST') return catalog['journey.recommendReason.nearest']
+  if (reason === 'PLAN_ORDER') return catalog['journey.recommendReason.planOrder']
+  return undefined
+}
+
+/**
  * Journey progress for the patient home screen (#34): how many steps are
  * finished. Cancelled steps stay in `total` — they are part of the plan the
  * rail recaps (the `step.meta.cancelled` label), so 2 done of 5 with one

@@ -20,6 +20,17 @@ type StepView struct {
 	ServicePoint   *servicepoint.ServicePoint `json:"servicePoint,omitempty"`
 }
 
+// Recommendation criteria (#103, FR-04), sent as stable codes — the
+// patient-facing text lives in the web catalogs (ADR-0012).
+const (
+	// RecommendNearest: the actionable step whose service point is the
+	// shortest walk from the visit's last known location.
+	RecommendNearest = "NEAREST"
+	// RecommendPlanOrder: no usable location, so the plan's own sequence
+	// decides — the documented fallback, not a silent first-element grab.
+	RecommendPlanOrder = "PLAN_ORDER"
+)
+
 // View is the patient/staff-facing journey: the plan with steps ordered by
 // sequence, every currently-READY step in Actionable, and CarePath's pick
 // among them as Recommended. Completed makes a finished visit unambiguous
@@ -33,13 +44,18 @@ type View struct {
 	Steps       []StepView `json:"steps"`
 	Actionable  []StepView `json:"actionable"`
 	Recommended *StepView  `json:"recommended,omitempty"`
-	SyncedAt    time.Time  `json:"syncedAt"`
+	// RecommendationReason names the criterion behind Recommended, so the
+	// pick is explainable rather than a black box. Empty exactly when
+	// Recommended is nil.
+	RecommendationReason string    `json:"recommendationReason,omitempty"`
+	SyncedAt             time.Time `json:"syncedAt"`
 }
 
 // assembleView resolves service points for the plan's stored bindings and
-// derives actionable/recommended. Recommendation today is simply the first
-// actionable step by sequence — a placeholder until the navigation module
-// can rank by distance/queue length (ADR-0009 §6).
+// derives actionable/recommended. Recommendation starts at the plan-order
+// fallback — the first actionable step by sequence; GetJourney then upgrades
+// it to the distance criterion when the visit has a known location
+// (recommendFromLocation, ADR-0009 §6).
 func assembleView(visit Visit, points []servicepoint.ServicePoint) View {
 	byID := make(map[string]servicepoint.ServicePoint, len(points))
 	for _, sp := range points {
@@ -78,9 +94,48 @@ func assembleView(visit Visit, points []servicepoint.ServicePoint) View {
 		if len(view.Actionable) > 0 {
 			recommended := view.Actionable[0]
 			view.Recommended = &recommended
+			view.RecommendationReason = RecommendPlanOrder
 		}
 	}
 	return view
+}
+
+// recommendByDistance re-picks Recommended as the actionable step bound
+// closest to the patient's last known position (#103, FR-04). distances maps
+// service point code → walking distance; actionable steps without a distance
+// (unmapped point, unreachable place) keep their plan order after every
+// ranked step, and equal distances stay with the earlier sequence — so the
+// pick only moves when the patient's position or plan does, never because a
+// refetch raced a queue tick. Returns whether the distance criterion took
+// effect; when it did not, the plan-order fallback assembleView set stands.
+func recommendByDistance(view *View, distances map[string]float64) bool {
+	if len(view.Actionable) == 0 || len(distances) == 0 {
+		return false
+	}
+	best := -1
+	var bestDist float64
+	for i := range view.Actionable {
+		step := view.Actionable[i]
+		if step.ServicePoint == nil {
+			continue
+		}
+		d, ok := distances[step.ServicePoint.Code]
+		if !ok {
+			continue
+		}
+		// Actionable is sequence-ordered, so a strict < keeps the earlier
+		// step on ties.
+		if best < 0 || d < bestDist {
+			best, bestDist = i, d
+		}
+	}
+	if best < 0 {
+		return false
+	}
+	recommended := view.Actionable[best]
+	view.Recommended = &recommended
+	view.RecommendationReason = RecommendNearest
+	return true
 }
 
 // bindingKey derives the servicepoint lookup code for a step (ADR-0009):

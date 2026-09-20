@@ -5,6 +5,7 @@ import type { Journey, JourneyStep } from './queries'
 import {
   journeyProgress,
   journeyProgressLabel,
+  recommendationReasonLabel,
   servicePointLabel,
   stepTitle,
   toJourneySteps,
@@ -259,5 +260,21 @@ describe('visitLoadErrorMessage', () => {
 
   it('handles a missing error object', () => {
     expect(visitLoadErrorMessage(null, 'en')).toBe('We could not reach the service.')
+  })
+})
+
+describe('recommendationReasonLabel', () => {
+  it('maps each criterion code to the locale catalog text', () => {
+    expect(recommendationReasonLabel('NEAREST', 'th')).toBe(
+      messagesFor('th')['journey.recommendReason.nearest'],
+    )
+    expect(recommendationReasonLabel('PLAN_ORDER', 'en')).toBe(
+      messagesFor('en')['journey.recommendReason.planOrder'],
+    )
+  })
+
+  it('renders nothing without a recommendation or for an unknown code', () => {
+    expect(recommendationReasonLabel(null, 'th')).toBeUndefined()
+    expect(recommendationReasonLabel(undefined, 'en')).toBeUndefined()
   })
 })

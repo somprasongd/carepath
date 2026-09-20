@@ -81,7 +81,7 @@ func newAnalyticsApp(t *testing.T, database *db.DB) *fiber.App {
 
 	// The journey service needs an HIS client by construction; the guard
 	// rejects every request this test sends it before the client is used.
-	journeys := journey.NewService(httpclient.New("http://127.0.0.1:1", nil), nil,
+	journeys := journey.NewService(httpclient.New("http://127.0.0.1:1", nil), nil, nil, nil,
 		journeypostgres.New(database), database, "Asia/Bangkok")
 
 	analyticsService, err := analytics.NewService(analyticspostgres.New(database), database,

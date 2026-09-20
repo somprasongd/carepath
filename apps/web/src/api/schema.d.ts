@@ -1654,8 +1654,13 @@ export interface components {
             steps: components["schemas"]["JourneyStep"][];
             /** @description Every step currently READY — what the patient could do right now, in any order. */
             actionable: components["schemas"]["JourneyStep"][];
-            /** @description CarePath's pick among `actionable` for the patient-facing single primary action; null when actionable is empty. Today this is the first actionable step by sequence. Ranking it by distance or queue length (ADR-0009 §6) remains the intent — the queue data it needs is served by /api/v1/journeys/{visitId}/queue (FR-17), but the ranking itself is not implemented yet. */
+            /** @description CarePath's pick among `actionable` for the patient-facing single primary action; null when actionable is empty. Ranked by shortest walking distance from the visit's last known location when one exists (recommendationReason NEAREST), otherwise by plan sequence (recommendationReason PLAN_ORDER). Queue length deliberately does not rank it (#103) — a recommendation must stay put while the patient walks, and queue ticks would flip it; the queue picture rides /api/v1/journeys/{visitId}/queue (FR-17) beside the pick instead. */
             recommended?: components["schemas"]["JourneyStep"] | null;
+            /**
+             * @description Which criterion produced `recommended`, so the pick is explainable rather than a black box (ADR-0012 — a stable code; the patient-facing text lives in the web catalogs). NEAREST is the shortest walking distance on the navigation graph from the visit's last recorded location observation (default accessibility). PLAN_ORDER means no usable location, so the plan's own sequence decides; actionable steps that cannot be routed rank after every routed one, ties by sequence. Null exactly when `recommended` is null.
+             * @enum {string|null}
+             */
+            recommendationReason?: "NEAREST" | "PLAN_ORDER" | null;
             /** Format: date-time */
             syncedAt: string;
         };

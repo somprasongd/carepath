@@ -22,6 +22,7 @@ import { ShareSheet } from '@/features/share'
 import {
   journeyProgressLabel,
   QueueCard,
+  recommendationReasonLabel,
   servicePointLabel,
   stepTitle,
   toJourneySteps,
@@ -130,6 +131,7 @@ export function JourneyScreen({
   // the single primary action keeps the screen's one-question shape.
   const queueStep =
     recommended && queue ? queue.steps.find((s) => s.stepKey === recommended.stepKey) : undefined
+  const reasonLabel = journey ? recommendationReasonLabel(journey.recommendationReason, locale) : undefined
 
   return (
     <JourneyShell
@@ -141,6 +143,9 @@ export function JourneyScreen({
       onNavigate={onNavigate}
       displayName={identity?.displayName}
     >
+      {/* Why this step is the pick (#103): the criterion in the patient's
+          language — the recommendation must be explainable, not a black box. */}
+      {recommended && reasonLabel && <Meta className="-mt-5 mb-4">{reasonLabel}</Meta>}
       {queueStep && <QueueCard step={queueStep} />}
       <JourneyRail
         steps={rail}

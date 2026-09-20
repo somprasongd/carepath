@@ -57,6 +57,9 @@ func (f *fakeNodes) Route(context.Context, string, string, navigation.RouteOptio
 func (f *fakeNodes) RouteToServicePoint(context.Context, string, string, navigation.RouteOptions) (navigation.Route, error) {
 	return navigation.Route{}, navigation.ErrNoRoute
 }
+func (f *fakeNodes) DistancesToServicePoints(context.Context, string, []string, navigation.RouteOptions) (map[string]float64, error) {
+	return nil, navigation.ErrNoRoute
+}
 
 func newProvider() (Provider, *fakePlaces, *fakeNodes) {
 	places := &fakePlaces{}
