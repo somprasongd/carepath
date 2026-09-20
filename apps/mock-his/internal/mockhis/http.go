@@ -34,9 +34,10 @@ func param(c fiber.Ctx, name string) string {
 // (/api/v1/demo/* and /console) that exists only on the mock — a real HIS
 // has its own operator tooling (see docs/integration/mock-his.md). The base
 // logger feeds the request-logging middleware; state changes log through the
-// request-scoped logger it stores in ctx.
-func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string) *fiber.App {
-	store := NewStore()
+// request-scoped logger it stores in ctx. Store options pass through (tests
+// inject a fixed clock for deterministic event ids).
+func New(log *slog.Logger, patientAppBaseURL, carepathAPIBaseURL string, storeOpts ...StoreOption) *fiber.App {
+	store := NewStore(storeOpts...)
 	app := fiber.New()
 	app.Use(logger.Middleware(log))
 

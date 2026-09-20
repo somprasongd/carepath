@@ -204,11 +204,12 @@ the API when the two aren't same-origin (docker-compose.yml defaults it to
 the dev API port; behind docker-compose.prod.yml's single-origin proxy the
 empty default is correct).
 
-One demo-operational caveat: the event log lives in memory, so restarting Mock
-HIS resets event ids from `EVT-000001` while CarePath's stored feed cursor
-keeps its old (higher) value — the poller would then see nothing new. Start a
-demo from a fresh stack (`docker compose down -v && docker compose up --build`)
-rather than restarting Mock HIS alone against a warm CarePath database.
+One demo-operational caveat: the event log (and all console-created visits)
+live in memory, so restarting Mock HIS loses them. Event ids are seeded from
+a wall-clock base, so a restarted feed's ids always sort above whatever
+cursor CarePath persisted — ingestion resumes on its own, no cursor surgery
+or database reset needed. Only the demo history itself is gone: re-create
+visits from the console after a restart (each deploy restarts Mock HIS).
 
 ## Production replacement
 

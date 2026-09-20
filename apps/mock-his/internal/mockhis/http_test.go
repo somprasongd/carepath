@@ -16,6 +16,15 @@ import (
 // build a capturing logger instead.
 func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
+// Event ids are wall-clock based so they grow across store restarts; the
+// fixed clock keeps them deterministic in tests. Seeds occupy ids
+// seedEventBase+1 .. seedEventBase+4.
+const seedEventBase = 1789000000
+
+var testClock = func() time.Time { return time.Unix(seedEventBase, 0) }
+
+func newApp() *fiber.App { return New(discardLogger(), "", "", WithClock(testClock)) }
+
 // do runs one request against the app and decodes the JSON response body.
 func do(t *testing.T, app *fiber.App, method, path, body string) (int, map[string]any) {
 	t.Helper()
@@ -67,7 +76,7 @@ func eventTypes(body map[string]any) []string {
 }
 
 func TestVisitSnapshotMatchesContract(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 
 	status, body := do(t, app, http.MethodGet, "/api/v1/visits/VISIT-001", "")
 	if status != http.StatusOK {
@@ -97,7 +106,7 @@ func TestVisitSnapshotMatchesContract(t *testing.T) {
 // JSON null: the contract declares orders an array, and the console's detail
 // panel (visit.orders.length) breaks on null.
 func TestOpenVisitWithoutOrdersHasEmptyArray(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits",
 		`{"visitType":"WALKIN","clinics":[{"clinicCode":"MED"}]}`)
@@ -124,7 +133,7 @@ func TestOpenVisitWithoutOrdersHasEmptyArray(t *testing.T) {
 // whose chest X-ray is ordered mid-visit, with stable identifiers the E2E
 // happy path (#40) and the demo script (#41) rely on.
 func TestSeedScenarioVisit(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 
 	status, body := do(t, app, http.MethodGet, "/api/v1/visits/VISIT-002", "")
 	if status != http.StatusOK {
@@ -153,7 +162,7 @@ func TestSeedScenarioVisit(t *testing.T) {
 
 	// The scenario announces itself through the canonical feed like any
 	// real visit: opened then placed, right after the VISIT-001 seed events.
-	_, page := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000002&limit=2", "")
+	_, page := do(t, app, http.MethodGet, "/api/v1/events?after="+EventID(seedEventBase+2)+"&limit=2", "")
 	scenarioTypes := eventTypes(page)
 	if len(scenarioTypes) != 2 || scenarioTypes[0] != "visit.opened" || scenarioTypes[1] != "order.placed" {
 		t.Fatalf("scenario events = %v, want [visit.opened order.placed]", scenarioTypes)
@@ -166,7 +175,7 @@ func TestSeedScenarioVisit(t *testing.T) {
 }
 
 func TestOpenVisit(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits",
 		`{"visitType":"WALKIN","patientRef":"HN-X","patientName":"ทดสอบ",`+
@@ -204,7 +213,7 @@ func TestOpenVisit(t *testing.T) {
 }
 
 func TestOpenVisitWithPreVisitOrders(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits",
 		`{"visitType":"APPOINTMENT","clinics":[{"clinicCode":"MED"}],`+
 			`"orders":[{"orderType":"LAB","orderName":"CBC","orderedByClinic":"MED"}]}`)
@@ -218,7 +227,7 @@ func TestOpenVisitWithPreVisitOrders(t *testing.T) {
 }
 
 func TestAddClinic(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics", `{"clinicCode":"SURG"}`)
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %v)", status, body)
@@ -237,7 +246,7 @@ func TestAddClinic(t *testing.T) {
 }
 
 func TestOrderLifecycle(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 	status, order := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/orders",
 		`{"orderType":"XRAY","orderName":"Chest X-Ray","orderedByClinic":"MED"}`)
 	if status != http.StatusOK || order["status"] != "PLACED" {
@@ -271,7 +280,7 @@ func TestOrderLifecycle(t *testing.T) {
 }
 
 func TestOrderCancel(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 	_, order := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/orders",
 		`{"orderType":"EKG","orderName":"ECG","orderedByClinic":"MED"}`)
 	ref := order["orderRef"].(string)
@@ -286,7 +295,7 @@ func TestOrderCancel(t *testing.T) {
 }
 
 func TestPlaceOrderRejectsUnknownTypeAndFinishedVisit(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 	if status, _ := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/orders",
 		`{"orderType":"MRI","orderName":"MRI","orderedByClinic":"MED"}`); status != http.StatusBadRequest {
 		t.Fatalf("unknown order type status = %d, want 400", status)
@@ -304,7 +313,7 @@ func TestPlaceOrderRejectsUnknownTypeAndFinishedVisit(t *testing.T) {
 }
 
 func TestCompleteEncounter(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics/MED/complete-encounter", "")
 	if status != http.StatusOK || body["visitId"] != "VISIT-001" {
 		t.Fatalf("complete-encounter = %d %v, want 200 VISIT-001", status, body)
@@ -318,7 +327,7 @@ func TestCompleteEncounter(t *testing.T) {
 }
 
 func TestStartEncounter(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics/MED/start-encounter", "")
 	if status != http.StatusOK || body["visitId"] != "VISIT-001" {
 		t.Fatalf("start-encounter = %d %v, want 200 VISIT-001", status, body)
@@ -332,7 +341,7 @@ func TestStartEncounter(t *testing.T) {
 
 	// The press must surface as one canonical event carrying the clinic and
 	// a timestamp, like encounter.completed does.
-	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000004&limit=10", "")
+	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after="+EventID(seedEventBase+4)+"&limit=10", "")
 	types := eventTypes(feed)
 	if len(types) != 1 || types[0] != "encounter.started" {
 		t.Fatalf("event types after start-encounter = %v, want [encounter.started]", types)
@@ -344,7 +353,7 @@ func TestStartEncounter(t *testing.T) {
 }
 
 func TestCompleteVisit(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/complete", "")
 	if status != http.StatusOK || body["status"] != "COMPLETED" {
 		t.Fatalf("complete = %d %v, want 200 COMPLETED", status, body)
@@ -358,15 +367,15 @@ func TestCompleteVisit(t *testing.T) {
 }
 
 func TestEventFeedCursorAndEnvelope(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 
 	status, page := do(t, app, http.MethodGet, "/api/v1/events?limit=1", "")
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200", status)
 	}
 	events := page["events"].([]any)
-	if len(events) != 1 || page["nextAfter"] != "EVT-000001" {
-		t.Fatalf("first page = %v nextAfter %v, want 1 event and EVT-000001", len(events), page["nextAfter"])
+	if len(events) != 1 || page["nextAfter"] != EventID(seedEventBase+1) {
+		t.Fatalf("first page = %v nextAfter %v, want 1 event and the first seed id", len(events), page["nextAfter"])
 	}
 	first := events[0].(map[string]any)
 	for _, key := range []string{"eventId", "occurredAt", "visitId", "patientRef", "type", "payload"} {
@@ -374,14 +383,14 @@ func TestEventFeedCursorAndEnvelope(t *testing.T) {
 			t.Fatalf("event envelope missing %q: %v", key, first)
 		}
 	}
-	if first["eventId"] != "EVT-000001" || first["type"] != "visit.opened" {
-		t.Fatalf("first event = %v, want EVT-000001 visit.opened", first)
+	if first["eventId"] != EventID(seedEventBase+1) || first["type"] != "visit.opened" {
+		t.Fatalf("first event = %v, want the first seed id visit.opened", first)
 	}
 
 	// Seed history is 2x (opened + placed) = 4 events.
-	_, tail := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000004", "")
+	_, tail := do(t, app, http.MethodGet, "/api/v1/events?after="+EventID(seedEventBase+4)+"", "")
 	if got := len(tail["events"].([]any)); got != 0 {
-		t.Fatalf("events after EVT-000004 = %d, want 0", got)
+		t.Fatalf("events after the seed page = %d, want 0", got)
 	}
 	if tail["nextAfter"] != "" {
 		t.Fatalf("nextAfter on empty page = %v, want empty", tail["nextAfter"])
@@ -389,7 +398,7 @@ func TestEventFeedCursorAndEnvelope(t *testing.T) {
 }
 
 func TestListDemoVisits(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 	do(t, app, http.MethodPost, "/api/v1/demo/visits", `{"visitType":"WALKIN","clinics":[{"clinicCode":"SURG"}]}`)
 
 	status, visits := doList(t, app, http.MethodGet, "/api/v1/demo/visits", "")
@@ -408,7 +417,7 @@ func TestListDemoVisits(t *testing.T) {
 // The full ADR-0009 example flow: pre-visit lab, clinic round, a mid-visit
 // order inferring a return, encounter completed, cashier, done.
 func TestDemoActionsSurfaceAsCanonicalEvents(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 	do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics/MED/start-encounter", "")
 	_, xray := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/orders",
 		`{"orderType":"XRAY","orderName":"Chest X-Ray","orderedByClinic":"MED"}`)
@@ -419,7 +428,7 @@ func TestDemoActionsSurfaceAsCanonicalEvents(t *testing.T) {
 	do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/clinics/MED/complete-encounter", "")
 	do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/complete", "")
 
-	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000004&limit=100", "")
+	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after="+EventID(seedEventBase+4)+"&limit=100", "")
 	want := []string{
 		"encounter.started",   // MED calls the patient in
 		"order.placed",        // xray ordered
@@ -442,7 +451,7 @@ func TestDemoActionsSurfaceAsCanonicalEvents(t *testing.T) {
 
 // #22 follow-up: the console detail panel shows a QR of the visit id.
 func TestVisitQrcode(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 
 	status, png := doRaw(t, app, http.MethodGet, "/api/v1/demo/visits/VISIT-001/qrcode.png", "")
 	if status != http.StatusOK {
@@ -525,7 +534,7 @@ func TestQRTargetAbsolute(t *testing.T) {
 // Visit cancellation from the console: open orders are cancelled, the visit
 // becomes CANCELLED, everything surfaces as canonical events.
 func TestCancelVisit(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 
 	status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/cancel", "")
 	if status != http.StatusOK {
@@ -539,7 +548,7 @@ func TestCancelVisit(t *testing.T) {
 		t.Fatalf("orders = %v, want the open lab order cancelled", orders)
 	}
 
-	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000004&limit=100", "")
+	_, feed := do(t, app, http.MethodGet, "/api/v1/events?after="+EventID(seedEventBase+4)+"&limit=100", "")
 	want := []string{"order.cancelled", "visit.closed"}
 	got := eventTypes(feed)
 	if len(got) != len(want) {
@@ -550,7 +559,7 @@ func TestCancelVisit(t *testing.T) {
 	if status, body := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/cancel", ""); status != http.StatusOK || body["status"] != "CANCELLED" {
 		t.Fatalf("re-cancel = %d %v, want 200 no-op", status, body["status"])
 	}
-	_, feed = do(t, app, http.MethodGet, "/api/v1/events?after=EVT-000006&limit=100", "")
+	_, feed = do(t, app, http.MethodGet, "/api/v1/events?after="+EventID(seedEventBase+6)+"&limit=100", "")
 	if n := len(feed["events"].([]any)); n != 0 {
 		t.Fatalf("events after re-cancel = %d, want 0", n)
 	}
@@ -561,7 +570,7 @@ func TestCancelVisit(t *testing.T) {
 }
 
 func TestCancelCompletedVisitConflicts(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 	do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/complete", "")
 
 	if status, resp := do(t, app, http.MethodPost, "/api/v1/demo/visits/VISIT-001/cancel", ""); status != http.StatusConflict {
@@ -570,7 +579,7 @@ func TestCancelCompletedVisitConflicts(t *testing.T) {
 }
 
 func TestConsoleServed(t *testing.T) {
-	app := New(discardLogger(), "", "")
+	app := newApp()
 
 	req, _ := http.NewRequest(http.MethodGet, "/console", nil)
 	resp, err := app.Test(req)
@@ -623,5 +632,34 @@ func TestConsoleInjectsBaseURLs(t *testing.T) {
 		if !strings.Contains(string(raw), want) {
 			t.Fatalf("/console body is missing %s", want)
 		}
+	}
+}
+
+// The restart-safety property (seen live: a deploy restarted Mock HIS, the
+// feed restarted at EVT-000001, CarePath's persisted cursor stayed above it,
+// and the poller went silently blind): a store booted later must issue ids
+// strictly greater than every id an earlier boot issued, and new-format ids
+// must sort after any legacy 6-digit id a consumer may still hold.
+func TestEventIDsGrowAcrossRestart(t *testing.T) {
+	boot1 := NewStore(WithClock(func() time.Time { return time.Unix(seedEventBase, 0) }))
+	evs1, _ := boot1.Events("", 100)
+	if len(evs1) == 0 {
+		t.Fatal("first boot seeded no events")
+	}
+
+	boot2 := NewStore(WithClock(func() time.Time { return time.Unix(seedEventBase+60, 0) }))
+	evs2, _ := boot2.Events("", 100)
+	for _, e2 := range evs2 {
+		for _, e1 := range evs1 {
+			if e2.EventID <= e1.EventID {
+				t.Fatalf("restarted store reissued id %s not greater than earlier %s", e2.EventID, e1.EventID)
+			}
+		}
+	}
+
+	// A cursor persisted before the fix holds a legacy short id; new ids must
+	// still compare greater so ingestion resumes without manual cursor surgery.
+	if !("EVT-000042" < EventID(seedEventBase)) {
+		t.Fatalf("new-format id %s must sort after a legacy cursor EVT-000042", EventID(seedEventBase))
 	}
 }

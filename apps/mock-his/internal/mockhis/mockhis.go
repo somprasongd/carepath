@@ -126,11 +126,22 @@ type Store struct {
 	visits   map[string]*Visit
 	orderVis map[string]string // orderRef -> visitId, for the /demo/orders/{orderRef}/* endpoints
 	events   []HISEvent
-	eventSeq int
+	eventSeq int // event id counter; starts at a wall-clock base (see NewStore)
 	visitSeq int
 	orderSeq int
+	seedSeq  int // minute offset for seed OccurredAt stamps, decoupled from eventSeq
 	seedBase time.Time
 	now      func() time.Time
+}
+
+// StoreOption customises a Store at construction (tests inject a fixed
+// clock for deterministic event ids).
+type StoreOption func(*Store)
+
+// WithClock overrides the store's notion of now; the event id base is
+// derived from it, so a fixed clock yields deterministic EVT ids.
+func WithClock(fn func() time.Time) StoreOption {
+	return func(s *Store) { s.now = fn }
 }
 
 // NewStore returns a seeded store. Two deterministic demo scenarios replay
@@ -147,7 +158,16 @@ type Store struct {
 //
 // Seed facts sit on the same minute cadence as appendSeed's event stamps, so
 // each event's OccurredAt equals the fact time it announces.
-func NewStore() *Store {
+//
+// Event ids start at a wall-clock base (Unix seconds) rather than 1: the
+// store is in-memory, so a restart re-seeds the feed from scratch while
+// CarePath's persisted feed cursor keeps its old value — with ids restarting
+// at EVT-000001 every restart strands the cursor above the new feed and the
+// poller goes blind (seen live: console actions silently stopped projecting).
+// Unix-based ids keep growing across restarts, so a restarted feed always
+// sorts after any earlier cursor and ingestion self-heals. Restarting within
+// the same second can still collide ids; container restarts never do.
+func NewStore(opts ...StoreOption) *Store {
 	s := &Store{
 		visits:   map[string]*Visit{},
 		orderVis: map[string]string{},
@@ -156,6 +176,12 @@ func NewStore() *Store {
 		seedBase: time.Date(2026, 9, 19, 9, 0, 0, 0, time.FixedZone("ICT", 7*60*60)),
 		now:      time.Now,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	// The id base is read after options so WithClock makes ids deterministic
+	// in tests; in production it is "now", so ids grow across restarts.
+	s.eventSeq = int(s.now().Unix())
 	v := &Visit{
 		VisitID: "VISIT-001", PatientRef: "PATIENT-DEMO-001", PatientName: "สมชาย ใจดี",
 		VisitType: VisitAppointment, Status: VisitActive,
@@ -196,9 +222,10 @@ func NewStore() *Store {
 
 func (s *Store) appendSeed(eventType string, v *Visit, payload map[string]any) {
 	s.eventSeq++
+	s.seedSeq++
 	s.events = append(s.events, HISEvent{
 		EventID:    EventID(s.eventSeq),
-		OccurredAt: s.seedBase.Add(time.Duration(s.eventSeq) * time.Minute),
+		OccurredAt: s.seedBase.Add(time.Duration(s.seedSeq) * time.Minute),
 		VisitID:    v.VisitID,
 		PatientRef: v.PatientRef,
 		Type:       eventType,
@@ -206,8 +233,10 @@ func (s *Store) appendSeed(eventType string, v *Visit, payload map[string]any) {
 	})
 }
 
-// EventID formats the zero-padded, lexicographically sortable event id.
-func EventID(seq int) string { return fmt.Sprintf("EVT-%06d", seq) }
+// EventID formats the lexicographically sortable event id. Sequences come
+// from a wall-clock base, so ids keep growing across store restarts and a
+// restarted feed always sorts after a consumer's stored cursor.
+func EventID(seq int) string { return fmt.Sprintf("EVT-%012d", seq) }
 
 func orderPayload(o Order) map[string]any {
 	return map[string]any{
