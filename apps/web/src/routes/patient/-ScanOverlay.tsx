@@ -4,6 +4,7 @@ import { format, messagesFor, useLocale, useT } from '@/i18n'
 import { floorLabelFor } from '@/features/floorplan'
 import { useReportLocation, useQrScanner } from '@/features/navigation'
 import { useServicePoints } from '@/features/servicepoint'
+import { activeFloorFor, pickablePlaces } from './-scan-pick'
 
 /**
  * Full-screen location report for the navigate screen: the camera QR scanner
@@ -140,34 +141,26 @@ function PlaceList({
   const report = useReportLocation(visitId)
   const { data: servicePoints, isPending } = useServicePoints()
 
-  // Places, not service points: several clinics share one nurse station, and
-  // the report is about where the patient stands (one node per place).
-  const places = new Map<string, { entryNodeId: string; name: string; floorCode: string }>()
-  for (const sp of servicePoints ?? []) {
-    const entryNodeId = sp.place?.entryNodeId
-    if (!entryNodeId || !sp.place) continue
-    if (!places.has(entryNodeId)) {
-      places.set(entryNodeId, {
-        entryNodeId,
-        name: sp.place.name,
-        floorCode: sp.place.floor.code,
-      })
-    }
-  }
+  const places = pickablePlaces(servicePoints)
 
   // Floor-first: chips for the floors that have pickable places, ordered by
   // floor code, opening on the floor the map is already showing. The match
   // goes through the localized floor label — no floorId→code table here.
   const catalog = messagesFor(locale)
-  const floorCodes = Array.from(new Set(Array.from(places.values()).map((p) => p.floorCode))).sort()
+  const floorCodes = Array.from(new Set(places.map((p) => p.floorCode))).sort()
   const defaultFloorCode = defaultFloorId
     ? floorCodes.find(
         (code) =>
           floorLabelFor(defaultFloorId, locale) === format(catalog, 'common.floor', { code }),
       )
     : undefined
-  const [activeFloor, setActiveFloor] = useState(defaultFloorCode ?? floorCodes[0] ?? '')
-  const visible = Array.from(places.values()).filter((p) => p.floorCode === activeFloor)
+  // Only the chip tap is state. The default floor must stay derived: the
+  // service-points query can resolve after this list mounts, and a useState
+  // initial value would latch to '' — chips for the loaded floors above a
+  // forever-empty list until the overlay is reopened.
+  const [floorPick, setFloorPick] = useState<string | null>(null)
+  const activeFloor = activeFloorFor(floorPick, defaultFloorCode, floorCodes)
+  const visible = places.filter((p) => p.floorCode === activeFloor)
 
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-y-auto pt-4">
@@ -177,7 +170,7 @@ function PlaceList({
             <button
               key={code}
               type="button"
-              onClick={() => setActiveFloor(code)}
+              onClick={() => setFloorPick(code)}
               className={`cursor-pointer rounded-full border px-3.5 py-1.5 font-sans text-caption font-bold ${
                 code === activeFloor
                   ? 'border-primary bg-primary-tint text-ink'
