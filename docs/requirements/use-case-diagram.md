@@ -20,14 +20,14 @@ flowchart LR
         UC5(["Get queue-proximity notification"])
         UC6(["Switch language / accessibility mode"])
         UC7(["Track visit progress<br/>via shared link"])
-        UC8(["View pathway-template<br/>service-code checklist"])
+        UC8(["Look up a visit and<br/>view its derived plan"])
         UC9(["Call queue /<br/>update step status"])
-        UC10(["Insert unplanned step"])
+        UC10(["Confirm return to clinic<br/>after an extra test"])
         UC11(["Manage hospital map &amp;<br/>service-point mapping"])
-        UC12(["Manage pathway templates"])
+        UC12(["Review journey<br/>planning rules"])
         UC13(["Manage users &amp; roles"])
         UC14(["View bottleneck &amp;<br/>wait-time dashboard"])
-        UC15(["Sync visit / service state<br/>with HIS"])
+        UC15(["Ingest canonical visit &amp;<br/>order facts from HIS"])
         UC16(["Log in to the console<br/>(staff / admin)"])
     end
 
@@ -52,15 +52,14 @@ flowchart LR
 
     UC3 -. include .-> UC4
     UC2 -. include .-> UC15
-    UC9 -. include .-> UC15
-    UC10 -. include .-> UC15
     UC15 --> HIS
 ```
 
 ## Notes
 
 - **Authentication & role-based access (FR-18)** applies across every staff/admin/executive use case: **UC8–UC14 each `include` UC16**, drawn here as actor edges rather than seven include edges to keep the diagram readable. Per [ADR-0010](../adr/0010-staff-auth-jwt-argon2.md) the MVP implements UC16 for two roles (`STAFF`, `ADMIN`) with argon2id passwords and JWT access/refresh tokens; **UC13 (manage users & roles) has no screen in the MVP** — accounts are seeded by migration and edited in the database, while the *enforcement* it exists to configure is real. Patient use cases (UC1–UC7) are not behind UC16: patients authenticate through LINE (UC1), a separate mechanism with its own session token.
-- **UC15 (Sync visit/service state with HIS)** is the canonical event/command boundary defined in [ADR-0008](../adr/0008-his-canonical-event-contract.md): the HIS remains the system of record for visit/step status, and CarePath actions (queue call, step completion, unplanned-step insertion) are forwarded as commands rather than written directly. Visit opening and service ordering (UC8) happen in the HIS itself — CarePath only reads the resulting events, so UC8 has no command edge into UC15.
+- **UC15 (Ingest canonical visit & order facts from HIS)** is the inbound boundary as redefined by [ADR-0009](../adr/0009-carepath-owns-journey-plan.md), which supersedes [ADR-0008](../adr/0008-his-canonical-event-contract.md) §2. The HIS owns the visit, its clinic assignments and its orders, and reports them as facts (`visit.opened`, `order.placed`, `order.performed`, `order.resulted`, `encounter.completed`, `visit.closed`); **CarePath owns the journey plan and its step statuses**, derived from those facts. CarePath therefore no longer forwards step transitions to the HIS as commands — which is why **UC9 and UC10 have no edge into UC15**, and why UC8 never had one. Where a HIS-side counterpart does exist (an order being fulfilled) CarePath may notify it, but the journey never depends on that write succeeding.
+- **UC10 substitutes for a fact; it does not send a command.** A diagnostic ordered while an encounter is open implies the patient returns to that doctor, so the planner emits a follow-up clinic step. UC10 is the manual override when that inference is wrong, and the fallback when a HIS cannot emit `encounter.completed` at all (ADR-0009 §4) — the reason it reads "confirm" rather than the retired "insert unplanned step": per FR-16 a mid-visit order is added to the plan by the planner, never by hand.
 - **UC3 includes UC4** because route calculation needs a resolved starting point; when no QR scan has happened yet, the patient falls back to manual location selection (see [ADR-0004](../adr/0004-location-provider-abstraction.md)).
 
 ## Actor → use case → requirement traceability
@@ -74,12 +73,12 @@ flowchart LR
 | Patient | UC5 Queue-proximity notification | [US-10](user-stories.md#us-10-get-notified-before-my-queue-comes-up--should-s6) | FR-21 |
 | Patient | UC6 Switch language / accessibility | [US-09](user-stories.md#us-09-get-an-accessible-route--should-s5), [US-11](user-stories.md#us-11-use-carepath-in-my-own-language--should-s4) | FR-19, FR-20 |
 | Relative | UC7 Track visit progress | [US-12](user-stories.md#us-12-track-a-patients-progress-remotely--could-c2) | FR-24 |
-| Registration/screening staff | UC8 View pathway-template checklist | [US-13](user-stories.md#us-13-look-up-service-codes-for-a-pathway-template--must-m3) | FR-14 |
+| Registration/screening staff | UC8 Look up a visit and view its derived plan | [US-13](user-stories.md#us-13-look-up-a-patients-derived-visit-plan--must-m3--revised-by-adr-0009) | FR-14 |
 | Service-point staff | UC9 Call queue / update step status | [US-14](user-stories.md#us-14-call-the-queue-and-record-step-completion--must-m7) | FR-15, FR-17 |
-| Service-point staff | UC10 Insert unplanned step | [US-15](user-stories.md#us-15-insert-an-unplanned-step--must-m7) | FR-16 |
+| Service-point staff | UC10 Confirm return to clinic after an extra test | [US-15](user-stories.md#us-15-confirm-whether-a-patient-returns-after-an-extra-test--must-m7--revised-by-adr-0009) | FR-16 |
 | Hospital admin | UC11 Manage hospital map & service points | [US-05](user-stories.md#us-05-configure-service-point-mapping--must-m1), [US-06](user-stories.md#us-06-update-floornavigation-data--must-m1-m6) | FR-05, FR-11 |
-| Hospital admin | UC12 Manage pathway templates | [US-16](user-stories.md#us-16-create-and-edit-care-pathway-templates--must-m2) | FR-13 |
-| Hospital admin | UC13 Manage users & roles | [US-17](user-stories.md#us-17-manage-user-roles-and-access--must-m8) | FR-18 (enforcement only in MVP; no management screen — ADR-0010) |
+| Hospital admin | UC12 Review journey planning rules | [US-16](user-stories.md#us-16-review-the-journey-planning-rules--must-m2--revised-by-adr-0009) | FR-13 |
+| Hospital admin | UC13 Manage users & roles | [US-17](user-stories.md#us-17-manage-user-roles-and-access--must-m8--mvp-slice-scoped-by-adr-0010) | FR-18 (enforcement only in MVP; no management screen — ADR-0010) |
 | Registration / service-point staff, admin, executive | UC16 Log in to the console | [US-22](user-stories.md#us-22-log-in-to-the-staff-console--must-m8--added-by-adr-0010) | FR-18 |
 | Hospital executive | UC14 View bottleneck & wait-time dashboard | [US-18](user-stories.md#us-18-view-bottlenecks-and-average-wait-time--should-s7) | FR-22 |
-| System (HIS integration) | UC15 Sync visit/service state with HIS | [US-07](user-stories.md#us-07-develop-without-a-production-his--must-supports-m3m7), [US-08](user-stories.md#us-08-replace-mock-his-with-a-real-adapter--non-functional-maintainability) | FR-09, FR-10 |
+| System (HIS integration) | UC15 Ingest canonical visit & order facts from HIS | [US-07](user-stories.md#us-07-develop-without-a-production-his--must-supports-m3m7), [US-08](user-stories.md#us-08-replace-mock-his-with-a-real-adapter--non-functional-maintainability) | FR-09, FR-10 |

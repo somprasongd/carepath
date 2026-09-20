@@ -81,7 +81,7 @@ The MVP slice, per [ADR-0010](../adr/0010-staff-auth-jwt-argon2.md):
 - Every staff/admin endpoint (`/api/v1/staff/*`, step transitions, the clinic-round override) requires a valid token with a permitted role; patient-facing endpoints are not blocked by the guard.
 - The acting user is recorded on every command for the audit trail ([NFR-09](non-functional-requirements.md)).
 
-Deliberately **not** in the MVP slice, and tracked separately: binding `GET /api/v1/journeys/{visitId}` to the requesting patient's own session (the "patient sees only their own data" half of this requirement), user-management screens (FR-18 via [US-17](user-stories.md#us-17-manage-user-roles-and-access--must-m8)), password reset/change, login rate limiting, and SSO.
+Deliberately **not** in the MVP slice, and tracked separately: binding `GET /api/v1/journeys/{visitId}` to the requesting patient's own session (the "patient sees only their own data" half of this requirement), user-management screens (FR-18 via [US-17](user-stories.md#us-17-manage-user-roles-and-access--must-m8--mvp-slice-scoped-by-adr-0010)), password reset/change, login rate limiting, and SSO.
 
 ## FR-19 Multi-language support — *Should (S4)*
 

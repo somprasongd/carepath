@@ -1149,7 +1149,7 @@ export interface components {
             steps: components["schemas"]["JourneyStep"][];
             /** @description Every step currently READY — what the patient could do right now, in any order. */
             actionable: components["schemas"]["JourneyStep"][];
-            /** @description CarePath's pick among `actionable` (nearest, or shortest queue) for the patient-facing single primary action; null when actionable is empty. */
+            /** @description CarePath's pick among `actionable` for the patient-facing single primary action; null when actionable is empty. Today this is the first actionable step by sequence. Ranking it by distance or queue length (ADR-0009 §6) remains the intent, but is not implemented — it depends on the queue data of FR-17, which does not exist yet. */
             recommended?: components["schemas"]["JourneyStep"] | null;
             /** Format: date-time */
             syncedAt: string;

@@ -857,9 +857,12 @@ components:
           allOf:
             - $ref: '#/components/schemas/JourneyStep'
           nullable: true
-          description: CarePath's pick among `actionable` (nearest, or
-            shortest queue) for the patient-facing single primary action; null
-            when actionable is empty.
+          description: CarePath's pick among `actionable` for the
+            patient-facing single primary action; null when actionable is
+            empty. Today this is the first actionable step by sequence.
+            Ranking it by distance or queue length (ADR-0009 §6) remains the
+            intent, but is not implemented — it depends on the queue data of
+            FR-17, which does not exist yet.
         syncedAt: { type: string, format: date-time }
     TransitionRequest:
       type: object

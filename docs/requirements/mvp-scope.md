@@ -6,12 +6,12 @@ Mirrors the MoSCoW prioritization in the hackathon brief (§5). See [Functional 
 
 - LINE OA entry point, LIFF/web patient experience (M4)
 - Hospital map data: buildings, floors, places/service points, connecting routes (M1)
-- Care Pathway Template management (M2)
-- Patient registration for the day, with pathway template assignment and auto-generated visit steps (M3)
+- Journey planning rules an administrator can review — hospital policy encoded in the planner, not per-patient templates staff assemble (M2); what this originally called "Care Pathway Template management" is retired by [ADR-0009](../adr/0009-carepath-owns-journey-plan.md)
+- Registration staff look up a visit by VN and see the plan the journey planner derived for it (M3); per [ADR-0009](../adr/0009-carepath-owns-journey-plan.md) the HIS alone opens the visit and assigns clinics/orders, so CarePath neither registers the patient nor assigns a template
 - Patient journey screen: all steps in order with status, and what's next (M4)
 - Navigation from current location to next destination, as step-by-step instructions with distance/time estimate (M5)
 - Shortest-route calculation from the navigation graph — no hardcoded routes (M6)
-- Service-point staff console: call queue, update step status, insert unplanned steps (M7)
+- Service-point staff console: call queue, update step status, and confirm whether a patient returns to the ordering clinic after an extra test (M7); per [ADR-0009](../adr/0009-carepath-owns-journey-plan.md) a mid-visit order is added to the plan by the planner, not inserted by hand
 - Authentication and role-based access control (M8) — staff/admin username + password login (argon2id), JWT access + refresh tokens, `STAFF`/`ADMIN` roles guarding the staff endpoints ([ADR-0010](../adr/0010-staff-auth-jwt-argon2.md))
 - Mock HIS service and a replaceable HIS adapter interface
 
