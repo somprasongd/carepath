@@ -133,9 +133,16 @@
 // ORDERTYPE:<type> the order-type pickers. That read is console-only demo
 // tooling — the canonical HIS surface stays one-directional (ADR-0005).
 // The fallbacks below mirror CarePath's seed service points
-// (infra/postgres/migrations/000010) and only hold the pickers up until
-// the fetch lands; it is retried on the refresh tick while it fails.
-const FALLBACK_CLINICS = [{ code: "MED", name: "อายุรกรรม" }];
+// (infra/postgres/migrations: 000010 MED, 000018 the rest) and only hold
+// the pickers up until the fetch lands; it is retried on the refresh tick
+// while it fails.
+const FALLBACK_CLINICS = [
+  { code: "DENT", name: "ทันตกรรม (DENT)" },
+  { code: "ENT", name: "หู คอ จมูก (ENT)" },
+  { code: "MED", name: "อายุรกรรม (MED)" },
+  { code: "OPHTH", name: "ตา (OPHTH)" },
+  { code: "SURG", name: "ศัลยกรรม (SURG)" },
+];
 const FALLBACK_ORDER_TYPES = ["LAB", "XRAY"];
 
 let clinicCatalog = FALLBACK_CLINICS;
