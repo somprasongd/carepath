@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.13.0
+  version: 0.14.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -762,6 +762,14 @@ paths:
           required: true
           description: Destination service point code, e.g. PHARMACY.
           schema: { type: string }
+        - in: query
+          name: accessibleOnly
+          required: false
+          description: >
+            Skip edges not marked accessible (the stairs transitions) so
+            wheelchair routes detour via the elevator instead (FR-20/US-09).
+            Absent or false routes over the full graph.
+          schema: { type: boolean, default: false }
       responses:
         '200':
           description: Ordered route — nodes[0] is the origin, the last node the destination
@@ -770,7 +778,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/NavigationRoute'
         '400':
-          description: Missing or empty from/to
+          description: Missing or empty from/to, or accessibleOnly is not a boolean
           content:
             application/json:
               schema:

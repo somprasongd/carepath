@@ -797,6 +797,12 @@ const docTemplate = `{
                         "name": "to",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Skip non-accessible edges (stairs) so the route detours via the elevator (FR-20)",
+                        "name": "accessibleOnly",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -807,7 +813,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "missing from or to",
+                        "description": "missing from or to, or accessibleOnly is not a boolean",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }

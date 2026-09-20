@@ -1219,6 +1219,8 @@ export interface paths {
                     from: string;
                     /** @description Destination service point code, e.g. PHARMACY. */
                     to: string;
+                    /** @description Skip edges not marked accessible (the stairs transitions) so wheelchair routes detour via the elevator instead (FR-20/US-09). Absent or false routes over the full graph. */
+                    accessibleOnly?: boolean;
                 };
                 header?: never;
                 path?: never;
@@ -1235,7 +1237,7 @@ export interface paths {
                         "application/json": components["schemas"]["NavigationRoute"];
                     };
                 };
-                /** @description Missing or empty from/to */
+                /** @description Missing or empty from/to, or accessibleOnly is not a boolean */
                 400: {
                     headers: {
                         [name: string]: unknown;

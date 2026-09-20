@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { LanguageToggle, useLocale, useT } from '@/i18n'
+import { LargeTextToggle } from '@/preferences'
 import {
   AppBar,
   Button,
@@ -31,6 +32,8 @@ export function NavigateScreen({
   currentLocation,
   assumedLocation,
   onFloorChange,
+  accessibleOnly,
+  onToggleAccessibleOnly,
   onScan,
   onPickLocation,
   onBack,
@@ -44,6 +47,10 @@ export function NavigateScreen({
   assumedLocation?: string
   /** Flips the displayed floor of a cross-floor route (#35 follow-up). */
   onFloorChange?: (floorId: string) => void
+  /** Avoid-stairs routing (#99, FR-20) — present renders the toggle chip. */
+  accessibleOnly?: boolean
+  /** Flips accessibleOnly; the route refetches via the lift on its own. */
+  onToggleAccessibleOnly?: () => void
   /** Opens the QR scanner overlay — the screen's single primary action. */
   onScan?: () => void
   /** Opens the same overlay straight at the manual place list. */
@@ -66,7 +73,12 @@ export function NavigateScreen({
         backLabel={t('navigate.back')}
         title={appBarTitle(plan, t)}
         subtitle={plan.state === 'plan' ? plan.subtitle : undefined}
-        trailing={<LanguageToggle />}
+        trailing={
+          <div className="flex items-center gap-2">
+            <LargeTextToggle />
+            <LanguageToggle />
+          </div>
+        }
       />
 
       {plan.state === 'plan' && floorId && floorPlanFor(floorId) ? (
@@ -130,6 +142,8 @@ export function NavigateScreen({
               cues={route?.cues}
               currentLocation={currentLocation}
               assumedLocation={assumedLocation}
+              accessibleOnly={accessibleOnly}
+              onToggleAccessibleOnly={onToggleAccessibleOnly}
               onScan={onScan}
               onPickLocation={onPickLocation}
             />
@@ -183,6 +197,8 @@ function DestinationPanel({
   cues,
   currentLocation,
   assumedLocation,
+  accessibleOnly,
+  onToggleAccessibleOnly,
   onScan,
   onPickLocation,
 }: {
@@ -190,6 +206,8 @@ function DestinationPanel({
   cues?: string[]
   currentLocation?: string
   assumedLocation?: string
+  accessibleOnly?: boolean
+  onToggleAccessibleOnly?: () => void
   onScan?: () => void
   onPickLocation?: () => void
 }) {
@@ -232,6 +250,23 @@ function DestinationPanel({
         <div className="min-h-0 overflow-hidden">
           <div className="flex flex-col gap-3.5 pb-6">
             <Divider />
+            {/* Avoid-stairs routing (#99): a preference chip, not a modal —
+                flipping it refetches the route (the flag rides the query
+                key) and the line redraws via the elevator by itself. */}
+            {onToggleAccessibleOnly && (
+              <button
+                type="button"
+                aria-pressed={accessibleOnly ?? false}
+                onClick={onToggleAccessibleOnly}
+                className={`self-start cursor-pointer rounded-full border px-3.5 py-1.5 font-sans text-caption font-bold transition-colors ${
+                  accessibleOnly
+                    ? 'border-primary bg-primary-tint text-ink'
+                    : 'border-line bg-surface text-ink-muted'
+                }`}
+              >
+                {t('navigate.avoidStairs')}
+              </button>
+            )}
             {/* Where the patient stands (#35) — stated once, plainly; the
                 fallback below says so when it is not yet known. */}
             {currentLocation && (

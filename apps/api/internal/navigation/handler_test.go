@@ -220,3 +220,88 @@ func TestRouteNoPathHasCode(t *testing.T) {
 		t.Fatalf("code = %q, want not_found", envelope.Code)
 	}
 }
+
+// stairLiftGraph is the cross-floor miniature: reception on I-1301, the
+// pharmacy on I-1302, a short stairs transition and a long lift one — the
+// unrestricted route prefers the stairs, the accessible route must detour
+// (mirrors migrations 000008's real seed shape).
+func stairLiftGraph() *fakeRepo {
+	return &fakeRepo{
+		nodes: map[string]navigation.NavNode{
+			"I-1301/node-reception": {ID: "I-1301/node-reception", FloorID: "I-1301", X: 150, Y: 190, NodeType: "PLACE_ENTRY"},
+			"I-1301/node-stairs":    {ID: "I-1301/node-stairs", FloorID: "I-1301", X: 400, Y: 190, NodeType: "STAIRS"},
+			"I-1301/node-lift":      {ID: "I-1301/node-lift", FloorID: "I-1301", X: 100, Y: 400, NodeType: "ELEVATOR"},
+			"I-1302/node-stairs":    {ID: "I-1302/node-stairs", FloorID: "I-1302", X: 400, Y: 290, NodeType: "STAIRS"},
+			"I-1302/node-lift":      {ID: "I-1302/node-lift", FloorID: "I-1302", X: 100, Y: 500, NodeType: "ELEVATOR"},
+			"I-1302/node-pharmacy":  {ID: "I-1302/node-pharmacy", FloorID: "I-1302", X: 400, Y: 90, NodeType: "PLACE_ENTRY"},
+		},
+		edges: []navigation.NavEdge{
+			{ID: "reception>stairs", FromNodeID: "I-1301/node-reception", ToNodeID: "I-1301/node-stairs", EdgeType: "CORRIDOR", Distance: 250, Accessible: true},
+			{ID: "stairs>reception", FromNodeID: "I-1301/node-stairs", ToNodeID: "I-1301/node-reception", EdgeType: "CORRIDOR", Distance: 250, Accessible: true},
+			{ID: "reception>lift", FromNodeID: "I-1301/node-reception", ToNodeID: "I-1301/node-lift", EdgeType: "CORRIDOR", Distance: 220, Accessible: true},
+			{ID: "lift>reception", FromNodeID: "I-1301/node-lift", ToNodeID: "I-1301/node-reception", EdgeType: "CORRIDOR", Distance: 220, Accessible: true},
+			{ID: "stairs>x", FromNodeID: "I-1301/node-stairs", ToNodeID: "I-1302/node-stairs", EdgeType: "STAIRS", Distance: 60, Accessible: false},
+			{ID: "x>stairs", FromNodeID: "I-1302/node-stairs", ToNodeID: "I-1301/node-stairs", EdgeType: "STAIRS", Distance: 60, Accessible: false},
+			{ID: "lift>x", FromNodeID: "I-1301/node-lift", ToNodeID: "I-1302/node-lift", EdgeType: "ELEVATOR", Distance: 200, Accessible: true},
+			{ID: "x>lift", FromNodeID: "I-1302/node-lift", ToNodeID: "I-1301/node-lift", EdgeType: "ELEVATOR", Distance: 200, Accessible: true},
+			{ID: "stairs2>pharmacy", FromNodeID: "I-1302/node-stairs", ToNodeID: "I-1302/node-pharmacy", EdgeType: "CORRIDOR", Distance: 200, Accessible: true},
+			{ID: "pharmacy>stairs2", FromNodeID: "I-1302/node-pharmacy", ToNodeID: "I-1302/node-stairs", EdgeType: "CORRIDOR", Distance: 200, Accessible: true},
+			{ID: "lift2>pharmacy", FromNodeID: "I-1302/node-lift", ToNodeID: "I-1302/node-pharmacy", EdgeType: "CORRIDOR", Distance: 400, Accessible: true},
+			{ID: "pharmacy>lift2", FromNodeID: "I-1302/node-pharmacy", ToNodeID: "I-1302/node-lift", EdgeType: "CORRIDOR", Distance: 400, Accessible: true},
+		},
+	}
+}
+
+// #99 through the HTTP boundary: accessibleOnly=true must reach the
+// router's RouteOptions — the returned cross-floor route takes the longer
+// lift transition and carries no STAIRS segment, while the default query
+// keeps the shorter stairs path.
+func TestRouteAccessibleOnlyQueryAvoidsStairs(t *testing.T) {
+	app := newTestApp(t, stairLiftGraph(), "I-1302/node-pharmacy")
+
+	_, body := getRoute(t, app, "?from=I-1301/node-reception&to=PHARMACY")
+	var defaultRoute navigation.Route
+	if err := json.Unmarshal(body, &defaultRoute); err != nil {
+		t.Fatalf("decode %q: %v", body, err)
+	}
+	if defaultRoute.TotalDistance != 510 { // 250 + 60 + 200
+		t.Fatalf("default totalDistance = %v, want 510 (stairs)", defaultRoute.TotalDistance)
+	}
+
+	resp, body := getRoute(t, app, "?from=I-1301/node-reception&to=PHARMACY&accessibleOnly=true")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d (%s), want 200", resp.StatusCode, body)
+	}
+	var accessible navigation.Route
+	if err := json.Unmarshal(body, &accessible); err != nil {
+		t.Fatalf("decode %q: %v", body, err)
+	}
+	for _, segment := range accessible.Segments {
+		if segment.EdgeType == "STAIRS" {
+			t.Fatalf("accessible route still walks %q (%s)", segment.ID, segment.EdgeType)
+		}
+	}
+	if accessible.TotalDistance != 820 { // 220 + 200 + 400
+		t.Fatalf("accessible totalDistance = %v, want 820 (lift detour)", accessible.TotalDistance)
+	}
+}
+
+// A present-but-unparseable flag is a typo, not a choice — it must be a 400
+// rather than silently routing a wheelchair user over the stairs.
+func TestRouteAccessibleOnlyRejectsNonBoolean(t *testing.T) {
+	app := newTestApp(t, stairLiftGraph(), "I-1302/node-pharmacy")
+
+	resp, body := getRoute(t, app, "?from=I-1301/node-reception&to=PHARMACY&accessibleOnly=yes")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d (%s), want 400", resp.StatusCode, body)
+	}
+	var envelope struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatalf("decode %q: %v", body, err)
+	}
+	if envelope.Code != "invalid" {
+		t.Fatalf("code = %q, want invalid", envelope.Code)
+	}
+}

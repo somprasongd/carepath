@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { LanguageToggle, useT } from '@/i18n'
+import { LargeTextToggle } from '@/preferences'
 import { Button, Card, PageTitle, TextField } from '@/design-system'
 
 /**
@@ -39,7 +40,10 @@ export function VisitEntryScreen() {
             {/* No AppBar here (one card, not a page frame), so the language
                 switch rides the card header — it must be reachable from the
                 very first screen (#94). */}
-            <LanguageToggle />
+            <div className="flex items-center gap-2">
+              <LargeTextToggle />
+              <LanguageToggle />
+            </div>
           </div>
 
           <PageTitle className="mb-1.5">{t('entry.title')}</PageTitle>

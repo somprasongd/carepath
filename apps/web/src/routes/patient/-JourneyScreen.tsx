@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { useAuth } from '@/auth/AuthContext'
 import { LanguageToggle, useLocale, useT } from '@/i18n'
+import { LargeTextToggle } from '@/preferences'
 import {
   AppBar,
   Button,
@@ -175,6 +176,7 @@ export function JourneyShell({
         wordmark="CarePath"
         trailing={
           <div className="flex items-center gap-2">
+            <LargeTextToggle />
             <LanguageToggle />
             <RefPill>{visitRef}</RefPill>
           </div>

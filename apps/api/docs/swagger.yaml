@@ -918,6 +918,11 @@ paths:
         name: to
         required: true
         type: string
+      - description: Skip non-accessible edges (stairs) so the route detours via the
+          elevator (FR-20)
+        in: query
+        name: accessibleOnly
+        type: boolean
       produces:
       - application/json
       responses:
@@ -926,7 +931,7 @@ paths:
           schema:
             $ref: '#/definitions/navigation.Route'
         "400":
-          description: missing from or to
+          description: missing from or to, or accessibleOnly is not a boolean
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
         "404":

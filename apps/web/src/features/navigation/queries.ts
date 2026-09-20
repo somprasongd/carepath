@@ -75,19 +75,32 @@ export function useReportLocation(visitId: string) {
  * both render from this. Disabled until both ends are known; a 404 (no
  * walkable path) surfaces as the query's error for the screen to fall back
  * on, matching the honest no-route states in DESIGN.md.
+ *
+ * accessibleOnly (#99, FR-20) opts the route out of the stairs: the flag
+ * joins the query key, so flipping it refetches and the line redraws via
+ * the elevator by itself. Sent only when on — the canonical URL for the
+ * default route stays param-free.
  */
-export function navigationRouteQueryOptions(fromNodeId: string | null, servicePointCode: string) {
+export function navigationRouteQueryOptions(
+  fromNodeId: string | null,
+  servicePointCode: string,
+  accessibleOnly = false,
+) {
   return queryOptions({
-    queryKey: ['navigation', 'route', fromNodeId, servicePointCode] as const,
+    queryKey: ['navigation', 'route', fromNodeId, servicePointCode, accessibleOnly] as const,
     queryFn: () =>
       apiGet<components['schemas']['NavigationRoute']>(
-        `/api/v1/navigation/route?from=${encodeURIComponent(fromNodeId ?? '')}&to=${encodeURIComponent(servicePointCode)}`,
+        `/api/v1/navigation/route?from=${encodeURIComponent(fromNodeId ?? '')}&to=${encodeURIComponent(servicePointCode)}${accessibleOnly ? '&accessibleOnly=true' : ''}`,
       ),
     enabled: fromNodeId !== null,
     staleTime: 15_000,
   })
 }
 
-export function useNavigationRoute(fromNodeId: string | null, servicePointCode: string) {
-  return useQuery(navigationRouteQueryOptions(fromNodeId, servicePointCode))
+export function useNavigationRoute(
+  fromNodeId: string | null,
+  servicePointCode: string,
+  accessibleOnly = false,
+) {
+  return useQuery(navigationRouteQueryOptions(fromNodeId, servicePointCode, accessibleOnly))
 }
