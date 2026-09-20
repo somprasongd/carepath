@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.11.0
+  version: 0.12.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -330,6 +330,112 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/journeys/{visitId}/share:
+    post:
+      description: >
+        Patient command (ADR-0011): mint a time-limited tracking link for
+        this visit to hand to a relative. Requires a patient session
+        (bearerAuth). The response carries the raw token exactly once —
+        the server stores only its sha256, so it cannot be re-read. At
+        most 5 active links per visit; creating beyond that fails with
+        409 (revoke first). TTL defaults to 4h (SHARE_LINK_TTL).
+        Note: the session is not visit-bound yet (ADR-0011 §6) — creation
+        is gated on holding a session at all, an accepted MVP gap.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The minted link — token is shown this one time only
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareLinkResponse'
+        '401':
+          description: Missing, malformed, or invalid patient session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No visit found for this visit id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Too many active share links for this visit (max 5)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      description: >
+        Patient command (ADR-0011): revoke every active share link for
+        this visit. Idempotent — revoking with nothing active is still
+        204. Requires a patient session (bearerAuth).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: All active links revoked (or none existed)
+        '401':
+          description: Missing, malformed, or invalid patient session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/shared/journey:
+    get:
+      description: >
+        The relative-facing answer (ADR-0011): what the shared holder may
+        learn, and nothing more — the current (or next) step as a Thai
+        title, a coarse status, and the service point's display name and
+        floor. Unknown, expired, and revoked tokens are one and the same
+        401: the surface must not confirm which links ever existed. This
+        is the only surface shareAuth is valid on.
+      security:
+        - shareAuth: []
+      responses:
+        '200':
+          description: The redacted shared journey
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SharedJourney'
+        '401':
+          description: Unknown, expired, or revoked share token (indistinguishable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/journeys/{visitId}/location:
     get:
       description: The visit's current location — the latest recorded
@@ -614,6 +720,15 @@ components:
         A staff/admin JWT access token from POST /api/v1/auth/login or
         /api/v1/auth/refresh (ADR-0010). Distinct from bearerAuth: different
         subject, different store, different lifetime.
+    shareAuth:
+      type: http
+      scheme: bearer
+      description: >
+        A visit share token from POST /api/v1/journeys/{visitId}/share
+        (ADR-0011) — a third credential kind: visit-scoped, read-only,
+        time-limited, revocable. Valid only on GET /api/v1/shared/journey;
+        every other surface rejects it with 401, and it is never accepted in
+        a URL or query string (NFR-08).
   schemas:
     Error:
       type: object
@@ -861,6 +976,55 @@ components:
             shortest queue) for the patient-facing single primary action; null
             when actionable is empty.
         syncedAt: { type: string, format: date-time }
+    ShareLinkResponse:
+      type: object
+      description: >
+        The one-time mint of a visit share link (ADR-0011). The token is
+        the bearer credential the relative's device presents to
+        GET /api/v1/shared/journey; the server keeps only its sha256, so
+        this response is the last time anyone can read it.
+      required: [token, expiresAt]
+      properties:
+        token:
+          type: string
+          description: 64-char hex share token — send as Authorization Bearer, never in a URL.
+        expiresAt: { type: string, format: date-time }
+    SharedJourney:
+      type: object
+      description: >
+        The relative-facing read (ADR-0011 §3) — a deliberate disclosure
+        list, not a redacted Journey: current step title, coarse status,
+        where, and when. No patient name, no ids, no codes, no step list.
+      required: [status, updatedAt, expiresAt]
+      properties:
+        status:
+          type: string
+          description: Coarse progress — the only status vocabulary on this surface.
+          enum: [WAITING, IN_SERVICE, DONE]
+        currentStep:
+          allOf:
+            - $ref: '#/components/schemas/SharedStep'
+          nullable: true
+          description: The step happening now, else the next one; null once the visit is DONE.
+        updatedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+    SharedStep:
+      type: object
+      description: One step as a relative may see it — display strings only.
+      required: [title, status]
+      properties:
+        title:
+          type: string
+          description: Thai display title of the step kind (e.g. พบแพทย์, เจาะเลือด / ส่งตรวจแล็บ).
+        status:
+          type: string
+          enum: [WAITING, IN_SERVICE, DONE]
+        servicePointName:
+          type: string
+          description: Display name of the step's service point, code suffix stripped; absent when unmapped.
+        floorName:
+          type: string
+          description: Floor display name (e.g. ชั้น 1); absent when unmapped.
     TransitionRequest:
       type: object
       description: The client-facing transition command (#19, amended by ADR-0009 — no longer forwarded to the HIS).

@@ -46,6 +46,8 @@ import (
 	servicepointpostgres "carepath/apps/api/internal/servicepoint/postgres"
 	"carepath/apps/api/internal/session"
 	sessionpostgres "carepath/apps/api/internal/session/postgres"
+	"carepath/apps/api/internal/share"
+	sharepostgres "carepath/apps/api/internal/share/postgres"
 )
 
 // @title			CarePath API
@@ -189,6 +191,13 @@ func run(ctx context.Context, log *slog.Logger) error {
 	}
 	analytics.NewHandler(analyticsService).Register(app.Group("/api/v1"),
 		auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin, auth.RoleExecutive))
+	// Relative share links (ADR-0011): the third credential kind. Creating
+	// and revoking a link takes the patient-session guard; the shared read
+	// accepts the share token itself and nothing else — cross-kind token use
+	// fails in every direction by construction.
+	shareTTL := envDuration("SHARE_LINK_TTL", 4*time.Hour)
+	shares := share.NewService(sharepostgres.New(database), journeys, database, shareTTL)
+	share.NewHandler(shares).Register(app.Group("/api/v1"), session.RequireSession(sessions))
 	servicepoint.NewHandler(servicePoints).Register(app.Group("/api/v1"))
 	locationHandler := location.NewHandler(locations)
 	locationHandler.Register(app.Group("/api/v1"))

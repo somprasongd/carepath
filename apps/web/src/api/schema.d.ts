@@ -560,6 +560,172 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/journeys/{visitId}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Patient command (ADR-0011): mint a time-limited tracking link for this visit to hand to a relative. Requires a patient session (bearerAuth). The response carries the raw token exactly once — the server stores only its sha256, so it cannot be re-read. At most 5 active links per visit; creating beyond that fails with 409 (revoke first). TTL defaults to 4h (SHARE_LINK_TTL). Note: the session is not visit-bound yet (ADR-0011 §6) — creation is gated on holding a session at all, an accepted MVP gap. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    visitId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The minted link — token is shown this one time only */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ShareLinkResponse"];
+                    };
+                };
+                /** @description Missing, malformed, or invalid patient session */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description No visit found for this visit id */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Too many active share links for this visit (max 5) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        /** @description Patient command (ADR-0011): revoke every active share link for this visit. Idempotent — revoking with nothing active is still 204. Requires a patient session (bearerAuth). */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    visitId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description All active links revoked (or none existed) */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Missing, malformed, or invalid patient session */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shared/journey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The relative-facing answer (ADR-0011): what the shared holder may learn, and nothing more — the current (or next) step as a Thai title, a coarse status, and the service point's display name and floor. Unknown, expired, and revoked tokens are one and the same 401: the surface must not confirm which links ever existed. This is the only surface shareAuth is valid on. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The redacted shared journey */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SharedJourney"];
+                    };
+                };
+                /** @description Unknown, expired, or revoked share token (indistinguishable) */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/journeys/{visitId}/location": {
         parameters: {
             query?: never;
@@ -1153,6 +1319,38 @@ export interface components {
             recommended?: components["schemas"]["JourneyStep"] | null;
             /** Format: date-time */
             syncedAt: string;
+        };
+        /** @description The one-time mint of a visit share link (ADR-0011). The token is the bearer credential the relative's device presents to GET /api/v1/shared/journey; the server keeps only its sha256, so this response is the last time anyone can read it. */
+        ShareLinkResponse: {
+            /** @description 64-char hex share token — send as Authorization Bearer, never in a URL. */
+            token: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        /** @description The relative-facing read (ADR-0011 §3) — a deliberate disclosure list, not a redacted Journey: current step title, coarse status, where, and when. No patient name, no ids, no codes, no step list. */
+        SharedJourney: {
+            /**
+             * @description Coarse progress — the only status vocabulary on this surface.
+             * @enum {string}
+             */
+            status: "WAITING" | "IN_SERVICE" | "DONE";
+            /** @description The step happening now, else the next one; null once the visit is DONE. */
+            currentStep?: components["schemas"]["SharedStep"] | null;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        /** @description One step as a relative may see it — display strings only. */
+        SharedStep: {
+            /** @description Thai display title of the step kind (e.g. พบแพทย์, เจาะเลือด / ส่งตรวจแล็บ). */
+            title: string;
+            /** @enum {string} */
+            status: "WAITING" | "IN_SERVICE" | "DONE";
+            /** @description Display name of the step's service point, code suffix stripped; absent when unmapped. */
+            servicePointName?: string;
+            /** @description Floor display name (e.g. ชั้น 1); absent when unmapped. */
+            floorName?: string;
         };
         /** @description The client-facing transition command (#19, amended by ADR-0009 — no longer forwarded to the HIS). */
         TransitionRequest: {

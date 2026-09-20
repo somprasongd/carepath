@@ -11,6 +11,8 @@ Source of truth for externally visible behavior: [`packages/contracts/openapi/ca
 ## Authentication
 
 Two credentials, two audiences — see [ADR-0010](../adr/0010-staff-auth-jwt-argon2.md).
+A third, visit-scoped credential — the share link — is described under
+"[Share link](#share-link)" ([ADR-0011](../adr/0011-visit-share-link.md)).
 
 | | Patient | Staff / admin |
 |---|---|---|
@@ -77,6 +79,33 @@ Staff command to move a step to `STARTED`, `COMPLETED`, or `CANCELLED`. CarePath
 
 Staff override: confirms a clinic is done with the patient for this round even without an `encounter.completed` fact from the HIS, dropping any not-yet-started "return to this clinic" step the planner had inferred. Requires a `STAFF` or `ADMIN` access token.
 
+## Share link
+
+`POST /api/v1/journeys/{visitId}/share`
+
+Mints a relative-tracking link for the visit ([ADR-0011](../adr/0011-visit-share-link.md),
+issue #89). Requires a patient session token (`bearerAuth`). Returns
+`{token, expiresAt}` — the raw token exactly once; the server stores only its
+sha256. At most 5 active links per visit (a 6th is 409 — revoke first); the
+lifetime comes from `SHARE_LINK_TTL` (default 4h).
+
+`GET /api/v1/shared/journey`
+
+The relative-facing read, authenticated by the share token itself
+(`shareAuth`, in the `Authorization` header — never a URL path or query, which
+would leak it into logs, NFR-08). Answers with `SharedJourney`, a deliberate
+disclosure schema rather than a redacted `Journey`: the current or next step
+as a Thai title, a coarse status (`WAITING` / `IN_SERVICE` / `DONE`), the
+service point's display name and floor, and the link's own expiry. No patient
+name, no refs or ids, no clinic codes, no step list. Unknown, expired, and
+revoked tokens all return the same 401 — the surface never confirms a link
+existed. This is the only endpoint a share token is valid on.
+
+`DELETE /api/v1/journeys/{visitId}/share`
+
+Patient command ("stop sharing", requires `bearerAuth`): revokes every active
+share link for the visit. Idempotent — 204 even when nothing is active.
+
 ## Staff visit monitor
 
 `GET /api/v1/staff/visits`
@@ -142,6 +171,7 @@ them any longer — superseded fully by `GET /api/v1/journeys/{visitId}`.
 Implemented today: health, auth session (patient), staff authentication
 (`login`/`refresh`/`logout`/`me` per ADR-0010 — the staff visit monitor, step
 transitions, and the clinic round override now require a `STAFF`/`ADMIN`
-access token), the journey projection, the service point reads (with places/floors
+access token), the journey projection, the visit share link (create, read,
+revoke per ADR-0011), the service point reads (with places/floors
 resolved from Postgres), the navigation route API, and the location
 report/read endpoints (QR + Zigbee simulator).
