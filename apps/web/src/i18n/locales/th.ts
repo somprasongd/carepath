@@ -103,6 +103,9 @@ export const th = {
   'navigate.waitingLocation':
     'เส้นทางจะปรากฏเมื่อทราบตำแหน่งปัจจุบันของคุณ — สแกน QR ที่จุดบริการเพื่อเริ่มนำทาง',
   'navigate.askStaffIfLost': 'แจ้งเจ้าหน้าที่หากหลงทาง',
+  'navigate.scanCta': 'สแกน QR ที่จุดบริการ',
+  'navigate.pickInstead': 'หรือเลือกจุดที่คุณอยู่เอง',
+  'navigate.updateLocation': 'สแกน QR / เลือกจุด เพื่ออัปเดทตำแหน่ง',
 
   // Destination plan text (features/floorplan/destination.ts).
   'navigate.routeTitle': 'เส้นทางไป{name}',
@@ -119,6 +122,9 @@ export const th = {
   'navigate.cue.stairs': 'ใช้บันไดไป{floor}',
   'navigate.cue.arrive': 'ถึง{name} — จุดหมายของคุณ',
 
+  // The assumed-origin fallback line (features/navigation/origin.ts).
+  'navigate.assumedLocation': 'ตำแหน่งโดยประมาณ · หลังขั้นตอน{step}',
+
   // Floor plan map controls (design-system/FloorPlanMap.tsx labels).
   'map.viewFullFloor': 'ดูทั้งชั้น',
   'map.viewRoute': 'ดูเส้นทาง',
@@ -126,6 +132,28 @@ export const th = {
   'map.youAreHere': 'คุณอยู่ที่นี่',
   'map.planAria': 'ผัง{floor} — จุดหมาย {name}',
   'map.routeAria': 'ผัง{floor} — เส้นทางจากตำแหน่งปัจจุบันไป{name}',
+  'map.zoomIn': 'ซูมเข้า',
+  'map.zoomOut': 'ซูมออก',
+
+  // Location report overlay (routes/patient/-ScanOverlay.tsx).
+  'scan.title.camera': 'สแกน QR ที่จุดบริการ',
+  'scan.title.pick': 'เลือกจุดที่คุณอยู่',
+  'scan.close': 'ปิด',
+  'scan.cameraHint': 'ชี้กล้องไปที่ QR หน้าจุดบริการ เพื่อบอกตำแหน่งปัจจุบันของคุณ',
+  'scan.cameraDenied': 'เปิดกล้องไม่ได้ — อนุญาตให้เบราว์เซอร์ใช้กล้อง หรือเลือกจุดเองแทน',
+  'scan.cameraUnsupported': 'เบราว์เซอร์นี้ไม่รองรับการสแกน — เลือกจุดที่คุณอยู่แทนได้',
+  'scan.switchToPick': 'เลือกจุดที่คุณอยู่เอง',
+  'scan.switchToCamera': 'สแกน QR แทน',
+  'scan.reportInvalid': 'ไม่พบจุดบริการจากข้อมูลนี้ — ลองอีกครั้ง หรือเลือกจุดเอง',
+  'scan.reportFailed': 'ส่งตำแหน่งไม่สำเร็จ — ลองอีกครั้ง',
+  'scan.loadingPlaces': 'กำลังโหลดจุดบริการ…',
+  'scan.noPlaces': 'ยังไม่มีจุดบริการที่ระบุตำแหน่งได้',
+  'scan.floor': 'ชั้น {floor}',
+
+  // Wayfinding-anchor kinds (features/floorplan/graphs.ts; staff QR sheet).
+  'anchor.kind.ELEVATOR': 'ลิฟต์',
+  'anchor.kind.STAIRS': 'บันได',
+  'anchor.kind.ENTRANCE': 'ทางเข้า',
 
   // Journey rail captions (design-system/JourneyRail.tsx labels).
   'rail.currentStep': 'ขั้นตอนปัจจุบัน',

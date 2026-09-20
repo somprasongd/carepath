@@ -463,6 +463,37 @@ func (s *Store) CancelOrder(ctx context.Context, orderRef string) (Order, *Error
 	return v.Orders[i], nil
 }
 
+// StartEncounter announces that the clinic is calling the patient in to see
+// the doctor (ADR-0009 §4). The HIS does not know CarePath's rounds: which
+// round this opens is CarePath's to derive — the first actionable one, with
+// any round still in progress implicitly finished.
+func (s *Store) StartEncounter(ctx context.Context, visitID, clinicCode string) (Visit, *Error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	v, ok := s.visits[visitID]
+	if !ok {
+		return Visit{}, &Error{Kind: ErrNotFound, Msg: "visit not found"}
+	}
+	found := false
+	for _, c := range v.Clinics {
+		if c.Code == clinicCode {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return Visit{}, &Error{Kind: ErrNotFound, Msg: fmt.Sprintf("clinic %s is not assigned to this visit", clinicCode)}
+	}
+	now := s.now()
+	s.append(EventEncounterStarted, v, map[string]any{"clinicCode": clinicCode, "startedAt": now})
+	logger.FromContext(ctx).Info("encounter started",
+		"visit_id", visitID,
+		"clinic_code", clinicCode,
+	)
+	return *copyVisit(v), nil
+}
+
 // CompleteEncounter announces that the given clinic is finished examining
 // the patient for this round (ADR-0009 §4).
 func (s *Store) CompleteEncounter(ctx context.Context, visitID, clinicCode string) (Visit, *Error) {

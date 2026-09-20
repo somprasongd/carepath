@@ -1,6 +1,9 @@
-import { LanguageToggle, useT } from '@/i18n'
+import { useState } from 'react'
+import { LanguageToggle, useLocale, useT } from '@/i18n'
 import {
   AppBar,
+  Button,
+  ChevronRightIcon,
   Divider,
   FloorPlanMap,
   type FloorPlanRoute,
@@ -9,7 +12,7 @@ import {
   Screen,
   ScreenDock,
 } from '@/design-system'
-import { floorPlanFor, type DestinationPlan, type NavigatePlan } from '@/features/floorplan'
+import { floorLabelFor, floorPlanFor, type DestinationPlan, type NavigatePlan } from '@/features/floorplan'
 
 /**
  * Patient · navigate to a service point — the real floor-plan asset with the
@@ -17,23 +20,44 @@ import { floorPlanFor, type DestinationPlan, type NavigatePlan } from '@/feature
  * location is known, the walking line and turn-by-turn cues from the
  * navigation API (#28) drawn as a live overlay (#29). Without a location
  * the screen keeps its honest destination-only view — nothing about the
- * route is invented (DESIGN.md). The plan always comes from the caller:
- * the live route computes it from the journey, /design passes its static
- * reference plan.
+ * route is invented (DESIGN.md). Cross-floor routes open on the floor the
+ * patient stands on, with chips to flip floors; the map itself owns pan and
+ * zoom. The plan always comes from the caller: the live route computes it
+ * from the journey, /design passes its static reference plan.
  */
 export function NavigateScreen({
   plan,
   route,
   currentLocation,
+  assumedLocation,
+  onFloorChange,
+  onScan,
+  onPickLocation,
   onBack,
 }: {
   plan: NavigatePlan
-  route?: { mapRoute: FloorPlanRoute; cues: string[] }
+  route?: { floorId: string; floors: string[]; mapRoute: FloorPlanRoute; cues: string[] }
   /** Plain line stating where the patient is (#35); absent when unknown. */
   currentLocation?: string
+  /** The no-fix-yet fallback line — an assumption from the last finished step,
+   *  worded so it never claims to be a location (DESIGN.md's honesty rule). */
+  assumedLocation?: string
+  /** Flips the displayed floor of a cross-floor route (#35 follow-up). */
+  onFloorChange?: (floorId: string) => void
+  /** Opens the QR scanner overlay — the screen's single primary action. */
+  onScan?: () => void
+  /** Opens the same overlay straight at the manual place list. */
+  onPickLocation?: () => void
   onBack?: () => void
 }) {
   const t = useT()
+  const { locale } = useLocale()
+
+  // The displayed floor: the route's choice (origin floor by default, the
+  // patient's pick when they flip) or the destination's when routeless.
+  const planFloorId = plan.state === 'plan' ? plan.floorId : undefined
+  const floorId = route?.floorId ?? planFloorId
+  const showFloorSwitch = !!route && route.floors.length > 1 && !!onFloorChange
 
   return (
     <Screen variant="patient">
@@ -45,31 +69,59 @@ export function NavigateScreen({
         trailing={<LanguageToggle />}
       />
 
-      {plan.state === 'plan' && floorPlanFor(plan.floorId) ? (
+      {plan.state === 'plan' && floorId && floorPlanFor(floorId) ? (
         <>
+          {/* The inner relative box is the map card's own frame — chips
+              anchored here stay inside the card, not the screen gutter. */}
           <div className="flex-1 overflow-hidden px-gutter pt-1 pb-2">
-            <FloorPlanMap
-              svg={floorPlanFor(plan.floorId) ?? ''}
-              floorLabel={plan.floorLabel}
-              destination={{
-                placeId: plan.placeId,
-                name: plan.name,
-                x: plan.x,
-                y: plan.y,
-              }}
-              route={route?.mapRoute}
-              ariaLabel={
-                route
-                  ? t('map.routeAria', { floor: plan.floorLabel, name: plan.name })
-                  : t('map.planAria', { floor: plan.floorLabel, name: plan.name })
-              }
-              labels={{
-                viewFullFloor: t('map.viewFullFloor'),
-                viewRoute: t('map.viewRoute'),
-                viewDestination: t('map.viewDestination'),
-                youAreHere: t('map.youAreHere'),
-              }}
-            />
+            <div className="relative h-full w-full">
+              <FloorPlanMap
+                svg={floorPlanFor(floorId) ?? ''}
+                floorLabel={floorLabelFor(floorId, locale)}
+                destination={
+                  plan.floorId === floorId
+                    ? {
+                        placeId: plan.placeId,
+                        name: plan.name,
+                        x: plan.x,
+                        y: plan.y,
+                      }
+                    : undefined
+                }
+                route={route?.mapRoute}
+                ariaLabel={
+                  route
+                    ? t('map.routeAria', { floor: plan.floorLabel, name: plan.name })
+                    : t('map.planAria', { floor: plan.floorLabel, name: plan.name })
+                }
+                labels={{
+                  viewFullFloor: t('map.viewFullFloor'),
+                  viewRoute: t('map.viewRoute'),
+                  viewDestination: t('map.viewDestination'),
+                  youAreHere: t('map.youAreHere'),
+                  zoomIn: t('map.zoomIn'),
+                  zoomOut: t('map.zoomOut'),
+                }}
+              />
+              {showFloorSwitch && (
+                <div className="absolute top-2.5 left-2.5 z-10 flex gap-1.5">
+                  {route.floors.map((floor) => (
+                    <button
+                      key={floor}
+                      type="button"
+                      onClick={() => onFloorChange?.(floor)}
+                      className={`cursor-pointer rounded-full border px-3 py-1.5 font-sans text-caption font-bold ${
+                        floor === floorId
+                          ? 'border-primary bg-primary-tint text-ink'
+                          : 'border-line bg-surface text-ink-muted'
+                      }`}
+                    >
+                      {floorLabelFor(floor, locale)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <ScreenDock>
@@ -77,6 +129,9 @@ export function NavigateScreen({
               plan={plan}
               cues={route?.cues}
               currentLocation={currentLocation}
+              assumedLocation={assumedLocation}
+              onScan={onScan}
+              onPickLocation={onPickLocation}
             />
           </ScreenDock>
         </>
@@ -116,50 +171,112 @@ function noticeFor(plan: NavigatePlan, t: Translate): string {
 /**
  * The sheet under the map carries the destination facts patients need —
  * name, floor, place — and, once the current location is known, the
- * turn-by-turn cues derived from the route. Without a location it says so
- * instead of guessing a route (DESIGN.md's honesty rule).
+ * turn-by-turn cues derived from the route. It collapses to a one-line peek
+ * (destination + floor) so the map keeps the screen while walking; one tap
+ * on the peek opens the full body with the cues and the scan actions (the
+ * one primary action of this screen). The location block states a real fix
+ * in the secondary colour; before any fix, the assumed line says plainly
+ * that it is an estimate.
  */
 function DestinationPanel({
   plan,
   cues,
   currentLocation,
+  assumedLocation,
+  onScan,
+  onPickLocation,
 }: {
   plan: DestinationPlan
   cues?: string[]
   currentLocation?: string
+  assumedLocation?: string
+  onScan?: () => void
+  onPickLocation?: () => void
 }) {
   const t = useT()
+  // Always start peeking: the map is the thing the patient is walking by,
+  // and the route (assumed or scanned) is usually already drawn. One tap
+  // opens the cues and actions.
+  const [open, setOpen] = useState(false)
 
   return (
-    <div className="flex flex-col gap-3.5 rounded-t-xl bg-surface px-gutter pt-3 pb-6 shadow-sheet">
-      <div className="mx-auto h-1 w-9 rounded-full bg-line" aria-hidden="true" />
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-sans text-body-md font-bold text-ink">{plan.name}</div>
-          <div className="font-sans text-body-sm text-ink-muted">{plan.subtitle}</div>
-        </div>
-        <span className="shrink-0 rounded-full border border-line bg-neutral px-2.5 py-1 font-sans text-caption font-bold text-ink-muted">
-          {plan.floorLabel}
+    <div className="flex flex-col rounded-t-xl bg-surface px-gutter pt-3 shadow-sheet">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex cursor-pointer flex-col gap-3 bg-none p-0 text-inherit"
+      >
+        <span className="mx-auto h-1 w-9 rounded-full bg-line" aria-hidden="true" />
+        <span className="flex items-baseline justify-between gap-3 pb-3">
+          <span className="min-w-0 text-left">
+            <span className="block font-sans text-body-md font-bold text-ink">{plan.name}</span>
+            <span className="block truncate font-sans text-body-sm text-ink-muted">
+              {plan.subtitle}
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="rounded-full border border-line bg-neutral px-2.5 py-1 font-sans text-caption font-bold text-ink-muted">
+              {plan.floorLabel}
+            </span>
+            <ChevronRightIcon
+              className={`text-ink-muted transition-transform ${open ? 'rotate-90' : '-rotate-90'}`}
+            />
+          </span>
         </span>
+      </button>
+
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="flex flex-col gap-3.5 pb-6">
+            <Divider />
+            {/* Where the patient stands (#35) — stated once, plainly; the
+                fallback below says so when it is not yet known. */}
+            {currentLocation && (
+              <p className="m-0 font-sans text-caption font-bold text-secondary">
+                {currentLocation}
+              </p>
+            )}
+            {!currentLocation && assumedLocation && (
+              <p className="m-0 font-sans text-caption text-ink-muted">{assumedLocation}</p>
+            )}
+            {cues ? (
+              <ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5">
+                {cues.map((cue) => (
+                  <li key={cue} className="font-sans text-body-sm text-ink">
+                    {cue}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+            {onScan && !cues && (
+              <div className="flex flex-col gap-2">
+                <Button block onClick={onScan}>
+                  {t('navigate.scanCta')}
+                </Button>
+                {onPickLocation && (
+                  <LinkButton onClick={onPickLocation} className="self-center">
+                    {t('navigate.pickInstead')}
+                  </LinkButton>
+                )}
+              </div>
+            )}
+            {onScan && cues && (
+              <LinkButton onClick={onScan} className="self-center">
+                {t('navigate.updateLocation')}
+              </LinkButton>
+            )}
+            {!onScan && !cues && (
+              <p className="m-0 font-sans text-caption text-ink-muted">
+                {t('navigate.waitingLocation')}
+              </p>
+            )}
+            <LinkButton>{t('navigate.askStaffIfLost')}</LinkButton>
+          </div>
+        </div>
       </div>
-      <Divider />
-      {/* Where the patient stands (#35) — stated once, plainly; the fallback
-          below says so when it is not yet known. */}
-      {currentLocation && (
-        <p className="m-0 font-sans text-caption font-bold text-secondary">{currentLocation}</p>
-      )}
-      {cues ? (
-        <ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5">
-          {cues.map((cue) => (
-            <li key={cue} className="font-sans text-body-sm text-ink">
-              {cue}
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className="m-0 font-sans text-caption text-ink-muted">{t('navigate.waitingLocation')}</p>
-      )}
-      <LinkButton>{t('navigate.askStaffIfLost')}</LinkButton>
     </div>
   )
 }

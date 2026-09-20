@@ -1,5 +1,5 @@
-import { queryOptions, useQuery } from '@tanstack/react-query'
-import { ApiError, apiGet } from '@/api/client'
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError, apiGet, apiPost } from '@/api/client'
 import type { components } from '@/api/schema'
 
 export type LocationObservation = components['schemas']['LocationObservation']
@@ -32,6 +32,35 @@ export function currentLocationQueryOptions(visitId: string) {
 
 export function useCurrentLocation(visitId: string) {
   return useQuery(currentLocationQueryOptions(visitId))
+}
+
+/** The sources the visit's own report endpoint resolves through (ADR-0004). */
+export type LocationReportSource = 'QR' | 'MANUAL'
+
+/**
+ * Report where the patient stands — a scanned QR string, or a manually picked
+ * node id — and make it the current location (#32/#33's write half). The 200
+ * body *is* the observation, so it lands straight in the location cache; a new
+ * nodeId changes the route query's key, and the walking line plus the
+ * "you are here" mark redraw by themselves (#29 AC2) — no reload, no refetch
+ * wait for the poll.
+ */
+export function useReportLocation(visitId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { source: LocationReportSource; raw: string }) =>
+      apiPost<LocationObservation>(
+        `/api/v1/journeys/${encodeURIComponent(visitId)}/location`,
+        input,
+      ),
+    onSuccess: (observation) => {
+      queryClient.setQueryData(
+        currentLocationQueryOptions(visitId).queryKey,
+        observation,
+      )
+    },
+  })
 }
 
 /**

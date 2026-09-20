@@ -221,3 +221,49 @@ body,
 #root {
   height: 100%;
 }
+
+/* ── 5. Live-route flow ──────────────────────────────────────────────────
+ * The walking line's moving half: dashes drawn over the solid route stroke
+ * (both are the asset's orange), advanced by a negative dash offset so the
+ * flow runs in point order — origin toward destination, the way the patient
+ * walks. `prefers-reduced-motion` freezes the dashes in place: the line still
+ * reads, only the motion is dropped. The dash period (16 + 12 = 28) and the
+ * offset step are one number pair — keep them in sync if either changes. */
+@keyframes route-flow {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+.route-flow {
+  stroke-dasharray: 16 12;
+  animation: route-flow 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-flow {
+    animation: none;
+  }
+}
+
+/* ── 6. Printable QR sticker sheet ────────────────────────────────────────
+ * When the staff QR sheet is open, printing yields the stickers alone: the
+ * classic visibility sandwich keeps layout (page breaks stay sane) while
+ * hiding everything that isn't the sheet. */
+@media print {
+  body:has(.qr-sheet) * {
+    visibility: hidden;
+  }
+  body:has(.qr-sheet) .qr-sheet,
+  body:has(.qr-sheet) .qr-sheet * {
+    visibility: visible;
+  }
+  .qr-sheet {
+    position: absolute;
+    inset: 0;
+    overflow: visible;
+    background: none;
+    backdrop-filter: none;
+  }
+}
+

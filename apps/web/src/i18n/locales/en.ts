@@ -88,6 +88,9 @@ export const en: Catalog = {
   'navigate.waitingLocation':
     'Directions appear once we know where you are — scan a QR code at a service point to start.',
   'navigate.askStaffIfLost': 'Tell the staff if you get lost',
+  'navigate.scanCta': 'Scan the QR at the service point',
+  'navigate.pickInstead': 'Or pick where you are',
+  'navigate.updateLocation': 'Scan QR / pick a point to update your location',
 
   'navigate.routeTitle': 'Directions to {name}',
   'navigate.subtitle': '{floor} · {name} · {place}',
@@ -102,12 +105,37 @@ export const en: Catalog = {
   'navigate.cue.stairs': 'Take the stairs to {floor}',
   'navigate.cue.arrive': 'Arrive at {name} — your destination',
 
+  'navigate.assumedLocation': 'Approximate · after {step}',
+
   'map.viewFullFloor': 'View full floor',
   'map.viewRoute': 'View the route',
   'map.viewDestination': 'View the destination',
   'map.youAreHere': 'You are here',
   'map.planAria': 'Floor plan, {floor} — destination {name}',
   'map.routeAria': 'Floor plan, {floor} — route from your location to {name}',
+  'map.zoomIn': 'Zoom in',
+  'map.zoomOut': 'Zoom out',
+
+  'scan.title.camera': 'Scan the service-point QR',
+  'scan.title.pick': 'Pick where you are',
+  'scan.close': 'Close',
+  'scan.cameraHint':
+    'Point the camera at the QR by the service point to set your current location',
+  'scan.cameraDenied':
+    'Camera unavailable — allow camera access, or pick your point instead',
+  'scan.cameraUnsupported': 'This browser cannot scan — pick where you are instead',
+  'scan.switchToPick': 'Pick where you are',
+  'scan.switchToCamera': 'Scan a QR instead',
+  'scan.reportInvalid':
+    'No service point matches this code — try again, or pick your point',
+  'scan.reportFailed': 'Could not send your location — try again',
+  'scan.loadingPlaces': 'Loading service points…',
+  'scan.noPlaces': 'No locatable service points yet',
+  'scan.floor': 'Floor {floor}',
+
+  'anchor.kind.ELEVATOR': 'Elevator',
+  'anchor.kind.STAIRS': 'Stairs',
+  'anchor.kind.ENTRANCE': 'Entrance',
 
   'rail.currentStep': 'Current step',
   'rail.nextStep': 'Next step',

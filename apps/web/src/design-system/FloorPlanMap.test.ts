@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { focusedViewBox, parseViewBox, routedViewBox } from './FloorPlanMap'
+import { clampView, focusedViewBox, MAX_ZOOM, parseViewBox, routedViewBox, zoomedView } from './FloorPlanMap'
 
 describe('parseViewBox', () => {
   it('parses a standard four-value viewBox', () => {
@@ -121,5 +121,53 @@ describe('routedViewBox', () => {
     expect(
       routedViewBox(base, { from: { x: 254, y: 307 }, to: { x: 531, y: 473 } }, 348 / 756),
     ).toEqual({ x: 72.5, y: 0, width: 640, height: 900 })
+  })
+})
+
+describe('clampView', () => {
+  const base = { x: 0, y: 0, width: 1600, height: 900 }
+
+  it('pulls an out-of-bounds window back inside the plan (zoomed-in axes stay edge-locked)', () => {
+    expect(
+      clampView({ x: -100, y: 700, width: 640, height: 640 }, base),
+    ).toEqual({ x: 0, y: 260, width: 640, height: 640 })
+  })
+
+  it('shrinks a window larger than the plan to the whole plan', () => {
+    const clamped = clampView({ x: 300, y: 100, width: 2000, height: 1125 }, base)
+    expect({ width: clamped.width, height: clamped.height }).toEqual({ width: 1600, height: 900 })
+  })
+
+  it('lets a fully-out axis drift so the plan can slide out from under the bottom sheet', () => {
+    // The plan exactly fills the window vertically (900 == 900): dragging up
+    // shifts the view above the plan, but never past 75% of the window.
+    const drifted = clampView({ x: 0, y: -400, width: 1600, height: 900 }, base)
+    expect(drifted.y).toBe(-400)
+    const tooFar = clampView({ x: 0, y: -800, width: 1600, height: 900 }, base)
+    expect(tooFar.y).toBe(-675) // keeps 25% of the window on the plan
+  })
+})
+
+describe('zoomedView', () => {
+  const base = { x: 0, y: 0, width: 1600, height: 900 }
+  const view = { x: 480, y: 270, width: 640, height: 360 }
+
+  it('zooms in at the cursor: the point under the cursor stays put', () => {
+    const next = zoomedView(view, base, 0.5, 0.25, 0.75)
+    expect(next.width).toBe(320)
+    // The plan point at viewport (0.25, 0.75): (480 + 0.25*640, 270 + 0.75*360)
+    const anchorX = 480 + 0.25 * 640
+    const anchorY = 270 + 0.75 * 360
+    expect(next.x + 0.25 * next.width).toBeCloseTo(anchorX)
+    expect(next.y + 0.75 * next.height).toBeCloseTo(anchorY)
+  })
+
+  it('never zooms out past the whole plan', () => {
+    expect(zoomedView(view, base, 10)).toEqual(base)
+  })
+
+  it('never zooms in past MAX_ZOOM of the plan width', () => {
+    const maxedIn = zoomedView(view, base, 1 / 1_000_000)
+    expect(maxedIn.width).toBeCloseTo(1600 / MAX_ZOOM)
   })
 })
