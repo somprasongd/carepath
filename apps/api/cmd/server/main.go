@@ -40,6 +40,9 @@ import (
 	"carepath/apps/api/internal/location/zigbee"
 	"carepath/apps/api/internal/navigation"
 	navigationpostgres "carepath/apps/api/internal/navigation/postgres"
+	"carepath/apps/api/internal/notification"
+	linenotifier "carepath/apps/api/internal/notification/line"
+	notificationpostgres "carepath/apps/api/internal/notification/postgres"
 	"carepath/apps/api/internal/platform/db"
 	"carepath/apps/api/internal/platform/logger"
 	"carepath/apps/api/internal/servicepoint"
@@ -106,6 +109,27 @@ func run(ctx context.Context, log *slog.Logger) error {
 	interval := envDuration("HIS_INGEST_INTERVAL", 5*time.Second)
 	go poller.Run(context.Background(), interval)
 	log.Info("HIS ingest poller started", "interval", interval.String())
+
+	// Queue-proximity notifications (#104, FR-21 / ADR-0013): the engine
+	// always runs; the channel is a port. LINE pushes happen only when the
+	// operator supplies a Messaging API channel token — that token is the
+	// opt-in to real, billed sends. Without it the no-op adapter keeps dev
+	// and demo fully functional with the send visibly suppressed.
+	notificationStore := notificationpostgres.New(database)
+	var queueNotifier notification.Notifier
+	if token := os.Getenv("LINE_MESSAGING_CHANNEL_TOKEN"); token != "" {
+		queueNotifier = linenotifier.New(token, nil)
+		log.Info("queue notifications via LINE Messaging API")
+	} else {
+		queueNotifier = notification.NewNoop(log)
+		log.Info("queue notifications suppressed (LINE_MESSAGING_CHANNEL_TOKEN not set)")
+	}
+	notifications := notification.NewService(
+		notification.NewJourneySource(journeys), notificationStore,
+		notificationpostgres.NewRecipients(database), queueNotifier, log)
+	notifyInterval := envDuration("QUEUE_NOTIFY_INTERVAL", 30*time.Second)
+	go notifications.Run(context.Background(), notifyInterval)
+	log.Info("queue notification sweep started", "interval", notifyInterval.String())
 
 	// Identity/session (#15/#16): LINE_CHANNEL_ID is only required for real
 	// LINE logins — a demo-only deployment can leave it unset, in which case
@@ -217,6 +241,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	locationHandler := location.NewHandler(locations)
 	locationHandler.Register(app.Group("/api/v1"), patientVisitGuard)
 	locationHandler.RegisterDemo(app.Group("/api/v1"))
+	notification.NewHandler(notifications).Register(app.Group("/api/v1"), patientVisitGuard)
 	navigation.NewHandler(navigationGraph).Register(app.Group("/api/v1"))
 
 	return app.Listen(":" + envOrDefault("PORT", "8080"))

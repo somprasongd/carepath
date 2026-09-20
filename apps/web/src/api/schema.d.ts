@@ -863,6 +863,115 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/journeys/{visitId}/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The visit's queue-proximity notification preference (FR-21, #104). No stored preference means enabled — notifications are on unless the patient turned them off. Patient surface (#96) — the session's identity must have claimed the visit. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    visitId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The visit's notification preference */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VisitNotificationPref"];
+                    };
+                };
+                /** @description Missing, malformed, or invalid patient session */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Unknown visit, or not claimed by this session */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        /** @description Set the visit's queue-proximity notification preference (FR-21, #104). Takes effect on the next background sweep. The notification itself is one message per step when the visit's queue position approaches — never more, and it carries no clinical data. Patient surface (#96) — the session's identity must have claimed the visit. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    visitId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["VisitNotificationPrefUpdate"];
+                };
+            };
+            responses: {
+                /** @description The stored preference */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VisitNotificationPref"];
+                    };
+                };
+                /** @description Invalid body (enabled must be a boolean) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing, malformed, or invalid patient session */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Unknown visit, or not claimed by this session */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/journeys/{visitId}/location": {
         parameters: {
             query?: never;
@@ -1843,6 +1952,15 @@ export interface components {
             identity: components["schemas"]["Identity"];
             /** Format: date-time */
             expiresAt: string;
+        };
+        /** @description The visit's queue-proximity notification preference (FR-21, #104, ADR-0013). Per visit, patient-owned, default enabled. */
+        VisitNotificationPref: {
+            visitId: string;
+            enabled: boolean;
+        };
+        /** @description The toggle for PUT /api/v1/journeys/{visitId}/notifications. */
+        VisitNotificationPrefUpdate: {
+            enabled: boolean;
         };
         /** @description The normalized current-location result every provider resolves onto (ADR-0004). nodeId is the canonical navigation node ("<floorId>/<localId>"); zone and confidence are optional — exact sources such as QR leave them unset. */
         LocationObservation: {

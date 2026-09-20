@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.18.0
+  version: 0.19.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -532,6 +532,83 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/journeys/{visitId}/notifications:
+    get:
+      description: >
+        The visit's queue-proximity notification preference (FR-21, #104).
+        No stored preference means enabled — notifications are on unless
+        the patient turned them off. Patient surface (#96) — the session's
+        identity must have claimed the visit.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The visit's notification preference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitNotificationPref'
+        '401':
+          description: Missing, malformed, or invalid patient session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown visit, or not claimed by this session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      description: >
+        Set the visit's queue-proximity notification preference (FR-21,
+        #104). Takes effect on the next background sweep. The notification
+        itself is one message per step when the visit's queue position
+        approaches — never more, and it carries no clinical data. Patient
+        surface (#96) — the session's identity must have claimed the visit.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VisitNotificationPrefUpdate' }
+      responses:
+        '200':
+          description: The stored preference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitNotificationPref'
+        '400':
+          description: Invalid body (enabled must be a boolean)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing, malformed, or invalid patient session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown visit, or not claimed by this session
           content:
             application/json:
               schema:
@@ -1545,6 +1622,21 @@ components:
         sessionToken: { type: string }
         identity: { $ref: '#/components/schemas/Identity' }
         expiresAt: { type: string, format: date-time }
+    VisitNotificationPref:
+      type: object
+      description: >
+        The visit's queue-proximity notification preference (FR-21, #104,
+        ADR-0013). Per visit, patient-owned, default enabled.
+      required: [visitId, enabled]
+      properties:
+        visitId: { type: string }
+        enabled: { type: boolean }
+    VisitNotificationPrefUpdate:
+      type: object
+      description: The toggle for PUT /api/v1/journeys/{visitId}/notifications.
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
     LocationObservation:
       type: object
       description: The normalized current-location result every provider

@@ -443,6 +443,18 @@ definitions:
       totalDistance:
         type: number
     type: object
+  notification.Pref:
+    properties:
+      enabled:
+        type: boolean
+      visitId:
+        type: string
+    type: object
+  notification.setRequestBody:
+    properties:
+      enabled:
+        type: boolean
+    type: object
   servicepoint.ServicePoint:
     properties:
       code:
@@ -948,6 +960,71 @@ paths:
       summary: Report a scanned location fix
       tags:
       - location
+  /api/v1/journeys/{visitId}/notifications:
+    get:
+      description: 'FR-21 (#104): whether queue-proximity notifications are enabled
+        for this visit. No stored preference means enabled. Patient-surface (#96):
+        the session''s identity must have claimed the visit.'
+      parameters:
+      - description: Visit ID
+        in: path
+        name: visitId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/notification.Pref'
+        "404":
+          description: unknown visit
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Read the visit's queue-notification preference
+      tags:
+      - notifications
+    put:
+      consumes:
+      - application/json
+      description: 'FR-21 (#104): enable or disable queue-proximity notifications
+        for this visit. The change takes effect on the next sweep. Patient-surface
+        (#96): the session''s identity must have claimed the visit.'
+      parameters:
+      - description: Visit ID
+        in: path
+        name: visitId
+        required: true
+        type: string
+      - description: The toggle
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/notification.setRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/notification.Pref'
+        "400":
+          description: invalid body
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: unknown visit
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Set the visit's queue-notification preference
+      tags:
+      - notifications
   /api/v1/journeys/{visitId}/queue:
     get:
       description: 'FR-17: for every currently-actionable step bound to a service

@@ -73,6 +73,9 @@ export const en: Catalog = {
   'journey.navigateCta': 'Take me to {title}',
   'journey.shareWithFamily': 'Share progress with family',
   'journey.shareDemoHint': 'Demo mode: sharing is not available yet',
+  'journey.notifyToggleLabel': 'Notify me as my queue approaches — once per step, via LINE',
+  'journey.notifyOn': 'Notifications on',
+  'journey.notifyOff': 'Notifications off',
   'journey.recommendReason.nearest': 'Picked as the closest to your last known location',
   'journey.recommendReason.planOrder':
     'Picked by your care plan’s order — scan a QR at any service point so we can pick the closest one',

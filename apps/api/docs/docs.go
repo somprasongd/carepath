@@ -611,6 +611,102 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/journeys/{visitId}/notifications": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "FR-21 (#104): whether queue-proximity notifications are enabled for this visit. No stored preference means enabled. Patient-surface (#96): the session's identity must have claimed the visit.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Read the visit's queue-notification preference",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit ID",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/notification.Pref"
+                        }
+                    },
+                    "404": {
+                        "description": "unknown visit",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "FR-21 (#104): enable or disable queue-proximity notifications for this visit. The change takes effect on the next sweep. Patient-surface (#96): the session's identity must have claimed the visit.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Set the visit's queue-notification preference",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit ID",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The toggle",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/notification.setRequestBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/notification.Pref"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "unknown visit",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/journeys/{visitId}/queue": {
             "get": {
                 "security": [
@@ -1832,6 +1928,25 @@ const docTemplate = `{
                 },
                 "totalDistance": {
                     "type": "number"
+                }
+            }
+        },
+        "notification.Pref": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "visitId": {
+                    "type": "string"
+                }
+            }
+        },
+        "notification.setRequestBody": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
                 }
             }
         },
