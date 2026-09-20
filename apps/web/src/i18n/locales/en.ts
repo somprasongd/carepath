@@ -73,6 +73,9 @@ export const en: Catalog = {
   'journey.navigateCta': 'Take me to {title}',
   'journey.shareWithFamily': 'Share progress with family',
   'journey.shareDemoHint': 'Demo mode: sharing is not available yet',
+  'journey.recommendReason.nearest': 'Picked as the closest to your last known location',
+  'journey.recommendReason.planOrder':
+    'Picked by your care plan’s order — scan a QR at any service point so we can pick the closest one',
 
   // Next-step queue card (features/visit/components/QueueCard.tsx, FR-17).
   'queue.title': 'Queue at your next step',

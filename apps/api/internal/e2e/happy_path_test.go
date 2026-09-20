@@ -200,12 +200,13 @@ func TestHappyPath(t *testing.T) {
 	hisClient := httpclient.New(server.URL, server.Client())
 	hospitalMap := hospitalmap.NewService(hospitalmappostgres.New(database))
 	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), hospitalMap)
-	journeys := journey.NewService(hisClient, servicePoints, journeypostgres.New(database), database, "Asia/Bangkok")
 	navigationGraph := navigation.NewService(navigationpostgres.New(database), servicePoints)
 	locations, err := location.NewService(locationpostgres.New(database), navigationGraph, manual.New())
 	if err != nil {
 		t.Fatalf("location service: %v", err)
 	}
+	journeys := journey.NewService(hisClient, servicePoints, navigationGraph, locations,
+		journeypostgres.New(database), database, "Asia/Bangkok")
 
 	// Patient entry: the two seed facts project the opening plan —
 	// registration done, the clinic visit recommended, X-ray next.
@@ -219,6 +220,11 @@ func TestHappyPath(t *testing.T) {
 	assertStep(t, view, "CASHIER", "PENDING")
 	if view.Recommended == nil || view.Recommended.StepKey != "CLINIC:MED:1" {
 		t.Fatalf("recommended = %v, want CLINIC:MED:1", stepKeyOf(view.Recommended))
+	}
+	// No location recorded yet, so the pick is explained by plan sequence,
+	// not distance (#103).
+	if view.RecommendationReason != journey.RecommendPlanOrder {
+		t.Fatalf("recommendationReason = %q, want PLAN_ORDER before any location is recorded", view.RecommendationReason)
 	}
 	if len(view.Actionable) != 2 {
 		t.Fatalf("actionable = %d steps, want clinic (current) + x-ray (next)", len(view.Actionable))
@@ -261,6 +267,11 @@ func TestHappyPath(t *testing.T) {
 	if view.Recommended == nil || view.Recommended.StepKey != "XRAY:1" {
 		t.Fatalf("recommended after round opens = %v, want XRAY:1", stepKeyOf(view.Recommended))
 	}
+	// The reception fix recorded above is the pick's criterion now — the
+	// reason code must say so (#103).
+	if view.RecommendationReason != journey.RecommendNearest {
+		t.Fatalf("recommendationReason after round opens = %q, want NEAREST from the recorded location", view.RecommendationReason)
+	}
 	route = routeToRecommended(t, navigationGraph, "I-1301/node-reception", view)
 	if last := route.Nodes[len(route.Nodes)-1]; last.ID != "I-1301/node-xray" {
 		t.Fatalf("destination after round opens = %s, want the X-ray entry node I-1301/node-xray", last.ID)
@@ -276,6 +287,9 @@ func TestHappyPath(t *testing.T) {
 	assertStep(t, view, "CLINIC:MED:2", "READY")
 	if view.Recommended == nil || view.Recommended.StepKey != "CLINIC:MED:2" {
 		t.Fatalf("recommended after x-ray resulted = %v, want CLINIC:MED:2", stepKeyOf(view.Recommended))
+	}
+	if view.RecommendationReason != journey.RecommendNearest {
+		t.Fatalf("recommendationReason after x-ray resulted = %q, want NEAREST — the location observation keeps explaining the pick", view.RecommendationReason)
 	}
 	route = routeToRecommended(t, navigationGraph, "I-1301/node-reception", view)
 	if last := route.Nodes[len(route.Nodes)-1]; last.ID != "I-1301/node-opd-ns" {

@@ -55,6 +55,10 @@ func (f *fakeGraph) RouteToServicePoint(context.Context, string, string, navigat
 	return navigation.Route{}, nil
 }
 
+func (f *fakeGraph) DistancesToServicePoints(context.Context, string, []string, navigation.RouteOptions) (map[string]float64, error) {
+	return nil, navigation.ErrNoRoute
+}
+
 func newProvider() zigbee.Provider { return zigbee.New(&fakeGraph{}) }
 
 // AC #2 of #33: a zone fix maps onto a node of the navigation graph,

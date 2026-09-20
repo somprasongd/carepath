@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.17.0
+  version: 0.18.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -1219,13 +1219,30 @@ components:
           allOf:
             - $ref: '#/components/schemas/JourneyStep'
           nullable: true
-          description: CarePath's pick among `actionable` for the
-            patient-facing single primary action; null when actionable is
-            empty. Today this is the first actionable step by sequence.
-            Ranking it by distance or queue length (ADR-0009 §6) remains the
-            intent — the queue data it needs is served by
-            /api/v1/journeys/{visitId}/queue (FR-17), but the ranking itself
-            is not implemented yet.
+          description: >
+            CarePath's pick among `actionable` for the patient-facing single
+            primary action; null when actionable is empty. Ranked by shortest
+            walking distance from the visit's last known location when one
+            exists (recommendationReason NEAREST), otherwise by plan sequence
+            (recommendationReason PLAN_ORDER). Queue length deliberately does
+            not rank it (#103) — a recommendation must stay put while the
+            patient walks, and queue ticks would flip it; the queue picture
+            rides /api/v1/journeys/{visitId}/queue (FR-17) beside the pick
+            instead.
+        recommendationReason:
+          type: string
+          nullable: true
+          enum: [NEAREST, PLAN_ORDER]
+          description: >
+            Which criterion produced `recommended`, so the pick is
+            explainable rather than a black box (ADR-0012 — a stable code;
+            the patient-facing text lives in the web catalogs). NEAREST is
+            the shortest walking distance on the navigation graph from the
+            visit's last recorded location observation (default
+            accessibility). PLAN_ORDER means no usable location, so the
+            plan's own sequence decides; actionable steps that cannot be
+            routed rank after every routed one, ties by sequence. Null
+            exactly when `recommended` is null.
         syncedAt: { type: string, format: date-time }
     JourneyQueue:
       type: object

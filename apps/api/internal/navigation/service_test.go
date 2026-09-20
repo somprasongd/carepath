@@ -194,3 +194,51 @@ func TestRouteToServicePointUnmappedDestination(t *testing.T) {
 		})
 	}
 }
+
+// #103: many service points measured from one origin in a single pass;
+// unresolvable codes (unknown, unmapped, unreachable) are absent, not
+// errors — ranking treats them as "no distance".
+func TestDistancesToServicePointsRanksFromOneOrigin(t *testing.T) {
+	entry := "I-1301/node-pharmacy"
+	reception := "I-1301/node-reception"
+	voidEntry := "I-1301/node-void"
+	graph := routeTestGraph()
+	// An isolated node as an unreachable destination.
+	graph.nodes["I-1301/node-void"] = NavNode{ID: "I-1301/node-void", FloorID: "I-1301", NodeType: "CORRIDOR"}
+	svc := NewService(graph, &fakeServicePoints{byCode: map[string]servicepoint.ServicePoint{
+		"PHARMACY": {ID: "SP-PHARMACY", Code: "PHARMACY", Name: "Pharmacy", PlaceID: "PHARMACY-01",
+			Place: &hospitalmap.Place{ID: "PHARMACY-01", FloorID: "I-1301", Name: "Pharmacy", EntryNodeID: &entry}},
+		"RECEPTION": {ID: "SP-RECEPTION", Code: "RECEPTION", Name: "Reception", PlaceID: "RECEPTION-01",
+			Place: &hospitalmap.Place{ID: "RECEPTION-01", FloorID: "I-1301", Name: "Reception", EntryNodeID: &reception}},
+		"CASHIER": {ID: "SP-CASHIER", Code: "CASHIER", Name: "Cashier", PlaceID: "CASHIER-01"}, // no place
+		"VOID": {ID: "SP-VOID", Code: "VOID", Name: "Void", PlaceID: "VOID-01",
+			Place: &hospitalmap.Place{ID: "VOID-01", FloorID: "I-1301", Name: "Void", EntryNodeID: &voidEntry}},
+	}})
+
+	dist, err := svc.DistancesToServicePoints(context.Background(), "I-1301/node-reception",
+		[]string{"PHARMACY", "RECEPTION", "CASHIER", "VOID", "XRAY"}, RouteOptions{})
+	if err != nil {
+		t.Fatalf("DistancesToServicePoints: %v", err)
+	}
+	want := map[string]float64{"PHARMACY": 735, "RECEPTION": 0}
+	if len(dist) != len(want) {
+		t.Fatalf("distances = %v, want exactly %v", dist, want)
+	}
+	for code, d := range want {
+		if dist[code] != d {
+			t.Fatalf("dist[%s] = %v, want %v", code, dist[code], d)
+		}
+	}
+}
+
+func TestDistancesToServicePointsUnknownOriginIsNotFound(t *testing.T) {
+	entry := "I-1301/node-pharmacy"
+	svc := NewService(routeTestGraph(), pharmacyServicePoints(&hospitalmap.Place{
+		ID: "PHARMACY-01", FloorID: "I-1301", Name: "Pharmacy", EntryNodeID: &entry,
+	}))
+
+	if _, err := svc.DistancesToServicePoints(context.Background(), "I-1301/node-nope",
+		[]string{"PHARMACY"}, RouteOptions{}); !errors.Is(err, ErrNodeNotFound) {
+		t.Fatalf("error = %v, want ErrNodeNotFound", err)
+	}
+}

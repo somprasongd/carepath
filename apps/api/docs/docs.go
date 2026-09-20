@@ -1644,6 +1644,10 @@ const docTemplate = `{
                 "patientRef": {
                     "type": "string"
                 },
+                "recommendationReason": {
+                    "description": "RecommendationReason names the criterion behind Recommended, so the\npick is explainable rather than a black box. Empty exactly when\nRecommended is nil.",
+                    "type": "string"
+                },
                 "recommended": {
                     "$ref": "#/definitions/journey.StepView"
                 },

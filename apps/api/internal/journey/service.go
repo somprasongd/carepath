@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 
 	"carepath/apps/api/internal/his"
+	"carepath/apps/api/internal/location"
+	"carepath/apps/api/internal/navigation"
 	"carepath/apps/api/internal/platform/apperr"
 	"carepath/apps/api/internal/platform/db"
 	"carepath/apps/api/internal/platform/logger"
@@ -58,16 +60,22 @@ type Service interface {
 type service struct {
 	his           his.Client
 	servicePoints servicepoint.Service
-	repo          Repo
-	tx            db.Transactor
+	// navigation and location power the recommendation's distance
+	// criterion (#103): the visit's last known observation is the origin,
+	// and the graph measures the walk to each actionable step's service
+	// point.
+	navigation navigation.Service
+	location   location.Service
+	repo       Repo
+	tx         db.Transactor
 	// queueTZ anchors the queue stats' "today" window. It is the hospital
 	// timezone, shared with the analytics module's env (#101) — midnight is
 	// resolved by the database either way, never by this process's clock.
 	queueTZ string
 }
 
-func NewService(hisClient his.Client, servicePoints servicepoint.Service, repo Repo, tx db.Transactor, queueTZ string) Service {
-	return &service{his: hisClient, servicePoints: servicePoints, repo: repo, tx: tx, queueTZ: queueTZ}
+func NewService(hisClient his.Client, servicePoints servicepoint.Service, navigation navigation.Service, location location.Service, repo Repo, tx db.Transactor, queueTZ string) Service {
+	return &service{his: hisClient, servicePoints: servicePoints, navigation: navigation, location: location, repo: repo, tx: tx, queueTZ: queueTZ}
 }
 
 func (s *service) ApplyHISEvent(ctx context.Context, event his.Event) error {
@@ -167,6 +175,7 @@ func (s *service) GetJourney(ctx context.Context, visitID string) (View, error) 
 			return err
 		}
 		view = assembleView(visit, points)
+		s.recommendFromLocation(ctx, &view)
 		return nil
 	})
 	if err != nil {
@@ -231,8 +240,11 @@ func (s *service) ListJourneys(ctx context.Context) ([]View, error) {
 			return err
 		}
 		views = make([]View, len(visits))
-		for i, visit := range visits {
-			views[i] = assembleView(visit, points)
+		for i := range visits {
+			views[i] = assembleView(visits[i], points)
+			// Ranked per visit so the monitor's "next" chip and the
+			// patient's screen never disagree about the pick.
+			s.recommendFromLocation(ctx, &views[i])
 		}
 		return nil
 	})
@@ -240,6 +252,54 @@ func (s *service) ListJourneys(ctx context.Context) ([]View, error) {
 		return nil, err
 	}
 	return views, nil
+}
+
+// recommendFromLocation upgrades a view's plan-order recommendation to the
+// distance criterion (#103, FR-04): shortest walking distance from the
+// visit's last known observation over the navigation graph, default
+// accessibility — a per-patient accessible-only preference exists only on
+// the navigation screens (#99). Any miss — no observation yet (the common
+// case: the patient has not scanned a QR), an origin the graph does not
+// know, a graph read error — leaves the documented plan-order fallback
+// standing: a recommendation is advice and degrades to its fallback
+// criterion, never fails the read.
+func (s *service) recommendFromLocation(ctx context.Context, view *View) {
+	if view.Recommended == nil {
+		return
+	}
+	if s.location == nil || s.navigation == nil {
+		// Minimal test stacks assemble the service without the location and
+		// navigation collaborators; production wiring always passes both.
+		return
+	}
+	obs, err := s.location.Current(ctx, view.VisitID)
+	if err != nil {
+		if apperr.KindOf(err) != apperr.KindNotFound {
+			logger.FromContext(ctx).Warn("recommendation: location unavailable, keeping plan order",
+				"visit_id", view.VisitID, "error", err)
+		}
+		return
+	}
+	codes := make([]string, 0, len(view.Actionable))
+	seen := make(map[string]bool, len(view.Actionable))
+	for i := range view.Actionable {
+		if sp := view.Actionable[i].ServicePoint; sp != nil && !seen[sp.Code] {
+			seen[sp.Code] = true
+			codes = append(codes, sp.Code)
+		}
+	}
+	if len(codes) == 0 {
+		return
+	}
+	distances, err := s.navigation.DistancesToServicePoints(ctx, obs.NodeID, codes, navigation.RouteOptions{})
+	if err != nil {
+		if apperr.KindOf(err) != apperr.KindNotFound {
+			logger.FromContext(ctx).Warn("recommendation: graph distances unavailable, keeping plan order",
+				"visit_id", view.VisitID, "error", err)
+		}
+		return
+	}
+	recommendByDistance(view, distances)
 }
 
 func (s *service) TransitionStep(ctx context.Context, visitID, stepKey string, cmd TransitionCommand, source string, actor Actor) (View, error) {

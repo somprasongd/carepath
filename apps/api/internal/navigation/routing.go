@@ -106,6 +106,70 @@ func shortestRoute(nodes []NavNode, edges []NavEdge, from, to string, opts Route
 	return route, nil
 }
 
+// shortestDistances settles the whole graph from one origin and returns the
+// cheapest walk cost to every reachable node — the multi-destination twin of
+// shortestRoute (the journey recommendation ranks several service points
+// from one patient position, #103, and one Dijkstra beats one per target).
+// Pure over the in-memory graph like its sibling; an unknown origin yields
+// ErrNodeNotFound and unreachable nodes are absent from the result.
+func shortestDistances(nodes []NavNode, edges []NavEdge, from string, opts RouteOptions) (map[string]float64, error) {
+	byID := make(map[string]NavNode, len(nodes))
+	for _, node := range nodes {
+		byID[node.ID] = node
+	}
+	if _, ok := byID[from]; !ok {
+		return nil, ErrNodeNotFound
+	}
+
+	adjacency := make(map[string][]NavEdge)
+	for _, edge := range edges {
+		// Same corrupt-data rule as shortestRoute: Dijkstra lies on negative
+		// costs, and authored distances are never negative.
+		if edge.Distance < 0 {
+			return nil, apperr.New(apperr.KindInternal, "navigation: negative distance on edge "+edge.ID)
+		}
+		if opts.AccessibleOnly && !edge.Accessible {
+			continue
+		}
+		adjacency[edge.FromNodeID] = append(adjacency[edge.FromNodeID], edge)
+	}
+
+	// dist/done follow the lazy-deletion variant: stale heap entries for an
+	// already-settled node are skipped on pop.
+	dist := make(map[string]float64, len(nodes))
+	for id := range byID {
+		dist[id] = math.Inf(1)
+	}
+	dist[from] = 0
+	done := make(map[string]bool, len(nodes))
+
+	pq := &priorityQueue{{nodeID: from}}
+	heap.Init(pq)
+	for pq.Len() > 0 {
+		current := heap.Pop(pq).(pqItem)
+		if done[current.nodeID] {
+			continue
+		}
+		done[current.nodeID] = true
+		for _, edge := range adjacency[current.nodeID] {
+			if done[edge.ToNodeID] {
+				continue
+			}
+			if next := dist[current.nodeID] + edge.Distance; next < dist[edge.ToNodeID] {
+				dist[edge.ToNodeID] = next
+				heap.Push(pq, pqItem{nodeID: edge.ToNodeID, dist: next})
+			}
+		}
+	}
+
+	for id, d := range dist {
+		if math.IsInf(d, 1) {
+			delete(dist, id)
+		}
+	}
+	return dist, nil
+}
+
 // pqItem is one frontier entry: a node and the cheapest known cost to it.
 type pqItem struct {
 	nodeID string
