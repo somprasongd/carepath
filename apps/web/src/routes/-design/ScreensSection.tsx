@@ -12,6 +12,24 @@ import { ScreenFrame, Section, SubHead } from './CatalogueParts'
 const MOBILE = { width: 390, height: 844, scale: 0.82 }
 const DESKTOP = { width: 1440, height: 900, scale: 0.62 }
 
+/**
+ * The gallery's Thai specimen of a resolved destination plan. The screen
+ * takes this as a prop now — the component itself stays language-neutral
+ * (ADR-0012), so this literal lives in the staff/demo gallery, not in the
+ * patient component.
+ */
+const REFERENCE_PLAN = {
+  title: 'เส้นทางไปรับยา',
+  name: 'Pharmacy',
+  subtitle: 'ชั้น 1 · Pharmacy · PHARMACY-01',
+  floorId: 'I-1301',
+  floorLabel: 'ชั้น 1',
+  placeId: 'PHARMACY-01',
+  servicePointCode: 'PHARMACY',
+  x: 885,
+  y: 190,
+}
+
 export function ScreensSection() {
   return (
     <Section
@@ -41,7 +59,7 @@ export function ScreensSection() {
           <ReferenceJourneyDone />
         </ScreenFrame>
         <ScreenFrame title="นำทางไปจุดบริการ" {...MOBILE}>
-          <NavigateScreen />
+          <NavigateScreen plan={{ state: 'plan', ...REFERENCE_PLAN }} />
         </ScreenFrame>
       </div>
 

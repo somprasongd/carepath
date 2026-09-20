@@ -77,10 +77,22 @@ export type FloorPlanRoute = {
 export type FloorPlanMapProps = {
   /** Raw SVG markup of a packages/floorplans floor plan. */
   svg: string
-  /** Thai floor label for the map caption, e.g. "ชั้น 1". */
+  /** Patient-facing floor label for the map caption, e.g. "Floor 1". */
   floorLabel: string
   destination?: FloorPlanDestination
   route?: FloorPlanRoute
+  /** Spoken label for the whole map; the caller composes it translated. */
+  ariaLabel?: string
+  /**
+   * Button and you-are-here captions, supplied translated (ADR-0012). The
+   * focus toggle is hidden and the origin mark drops its label without them.
+   */
+  labels?: {
+    viewFullFloor: string
+    viewRoute: string
+    viewDestination: string
+    youAreHere: string
+  }
 }
 
 /**
@@ -128,7 +140,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg'
  * No route is drawn; turn-by-turn lines arrive with the navigation API
  * (#28/#29), never faked here.
  */
-export function FloorPlanMap({ svg, floorLabel, destination, route }: FloorPlanMapProps) {
+export function FloorPlanMap({ svg, floorLabel, destination, route, ariaLabel, labels }: FloorPlanMapProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [focused, setFocused] = useState(true)
 
@@ -160,12 +172,14 @@ export function FloorPlanMap({ svg, floorLabel, destination, route }: FloorPlanM
 
     const floor = el.querySelector('g[data-floor]')
     const center =
-      destination && floor ? drawDestination(floor as SVGGElement, el, destination) : null
+      destination && floor
+        ? drawDestination(floor as SVGGElement, el, destination)
+        : null
 
     let routeLinesBounds: { from: { x: number; y: number }; to: { x: number; y: number } } | null =
       null
     if (route && floor) {
-      const drawn = drawRoute(floor as SVGGElement, route)
+      const drawn = drawRoute(floor as SVGGElement, route, labels?.youAreHere)
       routeLinesBounds = drawn ? absoluteBox(el, drawn) : null
     }
 
@@ -183,15 +197,10 @@ export function FloorPlanMap({ svg, floorLabel, destination, route }: FloorPlanM
       : base
     el.setAttribute('viewBox', `${view.x} ${view.y} ${view.width} ${view.height}`)
 
-    if (destination) {
-      el.setAttribute(
-        'aria-label',
-        route
-          ? `ผัง${floorLabel} — เส้นทางจากตำแหน่งปัจจุบันไป${destination.name}`
-          : `ผัง${floorLabel} — จุดหมาย ${destination.name}`,
-      )
+    if (destination && ariaLabel) {
+      el.setAttribute('aria-label', ariaLabel)
     }
-  }, [svg, destination, floorLabel, focused, route])
+  }, [svg, destination, floorLabel, focused, route, ariaLabel, labels])
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-lg border border-line bg-surface">
@@ -202,13 +211,13 @@ export function FloorPlanMap({ svg, floorLabel, destination, route }: FloorPlanM
         className="flex h-full w-full items-center justify-center [&>svg]:m-auto"
         dangerouslySetInnerHTML={{ __html: svg }}
       />
-      {(destination || route) && (
+      {labels && (destination || route) && (
         <button
           type="button"
           onClick={() => setFocused((value) => !value)}
           className="absolute top-2.5 right-2.5 cursor-pointer rounded-full border border-line bg-surface px-3 py-1.5 font-sans text-caption font-bold text-ink"
         >
-          {focused ? 'ดูทั้งชั้น' : route ? 'ดูเส้นทาง' : 'ดูจุดหมาย'}
+          {focused ? labels.viewFullFloor : route ? labels.viewRoute : labels.viewDestination}
         </button>
       )}
       <span className="absolute bottom-2.5 left-2.5 rounded-full border border-line bg-surface px-2.5 py-1 font-sans text-caption font-bold text-ink-muted">
@@ -307,10 +316,14 @@ function appendPin(floor: SVGGElement, pin: { x: number; y: number }, name: stri
  * its `arrow` marker, so the overlay matches the plan's shape language
  * instead of styling over it; the sample `#route-layer` stays hidden —
  * this group is the live one. Where the patient stands is a plain route-dot,
- * or — when the caller passes `origin` — the labelled "you are here" mark
- * from appendOriginMark.
+ * or — when the caller passes an origin and its label — the labelled
+ * you-are-here mark from appendOriginMark.
  */
-function drawRoute(floor: SVGGElement, route: FloorPlanRoute): SVGGElement | null {
+function drawRoute(
+  floor: SVGGElement,
+  route: FloorPlanRoute,
+  youAreHere?: string,
+): SVGGElement | null {
   const lines = route.lines.filter((line) => line.length > 0)
   if (lines.length === 0) return null
 
@@ -322,10 +335,10 @@ function drawRoute(floor: SVGGElement, route: FloorPlanRoute): SVGGElement | nul
     g.append(polyline)
   }
 
-  if (route.origin) {
-    g.append(originMark(route.origin))
+  const origin = route.origin ?? lines[0][0]
+  if (route.origin && youAreHere) {
+    g.append(originMark(route.origin, youAreHere))
   } else {
-    const origin = lines[0][0]
     const dot = document.createElementNS(SVG_NS, 'circle')
     dot.setAttribute('class', 'route-dot')
     dot.setAttribute('cx', String(origin.x))
@@ -340,10 +353,10 @@ function drawRoute(floor: SVGGElement, route: FloorPlanRoute): SVGGElement | nul
 
 /**
  * The patient's position (#35): the destination pin's shape language in the
- * secondary colour — halo + dot + label above the point, so "คุณอยู่ที่นี่"
- * never collides with a destination label below it.
+ * secondary colour — halo + dot + label above the point, so the you-are-here
+ * label never collides with a destination label below it.
  */
-function originMark(point: { x: number; y: number }): SVGGElement {
+function originMark(point: { x: number; y: number }, labelText: string): SVGGElement {
   const g = document.createElementNS(SVG_NS, 'g')
   g.setAttribute('transform', `translate(${point.x} ${point.y})`)
 
@@ -359,8 +372,7 @@ function originMark(point: { x: number; y: number }): SVGGElement {
   g.append(halo, dot)
 
   const labelHeight = 34
-  const label = 'คุณอยู่ที่นี่'
-  const labelWidth = Math.max(120, label.length * 12 + 28)
+  const labelWidth = Math.max(120, labelText.length * 12 + 28)
   const box = document.createElementNS(SVG_NS, 'g')
   box.setAttribute('transform', `translate(0 ${-40 - labelHeight})`)
   const background = document.createElementNS(SVG_NS, 'rect')
@@ -379,7 +391,7 @@ function originMark(point: { x: number; y: number }): SVGGElement {
   text.setAttribute('font-size', '22')
   text.setAttribute('font-weight', '700')
   text.setAttribute('fill', 'var(--ink)')
-  text.textContent = label
+  text.textContent = labelText
   box.append(background, text)
   g.append(box)
   return g

@@ -1,3 +1,4 @@
+import { useT } from '@/i18n'
 import {
   AppBar,
   Divider,
@@ -8,36 +9,17 @@ import {
   Screen,
   ScreenDock,
 } from '@/design-system'
-import {
-  floorPlanFor,
-  type DestinationPlan,
-  type NavigatePlan,
-} from '@/features/floorplan'
+import { floorPlanFor, type DestinationPlan, type NavigatePlan } from '@/features/floorplan'
 
 /**
- * Static reference for /design: the pharmacy on the real ground-floor plan —
- * the same asset and highlight as the live screen, no fabricated route.
- */
-const REFERENCE_PLAN: DestinationPlan = {
-  title: 'เส้นทางไปรับยา',
-  name: 'Pharmacy',
-  subtitle: 'ชั้น 1 · Pharmacy · PHARMACY-01',
-  floorId: 'I-1301',
-  floorLabel: 'ชั้น 1',
-  placeId: 'PHARMACY-01',
-  servicePointCode: 'PHARMACY',
-  x: 885,
-  y: 190,
-}
-
-/**
- * ผู้ป่วย · นำทางไปจุดบริการ — the real floor-plan asset with the
+ * Patient · navigate to a service point — the real floor-plan asset with the
  * destination room highlighted and named (#25), plus, when the current
  * location is known, the walking line and turn-by-turn cues from the
  * navigation API (#28) drawn as a live overlay (#29). Without a location
  * the screen keeps its honest destination-only view — nothing about the
- * route is invented (DESIGN.md). Omitting `plan` renders the static
- * reference screens on /design.
+ * route is invented (DESIGN.md). The plan always comes from the caller:
+ * the live route computes it from the journey, /design passes its static
+ * reference plan.
  */
 export function NavigateScreen({
   plan,
@@ -45,71 +27,88 @@ export function NavigateScreen({
   currentLocation,
   onBack,
 }: {
-  plan?: NavigatePlan
+  plan: NavigatePlan
   route?: { mapRoute: FloorPlanRoute; cues: string[] }
-  /** Plain-Thai line stating where the patient is (#35); absent when unknown. */
+  /** Plain line stating where the patient is (#35); absent when unknown. */
   currentLocation?: string
   onBack?: () => void
 }) {
-  const resolved = plan ?? { state: 'plan' as const, ...REFERENCE_PLAN }
+  const t = useT()
 
   return (
     <Screen variant="patient">
       <AppBar
         onBack={onBack}
-        backLabel="ย้อนกลับไปหน้าเส้นทาง"
-        title={appBarTitle(resolved)}
-        subtitle={resolved.state === 'plan' ? resolved.subtitle : undefined}
+        backLabel={t('navigate.back')}
+        title={appBarTitle(plan, t)}
+        subtitle={plan.state === 'plan' ? plan.subtitle : undefined}
       />
 
-      {resolved.state === 'plan' && floorPlanFor(resolved.floorId) ? (
+      {plan.state === 'plan' && floorPlanFor(plan.floorId) ? (
         <>
           <div className="flex-1 overflow-hidden px-gutter pt-1 pb-2">
             <FloorPlanMap
-              svg={floorPlanFor(resolved.floorId) ?? ''}
-              floorLabel={resolved.floorLabel}
+              svg={floorPlanFor(plan.floorId) ?? ''}
+              floorLabel={plan.floorLabel}
               destination={{
-                placeId: resolved.placeId,
-                name: resolved.name,
-                x: resolved.x,
-                y: resolved.y,
+                placeId: plan.placeId,
+                name: plan.name,
+                x: plan.x,
+                y: plan.y,
               }}
               route={route?.mapRoute}
+              ariaLabel={
+                route
+                  ? t('map.routeAria', { floor: plan.floorLabel, name: plan.name })
+                  : t('map.planAria', { floor: plan.floorLabel, name: plan.name })
+              }
+              labels={{
+                viewFullFloor: t('map.viewFullFloor'),
+                viewRoute: t('map.viewRoute'),
+                viewDestination: t('map.viewDestination'),
+                youAreHere: t('map.youAreHere'),
+              }}
             />
           </div>
 
           <ScreenDock>
-            <DestinationPanel plan={resolved} cues={route?.cues} currentLocation={currentLocation} />
+            <DestinationPanel
+              plan={plan}
+              cues={route?.cues}
+              currentLocation={currentLocation}
+            />
           </ScreenDock>
         </>
       ) : (
         <div className="px-gutter pt-5">
-          <InfoNote>{noticeFor(resolved)}</InfoNote>
+          <InfoNote>{noticeFor(plan, t)}</InfoNote>
         </div>
       )}
     </Screen>
   )
 }
 
-function appBarTitle(plan: NavigatePlan): string {
+type Translate = ReturnType<typeof useT>
+
+function appBarTitle(plan: NavigatePlan, t: Translate): string {
   switch (plan.state) {
     case 'pending':
-      return 'กำลังโหลดจุดหมาย…'
+      return t('navigate.loadingTitle')
     case 'no-destination':
-      return 'จุดบริการของคุณ'
+      return t('navigate.noDestinationTitle')
     default:
       return plan.title
   }
 }
 
-function noticeFor(plan: NavigatePlan): string {
+function noticeFor(plan: NavigatePlan, t: Translate): string {
   switch (plan.state) {
     case 'pending':
-      return 'กำลังโหลดจุดหมายของคุณ…'
+      return t('navigate.pendingNotice')
     case 'no-destination':
-      return 'ยังไม่มีจุดบริการถัดไปในการมาโรงพยาบาลครั้งนี้'
+      return t('navigate.noDestinationNotice')
     default:
-      return 'ระบบยังไม่รองรับเส้นทางในอาคารสำหรับจุดบริการนี้ — โปรดถามเจ้าหน้าที่ที่จุดรับลงทะเบียน'
+      return t('navigate.unsupportedNotice')
   }
 }
 
@@ -128,6 +127,8 @@ function DestinationPanel({
   cues?: string[]
   currentLocation?: string
 }) {
+  const t = useT()
+
   return (
     <div className="flex flex-col gap-3.5 rounded-t-xl bg-surface px-gutter pt-3 pb-6 shadow-sheet">
       <div className="mx-auto h-1 w-9 rounded-full bg-line" aria-hidden="true" />
@@ -155,11 +156,9 @@ function DestinationPanel({
           ))}
         </ol>
       ) : (
-        <p className="m-0 font-sans text-caption text-ink-muted">
-          เส้นทางจะปรากฏเมื่อทราบตำแหน่งปัจจุบันของคุณ — สแกน QR ที่จุดบริการเพื่อเริ่มนำทาง
-        </p>
+        <p className="m-0 font-sans text-caption text-ink-muted">{t('navigate.waitingLocation')}</p>
       )}
-      <LinkButton>แจ้งเจ้าหน้าที่หากหลงทาง</LinkButton>
+      <LinkButton>{t('navigate.askStaffIfLost')}</LinkButton>
     </div>
   )
 }

@@ -1,15 +1,16 @@
 import { stepTitle, type Journey } from '@/features/visit'
+import { format, messagesFor, type Locale } from '@/i18n'
 import { floorPlanFor, floorPlanHasPlace } from './plans'
 
 export type DestinationPlan = {
-  /** AppBar title, e.g. "เส้นทางไปรับยา". */
+  /** AppBar title, e.g. "Directions to Medication pickup" in English. */
   title: string
   /** The destination's name — also drawn beside the map pin (#25 AC3). */
   name: string
-  /** Place line under the title, e.g. "ชั้น 1 · Pharmacy · PHARMACY-01". */
+  /** Place line under the title, e.g. "Floor 1 · Pharmacy · PHARMACY-01". */
   subtitle: string
   floorId: string
-  /** Thai floor label for the map caption, e.g. "ชั้น 1". */
+  /** Patient-facing floor label for the map caption, e.g. "Floor 1". */
   floorLabel: string
   /** Stable SVG place id — the join key to data-place-id in the plan asset. */
   placeId: string
@@ -38,13 +39,17 @@ export type NavigatePlan =
 export function navigatePlanForJourney(
   journey: Journey | undefined,
   isPending: boolean,
+  locale: Locale,
 ): NavigatePlan {
   if (isPending) return { state: 'pending' }
 
   const recommended = journey?.recommended
   if (!journey || !recommended) return { state: 'no-destination' }
 
-  const title = `เส้นทางไป${stepTitle(recommended, 'th')}`
+  const catalog = messagesFor(locale)
+  const title = format(catalog, 'navigate.routeTitle', {
+    name: stepTitle(recommended, locale),
+  })
   const servicePoint = recommended.servicePoint
   const place = servicePoint?.place ?? null
   const svg = place ? floorPlanFor(place.floorId) : null
@@ -58,13 +63,14 @@ export function navigatePlanForJourney(
   }
 
   const name = servicePoint?.name ?? place.name
+  const floorLabel = format(catalog, 'common.floor', { code: place.floor.code })
   return {
     state: 'plan',
     title,
     name,
-    subtitle: `ชั้น ${place.floor.code} · ${name} · ${place.id}`,
+    subtitle: format(catalog, 'navigate.subtitle', { floor: floorLabel, name, place: place.id }),
     floorId: place.floorId,
-    floorLabel: `ชั้น ${place.floor.code}`,
+    floorLabel,
     placeId: place.id,
     servicePointCode: servicePoint?.code ?? '',
     x: place.x,

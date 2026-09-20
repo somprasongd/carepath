@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/api/client'
+import { messagesFor } from '@/i18n'
 import type { Journey, JourneyStep } from './queries'
 import {
   journeyProgress,
@@ -210,8 +211,9 @@ describe('journeyProgress', () => {
 })
 
 describe('journeyProgressLabel', () => {
-  it('composes the plain-Thai progress line', () => {
-    expect(journeyProgressLabel(journey())).toBe('ความคืบหน้า · เสร็จแล้ว 1 จาก 3 ขั้นตอน')
+  it('composes the progress line in each locale', () => {
+    expect(journeyProgressLabel(journey(), 'th')).toBe('ความคืบหน้า · เสร็จแล้ว 1 จาก 3 ขั้นตอน')
+    expect(journeyProgressLabel(journey(), 'en')).toBe('Progress · 1 of 3 steps done')
   })
 })
 
@@ -237,15 +239,25 @@ describe('visitOutcome', () => {
 
 describe('visitLoadErrorMessage', () => {
   it.each([
-    [404, 'ไม่พบข้อมูลการมาโรงพยาบาลของคุณ'],
-    [502, 'ระบบข้อมูลของโรงพยาบาลไม่พร้อมใช้งาน'],
-    [500, 'เชื่อมต่อระบบไม่สำเร็จ'],
-    [0, 'เชื่อมต่อระบบไม่สำเร็จ'],
-  ])('phrases status %i for the patient', (status, expected) => {
-    expect(visitLoadErrorMessage(new ApiError(status, 'internal detail'))).toBe(expected)
+    [404, 'We could not find a visit with that number.'],
+    [502, 'The hospital record system is unavailable right now.'],
+    [500, 'We could not reach the service.'],
+    [0, 'We could not reach the service.'],
+  ])('phrases status %i for the patient in English', (status, expected) => {
+    expect(visitLoadErrorMessage(new ApiError(status, 'internal detail'), 'en')).toBe(expected)
+  })
+
+  it('maps the same statuses onto the Thai catalog (the default locale)', () => {
+    expect(visitLoadErrorMessage(new ApiError(404, 'x'), 'th')).toBe(
+      messagesFor('th')['journey.error.notFound'],
+    )
+    expect(visitLoadErrorMessage(new ApiError(502, 'x'), 'th')).toBe(
+      messagesFor('th')['journey.error.hisUnavailable'],
+    )
+    expect(visitLoadErrorMessage(null, 'th')).toBe(messagesFor('th')['journey.error.unreachable'])
   })
 
   it('handles a missing error object', () => {
-    expect(visitLoadErrorMessage(null)).toBe('เชื่อมต่อระบบไม่สำเร็จ')
+    expect(visitLoadErrorMessage(null, 'en')).toBe('We could not reach the service.')
   })
 })

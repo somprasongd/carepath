@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useAuth } from '@/auth/AuthContext'
-import { useLocale } from '@/i18n'
+import { useLocale, useT } from '@/i18n'
 import {
   AppBar,
   Button,
@@ -30,7 +30,7 @@ import {
 } from '@/features/visit'
 
 /**
- * ผู้ป่วย · หน้าแรกเส้นทาง — the whole visit as one rail, one primary action.
+ * Patient · journey home — the whole visit as one rail, one primary action.
  * No persistent nav: the journey is a linear flow, not a set of destinations.
  *
  * Live data only; the static /design reference variant is ReferenceJourney
@@ -45,6 +45,7 @@ export function JourneyScreen({
 }) {
   const { identity } = useAuth()
   const { locale } = useLocale()
+  const t = useT()
   const { data: journey, isPending, isError, error, refetch } = useJourney(visitId)
   const [shareOpen, setShareOpen] = useState(false)
   // Sharing needs a real patient session (ADR-0011). In demo fallback — API
@@ -63,7 +64,7 @@ export function JourneyScreen({
         onNavigate={onNavigate}
         displayName={identity?.displayName}
       >
-        <Meta>กำลังโหลดขั้นตอนของคุณ…</Meta>
+        <Meta>{t('journey.loading')}</Meta>
       </JourneyShell>
     )
   }
@@ -79,10 +80,10 @@ export function JourneyScreen({
       >
         <Card radius="md" padding="md">
           <div className="mb-2.5 font-sans text-body-md text-ink">
-            {visitLoadErrorMessage(error)}
+            {visitLoadErrorMessage(error, locale)}
           </div>
           <Button variant="ghost" onClick={() => void refetch()}>
-            ลองใหม่
+            {t('journey.retry')}
           </Button>
         </Card>
       </JourneyShell>
@@ -102,7 +103,7 @@ export function JourneyScreen({
           value: `${nextTitle} · ${
             recommended.servicePoint ? servicePointLabel(recommended.servicePoint, locale) : ''
           }`.trim(),
-          cta: `นำทางไป${nextTitle}`,
+          cta: t('journey.navigateCta', { title: nextTitle }),
         }
       : null
   // Nothing to follow once the visit was cancelled — the shared view would
@@ -114,20 +115,21 @@ export function JourneyScreen({
       visitRef={journey?.visitId ?? visitId}
       steps={rail}
       next={next}
-      progress={journey ? journeyProgressLabel(journey) : undefined}
+      progress={journey ? journeyProgressLabel(journey, locale) : undefined}
       notice={outcome ? <VisitOutcomeCard outcome={outcome} /> : undefined}
       onNavigate={onNavigate}
       displayName={identity?.displayName}
     >
-      <JourneyRail steps={rail} />
+      <JourneyRail
+        steps={rail}
+        labels={{ currentStep: t('rail.currentStep'), nextStep: t('rail.nextStep') }}
+      />
       {shareable && (
         <div className="mt-5 flex flex-col items-start">
           <Button variant="ghost" onClick={() => setShareOpen(true)} disabled={!shareReady}>
-            แชร์ความคืบหน้าให้ญาติ
+            {t('journey.shareWithFamily')}
           </Button>
-          {!shareReady && (
-            <Meta className="mt-1">โหมดสาธิต: ยังขอสิทธิ์แชร์ไม่สำเร็จ</Meta>
-          )}
+          {!shareReady && <Meta className="mt-1">{t('journey.shareDemoHint')}</Meta>}
         </div>
       )}
       {shareOpen && (
@@ -151,7 +153,7 @@ export function JourneyShell({
   steps: JourneyStep[]
   /** The sticky CTA; null when nothing is actionable (visit finished). */
   next: { value: string; cta: string } | null
-  /** Progress line under the lead, e.g. "ความคืบหน้า · เสร็จแล้ว 2 จาก 5 ขั้นตอน". */
+  /** Progress line under the lead, e.g. "Progress · 2 of 5 steps done". */
   progress?: string
   /** End-of-visit summary card above the rail; absent mid-visit. */
   notice?: ReactNode
@@ -161,27 +163,33 @@ export function JourneyShell({
   /** Loading/error state replaces the rail. */
   children?: ReactNode
 }) {
+  const t = useT()
   return (
     <Screen variant="patient">
       <AppBar wordmark="CarePath" trailing={<RefPill>{visitRef}</RefPill>} />
 
       <ScreenBody className="pt-1.5 pb-40">
-        <PageTitle className="mt-3.5 mb-1.5">การมาโรงพยาบาลของคุณวันนี้</PageTitle>
-        <Lead className="mb-7 max-w-[300px]">
-          ติดตามขั้นตอนของคุณ แล้วไปยังจุดบริการถัดไปได้จากปุ่มด้านล่าง
-        </Lead>
-        {displayName && <Meta className="-mt-5 mb-7">เข้าสู่ระบบด้วยไลน์ · {displayName}</Meta>}
+        <PageTitle className="mt-3.5 mb-1.5">{t('journey.title')}</PageTitle>
+        <Lead className="mb-7 max-w-[300px]">{t('journey.lead')}</Lead>
+        {displayName && (
+          <Meta className="-mt-5 mb-7">{t('journey.signedInWithLine', { name: displayName })}</Meta>
+        )}
         {progress && <Meta className="-mt-5 mb-7">{progress}</Meta>}
 
         {notice}
-        {children ?? <JourneyRail steps={steps} />}
+        {children ?? (
+          <JourneyRail
+            steps={steps}
+            labels={{ currentStep: t('rail.currentStep'), nextStep: t('rail.nextStep') }}
+          />
+        )}
       </ScreenBody>
 
       {/* No READY step means nothing to navigate to — the one-primary-action
           rule says show no action bar at all rather than a disabled one. */}
       {next && (
         <ScreenDock>
-          <StickyActionBar label="ขั้นตอนถัดไป" value={next.value}>
+          <StickyActionBar label={t('journey.nextStep')} value={next.value}>
             <Button variant="primary" block onClick={onNavigate}>
               <span>{next.cta}</span>
               <ChevronRightIcon />

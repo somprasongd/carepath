@@ -3,6 +3,7 @@
 // the contract — so the SVGs have exactly one source of truth and no copied
 // asset to drift. Selector conventions (g[data-floor], [data-place-id],
 // #route-layer) are documented in packages/floorplans/README.md.
+import { format, messagesFor, type Locale } from '@/i18n'
 import i1301Ground from '../../../../../packages/floorplans/floors/i-1301-ground.svg?raw'
 import i1302Upper from '../../../../../packages/floorplans/floors/i-1302-upper.svg?raw'
 
@@ -17,14 +18,14 @@ export function floorPlanFor(floorId: string): string | null {
 }
 
 /**
- * Thai label for a floor the app can show on a plan ("ชั้น 1"). Journey
- * places carry their floor's code from the API, but route nodes only know
- * floorId — this bridges the two for cross-floor turn cues (#29). Same
- * static scope as PLANS: the floors with a plan asset.
+ * Patient-facing label for a floor the app can show on a plan ("Floor 1").
+ * Journey places carry their floor's code from the API, but route nodes
+ * only know floorId — this bridges the two for cross-floor turn cues
+ * (#29). Same static scope as PLANS: the floors with a plan asset.
  */
-export function floorLabelFor(floorId: string): string {
+export function floorLabelFor(floorId: string, locale: Locale): string {
   const code = FLOOR_CODES[floorId]
-  return code ? `ชั้น ${code}` : floorId
+  return code ? format(messagesFor(locale), 'common.floor', { code }) : floorId
 }
 
 const FLOOR_CODES: Record<string, string> = {
@@ -35,8 +36,8 @@ const FLOOR_CODES: Record<string, string> = {
 /**
  * Whether the plan really carries this place — rooms and nav nodes both
  * hold data-place-id, so one hit is enough. This guards the honest
- * "ยังไม่รองรับเส้นทาง" state when the map model knows a place the plan
- * asset hasn't drawn yet.
+ * route-unsupported state when the map model knows a place the plan
+ * asset has not drawn yet.
  */
 export function floorPlanHasPlace(svg: string, placeId: string): boolean {
   return svg.includes(`data-place-id="${placeId}"`)

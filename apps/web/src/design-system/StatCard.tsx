@@ -3,7 +3,7 @@ import { Card } from './Card'
 export type StatCardProps = {
   label: string
   value: string
-  /** Small trailing unit inside the numeral, e.g. "ราย", "นาที". */
+  /** Small trailing unit inside the numeral, e.g. a persons or minutes word. */
   unit?: string
   note?: string
   /** `attention` is the one orange KPI allowed on a staff screen. */

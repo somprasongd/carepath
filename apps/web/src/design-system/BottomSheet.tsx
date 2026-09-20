@@ -4,7 +4,7 @@ import { Divider } from './Card'
 export type BottomSheetProps = {
   /** Headline figure — walking time in the signage numeral face. */
   primary: string
-  /** Supporting figure, e.g. "· 65 เมตร". */
+  /** Supporting figure, e.g. "· 65 m". */
   secondary?: string
   /** Turn-by-turn text: the accessible alternative to reading the map. */
   steps: string[]

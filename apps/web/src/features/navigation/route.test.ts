@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { format, messagesFor } from '@/i18n'
+import { floorLabelFor } from '@/features/floorplan'
 import {
   currentLocationLabel,
   routeBounds,
@@ -90,14 +92,16 @@ describe('routePolylinesByFloor', () => {
 })
 
 describe('turnByTurnSteps', () => {
-  const label = (floorId: string) => (floorId === 'I-1301' ? 'ชั้น 1' : 'ชั้น 2')
+  const thFloor = (floorId: string) => floorLabelFor(floorId, 'th')
+  const enFloor = (floorId: string) => floorLabelFor(floorId, 'en')
+  const th = messagesFor('th')
 
   it('collapses a same-floor walk into one cue plus arrival', () => {
     const nodes = [node('I-1301', 150, 190), node('I-1301', 318, 190), node('I-1301', 885, 190)]
     const segments = [edge(0, 1, 'CORRIDOR'), edge(1, 2, 'CORRIDOR')]
-    expect(turnByTurnSteps(nodes, segments, 'Pharmacy', label)).toEqual([
-      'เดินตามเส้นสายส้มบนผัง',
-      'ถึงPharmacy — จุดหมายของคุณ',
+    expect(turnByTurnSteps(nodes, segments, 'Pharmacy', thFloor, 'th')).toEqual([
+      th['navigate.cue.followLine'],
+      format(th, 'navigate.cue.arrive', { name: 'Pharmacy' }),
     ])
   })
 
@@ -109,33 +113,49 @@ describe('turnByTurnSteps', () => {
       node('I-1302', 165, 405),
     ]
     const segments = [edge(0, 1, 'CORRIDOR'), edge(1, 2, 'ELEVATOR'), edge(2, 3, 'CORRIDOR')]
-    expect(turnByTurnSteps(nodes, segments, 'Blood Collection', label)).toEqual([
-      'เดินตามเส้นสายส้มบนผัง',
-      'ใช้ลิฟต์ไปชั้น 2',
-      'เดินตามเส้นสายส้มบนผัง',
-      'ถึงBlood Collection — จุดหมายของคุณ',
+    expect(turnByTurnSteps(nodes, segments, 'Blood Collection', thFloor, 'th')).toEqual([
+      th['navigate.cue.followLine'],
+      format(th, 'navigate.cue.elevator', { floor: thFloor('I-1302') }),
+      th['navigate.cue.followLine'],
+      format(th, 'navigate.cue.arrive', { name: 'Blood Collection' }),
+    ])
+  })
+
+  it('speaks the whole cue set in real English for the en locale', () => {
+    const nodes = [
+      node('I-1301', 150, 190),
+      node('I-1301', 700, 300),
+      node('I-1302', 700, 300),
+      node('I-1302', 165, 405),
+    ]
+    const segments = [edge(0, 1, 'CORRIDOR'), edge(1, 2, 'ELEVATOR'), edge(2, 3, 'CORRIDOR')]
+    expect(turnByTurnSteps(nodes, segments, 'Blood Collection', enFloor, 'en')).toEqual([
+      'Follow the orange line on the map',
+      'Take the elevator to Floor 2',
+      'Follow the orange line on the map',
+      'Arrive at Blood Collection — your destination',
     ])
   })
 
   it('names stairs instead of a lift for stair transitions', () => {
     const nodes = [node('I-1301', 700, 300), node('I-1302', 700, 300)]
     const segments = [edge(0, 1, 'STAIRS')]
-    expect(turnByTurnSteps(nodes, segments, 'Lab', label)).toEqual([
-      'ใช้บันไดไปชั้น 2',
-      'ถึงLab — จุดหมายของคุณ',
+    expect(turnByTurnSteps(nodes, segments, 'Lab', thFloor, 'th')).toEqual([
+      format(th, 'navigate.cue.stairs', { floor: thFloor('I-1302') }),
+      format(th, 'navigate.cue.arrive', { name: 'Lab' }),
     ])
   })
 
   it('still announces arrival when the patient already stands at the destination', () => {
     const nodes = [node('I-1301', 885, 190)]
-    expect(turnByTurnSteps(nodes, [], 'Pharmacy', label)).toEqual([
-      'เดินตามเส้นสายส้มบนผัง',
-      'ถึงPharmacy — จุดหมายของคุณ',
+    expect(turnByTurnSteps(nodes, [], 'Pharmacy', thFloor, 'th')).toEqual([
+      th['navigate.cue.followLine'],
+      format(th, 'navigate.cue.arrive', { name: 'Pharmacy' }),
     ])
   })
 
   it('returns no cues for an empty route', () => {
-    expect(turnByTurnSteps([], [], 'Pharmacy', label)).toEqual([])
+    expect(turnByTurnSteps([], [], 'Pharmacy', thFloor, 'th')).toEqual([])
   })
 })
 
@@ -180,23 +200,36 @@ describe('routeOriginOnFloor', () => {
 })
 
 describe('currentLocationLabel', () => {
-  const floorLabel = (floorId: string) => (floorId === 'I-1301' ? 'ชั้น 1' : floorId)
+  const floorLabel = (floorId: string) => floorLabelFor(floorId, 'en')
+  const thFloorLabel = (floorId: string) => floorLabelFor(floorId, 'th')
 
   it('states the floor and an exact source without a zone', () => {
     expect(
-      currentLocationLabel({ floorId: 'I-1301', zone: null, source: 'QR' }, floorLabel),
-    ).toBe('ตำแหน่งปัจจุบัน · ชั้น 1 · สแกน QR')
+      currentLocationLabel({ floorId: 'I-1301', zone: null, source: 'QR' }, floorLabel, 'en'),
+    ).toBe('Current location · Floor 1 · QR scan')
   })
 
   it('carries the zone and source for a probabilistic fix', () => {
     expect(
-      currentLocationLabel({ floorId: 'I-1301', zone: 'PUBLIC', source: 'ZIGBEE' }, floorLabel),
-    ).toBe('ตำแหน่งปัจจุบัน · ชั้น 1 · โซน PUBLIC · Zigbee')
+      currentLocationLabel({ floorId: 'I-1301', zone: 'PUBLIC', source: 'ZIGBEE' }, floorLabel, 'en'),
+    ).toBe('Current location · Floor 1 · Zone PUBLIC · Zigbee')
   })
 
   it('never surfaces an unknown provider name', () => {
     expect(
-      currentLocationLabel({ floorId: 'I-1301', zone: null, source: 'SMOKE_SIGNAL' }, floorLabel),
-    ).toBe('ตำแหน่งปัจจุบัน · ชั้น 1')
+      currentLocationLabel({ floorId: 'I-1301', zone: null, source: 'SMOKE_SIGNAL' }, floorLabel, 'en'),
+    ).toBe('Current location · Floor 1')
+  })
+
+  it('composes the same line from the Thai catalog (default locale)', () => {
+    expect(
+      currentLocationLabel({ floorId: 'I-1301', zone: 'PUBLIC', source: 'QR' }, thFloorLabel, 'th'),
+    ).toBe(
+      format(messagesFor('th'), 'navigate.locationNowAt', { floor: thFloorLabel('I-1301') }) +
+        ' · ' +
+        format(messagesFor('th'), 'navigate.zone', { zone: 'PUBLIC' }) +
+        ' · ' +
+        messagesFor('th')['navigate.source.QR'],
+    )
   })
 })

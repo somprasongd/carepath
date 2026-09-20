@@ -1,3 +1,4 @@
+import { useT } from '@/i18n'
 import { Card, CheckIcon } from '@/design-system'
 
 /**
@@ -6,14 +7,16 @@ import { Card, CheckIcon } from '@/design-system'
  * surface, because orange is reserved for the route CTA (DESIGN.md).
  */
 export function VisitOutcomeCard({ outcome }: { outcome: 'completed' | 'cancelled' }) {
+  const t = useT()
+
   if (outcome === 'cancelled') {
     return (
       <Card radius="md" padding="md" className="mb-5">
-        <div className="mb-1 font-sans text-caption text-ink-muted">การมาโรงพยาบาลนี้</div>
-        <div className="mb-1 text-[18px] font-bold text-ink">ถูกยกเลิก</div>
-        <p className="m-0 font-sans text-body-sm text-ink-muted">
-          หากคุณมีข้อสงสัย โปรดติดต่อเจ้าหน้าที่ที่จุดบริการ
-        </p>
+        <div className="mb-1 font-sans text-caption text-ink-muted">
+          {t('outcome.cancelled.label')}
+        </div>
+        <div className="mb-1 text-[18px] font-bold text-ink">{t('outcome.cancelled.title')}</div>
+        <p className="m-0 font-sans text-body-sm text-ink-muted">{t('outcome.cancelled.body')}</p>
       </Card>
     )
   }
@@ -24,11 +27,9 @@ export function VisitOutcomeCard({ outcome }: { outcome: 'completed' | 'cancelle
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-ink text-surface">
           <CheckIcon />
         </span>
-        <span className="text-[18px] font-bold text-ink">เสร็จสิ้นทุกขั้นตอนแล้ว</span>
+        <span className="text-[18px] font-bold text-ink">{t('outcome.completed.title')}</span>
       </div>
-      <p className="m-0 font-sans text-body-sm text-ink-muted">
-        ขอบคุณที่ใช้บริการวันนี้ ขอให้คุณมีสุขภาพแข็งแรง
-      </p>
+      <p className="m-0 font-sans text-body-sm text-ink-muted">{t('outcome.completed.body')}</p>
     </Card>
   )
 }

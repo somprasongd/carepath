@@ -16,13 +16,13 @@ export type Choice = {
   value: string
   title: string
   description?: ReactNode
-  /** A short figure on the right, e.g. "5 ขั้นตอน". */
+  /** A short figure on the right, e.g. "5 steps". */
   meta?: ReactNode
   icon?: ReactNode
 }
 
 export type ChoiceCardsProps = {
-  /** Describes the group for screen readers, e.g. "แผนการดูแล". */
+  /** Describes the group for screen readers, e.g. a care-plan group. */
   label: string
   options: Choice[]
   value: string

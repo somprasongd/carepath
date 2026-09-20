@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { useT } from '@/i18n'
 import { Button, Card, PageTitle, TextField } from '@/design-system'
 
 /**
- * ค้นหาการนัดหมายด้วยหมายเลขการรักษา (VN) — the patient side's front door.
+ * Find the appointment by visit number (VN) — the patient side's front door.
  * Replaces the old demo auto-entry: the visit must be named before any
  * journey renders. What the patient types is the HIS visit reference the
  * journey API is keyed on (`?visit=` on the patient routes) — VISIT-001 /
@@ -12,6 +13,7 @@ import { Button, Card, PageTitle, TextField } from '@/design-system'
  */
 export function VisitEntryScreen() {
   const navigate = useNavigate()
+  const t = useT()
   const [vn, setVn] = useState('')
   const [error, setError] = useState<string | undefined>()
 
@@ -19,7 +21,7 @@ export function VisitEntryScreen() {
     event.preventDefault()
     const value = vn.trim()
     if (value === '') {
-      setError('กรุณากรอกหมายเลขการรักษา')
+      setError(t('entry.required'))
       return
     }
     navigate({ to: '/patient/journey', search: { visit: value } })
@@ -31,19 +33,17 @@ export function VisitEntryScreen() {
         <Card radius="lg" padding="xl" className="w-full max-w-[440px]">
           <div className="mb-9 flex items-baseline gap-2">
             <span className="font-code text-[20px] font-bold text-ink">CarePath</span>
-            <span className="font-sans text-body-sm text-ink-muted">ผู้ป่วย</span>
+            <span className="font-sans text-body-sm text-ink-muted">{t('entry.role')}</span>
           </div>
 
-          <PageTitle className="mb-1.5">ค้นหาการนัดหมาย</PageTitle>
-          <p className="mt-0 mb-7 font-sans text-body-sm text-ink-muted">
-            กรอกหมายเลขการรักษา (VN) จากสลิกของโรงพยาบาลเพื่อดูแผนการรักษาของคุณ
-          </p>
+          <PageTitle className="mb-1.5">{t('entry.title')}</PageTitle>
+          <p className="mt-0 mb-7 font-sans text-body-sm text-ink-muted">{t('entry.lead')}</p>
 
           <form onSubmit={submit}>
             <div className="mb-5 grid grid-cols-1 gap-4">
               <TextField
-                label="หมายเลขการรักษา (VN)"
-                placeholder="เช่น VISIT-001"
+                label={t('entry.vnLabel')}
+                placeholder={t('entry.vnPlaceholder')}
                 value={vn}
                 onChange={(e) => setVn(e.target.value)}
               />
@@ -56,7 +56,7 @@ export function VisitEntryScreen() {
             )}
 
             <Button type="submit" variant="secondary" block>
-              ดูแผนการรักษา
+              {t('entry.submit')}
             </Button>
           </form>
         </Card>

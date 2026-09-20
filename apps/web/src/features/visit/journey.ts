@@ -1,6 +1,6 @@
 import type { JourneyStep as RailStep, JourneyStepState } from '@/design-system'
 import type { ApiError } from '@/api/client'
-import { lookup, messagesFor, type Locale } from '@/i18n'
+import { format, lookup, messagesFor, type Locale } from '@/i18n'
 import type { Journey, JourneyStep } from './queries'
 
 /**
@@ -72,32 +72,33 @@ export function toJourneySteps(journey: Journey, locale: Locale): RailStep[] {
 }
 
 function stepMeta(step: JourneyStep, state: JourneyStepState, locale: Locale): string {
-  if (step.status === 'CANCELLED') return 'ยกเลิกแล้ว'
-  if (step.status === 'COMPLETED') return 'เสร็จสิ้นแล้ว'
-  if (step.status === 'WAITING') return 'รอผลตรวจ'
+  const catalog = messagesFor(locale)
+  if (step.status === 'CANCELLED') return catalog['step.meta.cancelled']
+  if (step.status === 'COMPLETED') return catalog['step.meta.completed']
+  if (step.status === 'WAITING') return catalog['step.meta.waitingResult']
   if (state === 'current' || state === 'next') {
     return step.servicePoint
       ? `${servicePointLabel(step.servicePoint, locale)} · ${step.servicePoint.placeId}`
-      : 'พร้อมให้บริการ'
+      : catalog['step.meta.ready']
   }
-  return 'รอดำเนินการ'
+  return catalog['step.meta.pending']
 }
 
 /**
  * Journey progress for the patient home screen (#34): how many steps are
  * finished. Cancelled steps stay in `total` — they are part of the plan the
- * rail recaps ("ยกเลิกแล้ว"), so 2 done of 5 with one cancelled still reads
- * honestly against the rail.
+ * rail recaps (the `step.meta.cancelled` label), so 2 done of 5 with one
+ * cancelled still reads honestly against the rail.
  */
 export function journeyProgress(journey: Journey): { done: number; total: number } {
   const done = journey.steps.filter((s) => s.status === 'COMPLETED').length
   return { done, total: journey.steps.length }
 }
 
-/** The progress line under the screen lead, in plain Thai. */
-export function journeyProgressLabel(journey: Journey): string {
+/** The progress line under the screen lead, in the patient's language. */
+export function journeyProgressLabel(journey: Journey, locale: Locale): string {
   const { done, total } = journeyProgress(journey)
-  return `ความคืบหน้า · เสร็จแล้ว ${done} จาก ${total} ขั้นตอน`
+  return format(messagesFor(locale), 'journey.progress', { done, total })
 }
 
 /**
@@ -118,8 +119,9 @@ export function visitOutcome(journey: Journey): VisitOutcome {
  * Load-failure phrasing for the patient, keyed off the HTTP status — the raw
  * error detail (English, internal) stays in the console, never on screen.
  */
-export function visitLoadErrorMessage(error: ApiError | null): string {
-  if (error?.status === 404) return 'ไม่พบข้อมูลการมาโรงพยาบาลของคุณ'
-  if (error?.status === 502) return 'ระบบข้อมูลของโรงพยาบาลไม่พร้อมใช้งาน'
-  return 'เชื่อมต่อระบบไม่สำเร็จ'
+export function visitLoadErrorMessage(error: ApiError | null, locale: Locale): string {
+  const catalog = messagesFor(locale)
+  if (error?.status === 404) return catalog['journey.error.notFound']
+  if (error?.status === 502) return catalog['journey.error.hisUnavailable']
+  return catalog['journey.error.unreachable']
 }
