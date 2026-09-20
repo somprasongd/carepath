@@ -6,15 +6,20 @@ import (
 	"carepath/apps/api/internal/auth"
 	"carepath/apps/api/internal/platform/apperr"
 	"carepath/apps/api/internal/platform/httpx"
+	"carepath/apps/api/internal/servicepoint"
 )
 
 // Handler exposes the journey module over HTTP.
 type Handler struct {
 	service Service
+	// servicePoints answers the station-queue authorization question
+	// ("may this user work this point", #102) — read via the module's
+	// Service interface, never its repo.
+	servicePoints servicepoint.Service
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service Service, servicePoints servicepoint.Service) *Handler {
+	return &Handler{service: service, servicePoints: servicePoints}
 }
 
 // Register mounts the journey routes under the given /api/v1 router. The
@@ -27,8 +32,46 @@ func (h *Handler) Register(router fiber.Router, staffGuard, patientGuard fiber.H
 	router.Get("/journeys/:visitId/queue", patientGuard, h.getQueue)
 	router.Get("/staff/visits", staffGuard, h.listVisits)
 	router.Get("/staff/planning-rules", staffGuard, h.planningRules)
+	router.Get("/staff/queue/:servicePointId", staffGuard, h.getStationQueue)
 	router.Post("/journeys/:visitId/steps/:stepKey/transition", staffGuard, h.transitionStep)
 	router.Post("/journeys/:visitId/clinics/:clinicCode/close-round", staffGuard, h.closeRound)
+}
+
+// getStationQueue godoc
+//
+//	@Summary		Get one service point's working queue
+//	@Description	FR-15/#102: who is being served (STARTED) and who is waiting (READY, longest-waiting first) at the service point, with patient detail and arrival/call times from the timeline. Patient-level data on the staff surface only (NFR-03) — never analytics. STAFF sees only points they are assigned to (user_service_point); ADMIN may read any point. Not assigned reads as 403, including a point id that does not exist.
+//	@Tags			staff
+//	@Security		bearerAuth
+//	@Produce		json
+//	@Param			servicePointId	path	string	true	"Service point ID (from /staff/my/service-points)"
+//	@Success		200	{object}	journey.StationQueue
+//	@Failure		401	{object}	httpx.ErrorResponse	"missing, malformed, or expired staff access token"
+//	@Failure		403	{object}	httpx.ErrorResponse	"authenticated, but not assigned to this service point"
+//	@Failure		500	{object}	httpx.ErrorResponse	"internal server error"
+//	@Router			/api/v1/staff/queue/{servicePointId} [get]
+func (h *Handler) getStationQueue(c fiber.Ctx) error {
+	p := auth.PrincipalFromContext(c.Context())
+	if p.UserID == "" {
+		// The staff guard resolves the principal before handlers run;
+		// an empty one means the route was mounted without it.
+		return httpx.Error(c, apperr.New(apperr.KindUnauthorized, "missing principal"))
+	}
+	if !p.HasRole(auth.RoleAdmin) {
+		assigned, err := h.servicePoints.IsAssigned(c.Context(), p.UserID, c.Params("servicePointId"))
+		if err != nil {
+			return httpx.Error(c, err)
+		}
+		if !assigned {
+			return httpx.Error(c, apperr.New(apperr.KindForbidden,
+				"you are not assigned to this service point"))
+		}
+	}
+	queue, err := h.service.GetStationQueue(c.Context(), c.Params("servicePointId"))
+	if err != nil {
+		return httpx.Error(c, err)
+	}
+	return c.JSON(queue)
 }
 
 // transitionRequestBody is the client-facing command. CommandID is optional —

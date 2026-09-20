@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.16.0
+  version: 0.17.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -742,6 +742,86 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/staff/my/service-points:
+    get:
+      description: >
+        The signed-in staff member's workstation picker feed (FR-15, #102):
+        the active service points they are assigned to in
+        carepath.user_service_point, code-ordered. Admins bypass assignment
+        and see the full active list — the picker is also the admin's way to
+        watch any station. Unassigned points are simply absent for staff;
+        assignment, not existence, decides visibility.
+      security:
+        - staffAuth: []
+      responses:
+        '200':
+          description: The caller's assigned service points (all of them for admins)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServicePoint'
+        '401':
+          description: Missing, malformed, or expired staff access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/staff/queue/{servicePointId}:
+    get:
+      description: >
+        One station's live queue (FR-15, #102): the visits currently being
+        served at the point (STARTED steps, latest call first) and those
+        waiting (READY steps, earliest arrival first — arrival is the latest
+        READY event on the step's timeline). Entries carry patient-level
+        detail (name, reference) because this is the staff surface calling
+        patients in; the analytics module never sees them (NFR-03).
+        sequence/totalSteps say where the step sits in its visit's plan, for
+        "step X of Y" labels. Assignment decides who may ask: a staff member
+        assigned to the point (carepath.user_service_point) or any admin;
+        anyone else gets 403 — identical for a point that does not exist, so
+        the answer leaks no existence. Calling the next patient is not a new
+        mechanism: it is the existing staff transition endpoint moving the
+        head of the waiting list to STARTED.
+      security:
+        - staffAuth: []
+      parameters:
+        - in: path
+          name: servicePointId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The station's queue as of now
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationQueue'
+        '401':
+          description: Missing, malformed, or expired staff access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Authenticated, but not assigned to this service point
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/staff/planning-rules:
     get:
       description: >
@@ -1190,6 +1270,65 @@ components:
           description: The naive product waitingAhead times
             avgWaitMinutes — a rank-order estimate, not a promise; null
             whenever avgWaitMinutes is null.
+    StationQueue:
+      type: object
+      description: >
+        One service point's live queue (FR-15, #102): who is being served
+        right now and who is waiting, in call order. serving and waiting are
+        always arrays (possibly empty) so clients can render an honest
+        "nobody waiting" instead of guessing at null.
+      required: [servicePointId, asOf, serving, waiting]
+      properties:
+        servicePointId: { type: string }
+        asOf:
+          type: string
+          format: date-time
+          description: When the picture was taken.
+        serving:
+          type: array
+          description: STARTED steps at this point, latest call first.
+          items: { $ref: '#/components/schemas/StationQueueEntry' }
+        waiting:
+          type: array
+          description: READY steps at this point, earliest arrival first.
+          items: { $ref: '#/components/schemas/StationQueueEntry' }
+    StationQueueEntry:
+      type: object
+      description: One visit at a station — the staff-facing unit that calls
+        a patient by name. Patient detail appears here and only here among
+        queue surfaces; analytics stays aggregate-only (NFR-03).
+      required: [visitId, stepKey, kind, sequence, totalSteps, status, patientRef, patientName]
+      properties:
+        visitId: { type: string }
+        stepKey: { type: string }
+        kind: { type: string }
+        clinicCode:
+          type: string
+          nullable: true
+        round:
+          type: integer
+          nullable: true
+        sequence:
+          type: integer
+          description: The step's 1-based position in its visit's plan.
+        totalSteps:
+          type: integer
+          description: Steps in the visit's plan — the Y in "step X of Y".
+        status: { type: string, enum: [READY, STARTED] }
+        patientRef: { type: string }
+        patientName: { type: string }
+        readyAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Latest READY event for the step — the arrival that
+            sets the waiting order; null when the timeline has none.
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Latest STARTED event for the step — when the station
+            called this patient in; null while still waiting.
     PlanningRules:
       type: object
       description: >

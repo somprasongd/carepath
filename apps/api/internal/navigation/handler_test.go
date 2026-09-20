@@ -63,6 +63,16 @@ func (f *fakeServicePoints) List(context.Context) ([]servicepoint.ServicePoint, 
 	return nil, nil
 }
 
+// The queue-console assignment reads (#102) never run in this suite; the
+// stubs exist only to satisfy the grown interface.
+func (f *fakeServicePoints) ListForUser(context.Context, string) ([]servicepoint.ServicePoint, error) {
+	panic("not implemented in fake")
+}
+
+func (f *fakeServicePoints) IsAssigned(context.Context, string, string) (bool, error) {
+	panic("not implemented in fake")
+}
+
 func newTestApp(t *testing.T, repo navigation.Repo, pharmacyEntryNodeID string) *fiber.App {
 	t.Helper()
 	app := fiber.New()

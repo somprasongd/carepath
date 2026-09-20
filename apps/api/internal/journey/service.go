@@ -35,6 +35,11 @@ type Service interface {
 	// service point and that point's average wait so far today. Averages
 	// over zero samples are nil — "no data" never masquerades as zero.
 	GetQueue(ctx context.Context, visitID string) (QueueView, error)
+	// GetStationQueue returns the working queue of one service point
+	// (#102, FR-15): who is being served and who is waiting,
+	// longest-waiting first. Patient-level detail rides this staff surface
+	// only — the caller has already authorized the actor for the point.
+	GetStationQueue(ctx context.Context, servicePointID string) (StationQueue, error)
 	// ListJourneys returns the projected journey of every visit for the
 	// staff visit monitor (#37), freshest sync first.
 	ListJourneys(ctx context.Context) ([]View, error)
@@ -203,6 +208,15 @@ func (s *service) GetQueue(ctx context.Context, visitID string) (QueueView, erro
 		return QueueView{}, err
 	}
 	return view, nil
+}
+
+func (s *service) GetStationQueue(ctx context.Context, servicePointID string) (StationQueue, error) {
+	// A single read with no follow-ups — no transaction to join.
+	entries, err := s.repo.StationQueue(ctx, servicePointID)
+	if err != nil {
+		return StationQueue{}, err
+	}
+	return shapeStationQueue(servicePointID, entries, time.Now().UTC()), nil
 }
 
 func (s *service) ListJourneys(ctx context.Context) ([]View, error) {

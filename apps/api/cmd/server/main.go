@@ -187,8 +187,9 @@ func run(ctx context.Context, log *slog.Logger) error {
 	// visit (#96, the ADR-0010 leftover) — a blanket guard would still break
 	// the patient screens, so both stay per-route.
 	patientVisitGuard := session.RequirePatientVisit(sessions, claims)
-	journey.NewHandler(journeys).Register(app.Group("/api/v1"),
-		auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin),
+	staffGuard := auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin)
+	journey.NewHandler(journeys, servicePoints).Register(app.Group("/api/v1"),
+		staffGuard,
 		patientVisitGuard)
 	// Executive analytics (#86): read-only aggregates over the timeline the
 	// journey module writes (#85) — journey เขียน · analytics อ่าน. STAFF
@@ -209,7 +210,10 @@ func run(ctx context.Context, log *slog.Logger) error {
 	shareTTL := envDuration("SHARE_LINK_TTL", 4*time.Hour)
 	shares := share.NewService(sharepostgres.New(database), journeys, database, shareTTL)
 	share.NewHandler(shares).Register(app.Group("/api/v1"), patientVisitGuard)
-	servicepoint.NewHandler(servicePoints).Register(app.Group("/api/v1"))
+	// The public service-point reads stay unguarded; the assigned-points
+	// read (/staff/my/service-points) is the queue console's picker and
+	// shares the staff guard with the journey staff routes.
+	servicepoint.NewHandler(servicePoints).Register(app.Group("/api/v1"), staffGuard)
 	locationHandler := location.NewHandler(locations)
 	locationHandler.Register(app.Group("/api/v1"), patientVisitGuard)
 	locationHandler.RegisterDemo(app.Group("/api/v1"))

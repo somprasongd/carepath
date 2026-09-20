@@ -12,6 +12,8 @@ import (
 // fakeRepo mirrors the seed rows from infra/postgres/migrations/000002:
 // the external HIS service code is the lookup key, the result carries the
 // CarePath place (AC3 of #20: external service code → service point).
+// assigned is the user_service_point stand-in (#102): user-staff holds
+// SP-LAB and nothing else.
 type fakeRepo struct {
 	code string
 }
@@ -28,6 +30,17 @@ func (f *fakeRepo) List(context.Context) ([]ServicePoint, error) {
 		{ID: "SP-LAB", Code: "LAB", Name: "Laboratory", PlaceID: "LAB-01", Active: true},
 		{ID: "SP-REG", Code: "REGISTRATION", Name: "Registration", PlaceID: "REG-01", Active: true},
 	}, nil
+}
+
+func (f *fakeRepo) ListForUser(_ context.Context, userID string) ([]ServicePoint, error) {
+	if userID != "user-staff" {
+		return nil, nil
+	}
+	return []ServicePoint{{ID: "SP-LAB", Code: "LAB", Name: "Laboratory", PlaceID: "LAB-01", Active: true}}, nil
+}
+
+func (f *fakeRepo) IsAssigned(_ context.Context, userID, servicePointID string) (bool, error) {
+	return userID == "user-staff" && servicePointID == "SP-LAB", nil
 }
 
 // fakePlaces stands in for the hospitalmap module's Service.
@@ -148,5 +161,45 @@ func TestListPlaceLookupFailureSurfaces(t *testing.T) {
 
 	if _, err := svc.List(context.Background()); apperr.KindOf(err) != apperr.KindInternal {
 		t.Fatalf("error = %v, want internal", err)
+	}
+}
+
+func TestListForUserResolvesPlaces(t *testing.T) {
+	svc := NewService(&fakeRepo{code: "LAB"}, &fakePlaces{places: seedPlaces()})
+
+	points, err := svc.ListForUser(context.Background(), "user-staff")
+	if err != nil {
+		t.Fatalf("ListForUser: %v", err)
+	}
+	if len(points) != 1 || points[0].ID != "SP-LAB" {
+		t.Fatalf("points = %+v, want only the assigned SP-LAB", points)
+	}
+	if points[0].Place == nil {
+		t.Fatal("assigned point carries no resolved place")
+	}
+
+	empty, err := svc.ListForUser(context.Background(), "user-nobody")
+	if err != nil {
+		t.Fatalf("ListForUser unassigned: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("unassigned user points = %+v, want none", empty)
+	}
+}
+
+func TestIsAssigned(t *testing.T) {
+	svc := NewService(&fakeRepo{code: "LAB"}, &fakePlaces{places: seedPlaces()})
+
+	ok, err := svc.IsAssigned(context.Background(), "user-staff", "SP-LAB")
+	if err != nil || !ok {
+		t.Fatalf("IsAssigned(staff, SP-LAB) = %v, %v; want true, nil", ok, err)
+	}
+	ok, err = svc.IsAssigned(context.Background(), "user-staff", "SP-REG")
+	if err != nil || ok {
+		t.Fatalf("IsAssigned(staff, SP-REG) = %v, %v; want false, nil", ok, err)
+	}
+	ok, err = svc.IsAssigned(context.Background(), "user-staff", "SP-NOPE")
+	if err != nil || ok {
+		t.Fatalf("IsAssigned(staff, SP-NOPE) = %v, %v; want false — a nonexistent point is simply not assigned", ok, err)
 	}
 }

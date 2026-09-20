@@ -484,3 +484,109 @@ func absF(v float64) float64 {
 	}
 	return v
 }
+
+func TestStationQueueListsServingAndWaiting(t *testing.T) {
+	database := newDB(t)
+	cleanupJourney(t, database, "TEST-JOURNEY-SA")
+	cleanupJourney(t, database, "TEST-JOURNEY-SB")
+	cleanupJourney(t, database, "TEST-JOURNEY-SC")
+	repo := New(database)
+	ctx := context.Background()
+
+	// One visit being served, one waiting (earlier arrival), one waiting
+	// (later) whose second READY event is the arrival that counts — plus a
+	// PENDING step at the same point that must not appear at all.
+	if err := repo.UpsertVisit(ctx, journey.Visit{
+		VisitID: "TEST-JOURNEY-SA", PatientRef: "PAT-SA", PatientName: "กำลังให้บริการ", Status: "ACTIVE",
+		Steps: []journey.Step{
+			{StepKey: "LAB:1", Sequence: 1, Kind: journey.KindLab, Status: journey.StepStarted, ServicePointID: sp("SP-QA")},
+			{StepKey: "CASHIER:1", Sequence: 2, Kind: journey.KindCashier, Status: journey.StepPending, ServicePointID: sp("SP-QA")},
+		},
+	}); err != nil {
+		t.Fatalf("seed serving visit: %v", err)
+	}
+	if err := repo.UpsertVisit(ctx, journey.Visit{
+		VisitID: "TEST-JOURNEY-SB", PatientRef: "PAT-SB", PatientName: "รอก่อน", Status: "ACTIVE",
+		Steps: []journey.Step{
+			{StepKey: "LAB:1", Sequence: 1, Kind: journey.KindLab, Status: journey.StepReady, ServicePointID: sp("SP-QA")},
+		},
+	}); err != nil {
+		t.Fatalf("seed early waiting visit: %v", err)
+	}
+	if err := repo.UpsertVisit(ctx, journey.Visit{
+		VisitID: "TEST-JOURNEY-SC", PatientRef: "PAT-SC", PatientName: "รอหลัง", Status: "ACTIVE",
+		Steps: []journey.Step{
+			{StepKey: "XRAY:1", Sequence: 1, Kind: journey.KindXray, Status: journey.StepReady, ServicePointID: sp("SP-QA")},
+		},
+	}); err != nil {
+		t.Fatalf("seed later waiting visit: %v", err)
+	}
+	timeline := `
+		INSERT INTO carepath.journey_step_status_event
+			(visit_id, step_key, kind, service_point_id, to_status, source, occurred_at)
+		VALUES
+			('TEST-JOURNEY-SA', 'LAB:1', 'LAB', 'SP-QA', 'READY', 'planner', now() - interval '40 minutes'),
+			('TEST-JOURNEY-SA', 'LAB:1', 'LAB', 'SP-QA', 'STARTED', 'planner', now() - interval '10 minutes'),
+			('TEST-JOURNEY-SB', 'LAB:1', 'LAB', 'SP-QA', 'READY', 'planner', now() - interval '25 minutes'),
+			('TEST-JOURNEY-SC', 'XRAY:1', 'XRAY', 'SP-QA', 'READY', 'planner', now() - interval '5 minutes'),
+			('TEST-JOURNEY-SC', 'XRAY:1', 'XRAY', 'SP-QA', 'STARTED', 'planner', now() - interval '4 minutes'),
+			('TEST-JOURNEY-SC', 'XRAY:1', 'XRAY', 'SP-QA', 'READY', 'planner', now() - interval '3 minutes')`
+	if _, err := database.Querier(ctx).Exec(ctx, timeline); err != nil {
+		t.Fatalf("seed timeline: %v", err)
+	}
+
+	entries, err := repo.StationQueue(ctx, "SP-QA")
+	if err != nil {
+		t.Fatalf("StationQueue: %v", err)
+	}
+	queue := journey.StationQueue{} // shaping is domain-tested; assert raw feed facts
+	for _, e := range entries {
+		switch e.Status {
+		case journey.StepStarted:
+			queue.Serving = append(queue.Serving, e)
+		case journey.StepReady:
+			queue.Waiting = append(queue.Waiting, e)
+		default:
+			t.Fatalf("status %q leaked into the station queue (%+v)", e.Status, e)
+		}
+	}
+	if len(queue.Serving) != 1 || queue.Serving[0].VisitID != "TEST-JOURNEY-SA" {
+		t.Fatalf("serving = %+v, want only TEST-JOURNEY-SA", queue.Serving)
+	}
+	s := queue.Serving[0]
+	if s.PatientName != "กำลังให้บริการ" || s.TotalSteps != 2 || s.Sequence != 1 {
+		t.Fatalf("serving entry = %+v, want patient detail and 1-of-2 position", s)
+	}
+	if s.ReadyAt == nil || s.StartedAt == nil {
+		t.Fatalf("serving entry = %+v, want both READY and STARTED times from the timeline", s)
+	}
+	if len(queue.Waiting) != 2 {
+		t.Fatalf("waiting = %+v, want the two READY entries only", queue.Waiting)
+	}
+	byVisit := map[string]journey.StationQueueEntry{}
+	for _, w := range queue.Waiting {
+		byVisit[w.VisitID] = w
+	}
+	sb, sc := byVisit["TEST-JOURNEY-SB"], byVisit["TEST-JOURNEY-SC"]
+	if sb.ReadyAt == nil || sc.ReadyAt == nil {
+		t.Fatal("waiting entries carry no arrival time")
+	}
+	// SC's step re-entered READY after a brief STARTED: its arrival is the
+	// LATEST READY event, not the first — same pairing rule as the wait stats.
+	if !sc.ReadyAt.After(nowMinus(t, 4*time.Minute)) {
+		t.Fatalf("SC readyAt = %v, want the latest READY event (~3 min ago)", sc.ReadyAt)
+	}
+	if sc.ReadyAt.Before(*sb.ReadyAt) {
+		t.Fatalf("SC (%v) must have arrived after SB (%v)", sc.ReadyAt, sb.ReadyAt)
+	}
+	if sc.StartedAt != nil {
+		t.Fatalf("SC startedAt = %v, want nil while waiting", sc.StartedAt)
+	}
+}
+
+func nowMinus(t *testing.T, d time.Duration) time.Time {
+	t.Helper()
+	// The timeline rows above are anchored to now(); a 30-second slop keeps
+	// this comparison about minutes, not test-runtime jitter.
+	return time.Now().Add(-d).Add(-30 * time.Second)
+}

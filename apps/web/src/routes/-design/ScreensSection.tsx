@@ -96,7 +96,9 @@ export function ScreensSection() {
           <StaffSession><PathwayTemplates /></StaffSession>
         </ScreenFrame>
         <ScreenFrame title="เรียกคิว" {...MOBILE}>
-          <StaffSession><Queue /></StaffSession>
+          <StaffSession>
+            <Queue servicePointId={undefined} onServicePointChange={() => {}} />
+          </StaffSession>
         </ScreenFrame>
       </div>
 
@@ -113,7 +115,9 @@ export function ScreensSection() {
       </div>
       <div className="ds-frames mt-6">
         <ScreenFrame title="เรียกคิว" {...DESKTOP}>
-          <StaffSession><Queue /></StaffSession>
+          <StaffSession>
+            <Queue servicePointId={undefined} onServicePointChange={() => {}} />
+          </StaffSession>
         </ScreenFrame>
       </div>
     </Section>
