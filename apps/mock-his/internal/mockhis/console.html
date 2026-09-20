@@ -64,6 +64,7 @@
   }
   .topbar-note { flex: 1 1 260px; min-width: 0; margin: 0; color: var(--ink-muted); font: 500 12px/1.4 var(--font-sans); }
   .clock { margin-left: auto; color: var(--ink-muted); font: 600 13px/1 var(--font-code); font-variant-numeric: tabular-nums; }
+  .lang-toggle { min-height: 30px; padding: 4px 12px; font-size: 12px; }
   @media (max-width: 859px) { .topbar-note { display: none; } }
 
   /* ── Layout: 1 column → 2 columns → 3 columns ────────────────────────── */
@@ -271,62 +272,63 @@
 </head>
 <body>
 <header class="topbar">
-  <h1>Mock HIS Console</h1>
-  <span class="tag">demo driver</span>
-  <p class="topbar-note">drives the fake HIS for demos &mdash; every action surfaces as canonical facts on the event feed (ADR-0009)</p>
+  <h1 data-i18n="docTitle">Mock HIS Console</h1>
+  <span class="tag" data-i18n="tag">demo driver</span>
+  <p class="topbar-note" data-i18n="note">drives the fake HIS for demos &mdash; every action surfaces as canonical facts on the event feed (ADR-0009)</p>
   <span class="clock" id="clock"></span>
+  <button class="btn lang-toggle" id="lang-toggle" type="button" aria-label="Switch language">EN</button>
 </header>
 
 <main>
   <section class="panel" id="visits-panel" aria-labelledby="visits-title">
     <div class="panel-head">
-      <h2 id="visits-title">Visits</h2>
+      <h2 id="visits-title" data-i18n="visitsTitle">Visits</h2>
       <span class="count" id="visit-count" hidden></span>
     </div>
-    <div id="visits"><div class="empty">loading&hellip;</div></div>
+    <div id="visits"><div class="empty" data-i18n="loading">loading&hellip;</div></div>
     <details class="creator">
-      <summary>New visit</summary>
+      <summary data-i18n="newVisit">New visit</summary>
       <form id="create-form" class="form">
         <div class="picker-row">
-          <select id="new-visit-type" aria-label="Visit type">
+          <select id="new-visit-type" aria-label="Visit type" data-i18n-aria="visitTypeAria">
             <option value="APPOINTMENT">APPOINTMENT</option>
             <option value="WALKIN">WALKIN</option>
           </select>
-          <input id="new-patient-ref" placeholder="HN (optional)" aria-label="Patient HN">
+          <input id="new-patient-ref" placeholder="HN (optional)" aria-label="Patient HN" data-i18n-ph="hnPh" data-i18n-aria="hnAria">
         </div>
         <div class="picker-row">
-          <input id="new-patient-name" placeholder="patient name (optional)" aria-label="Patient name">
+          <input id="new-patient-name" placeholder="patient name (optional)" aria-label="Patient name" data-i18n-ph="patientNamePh" data-i18n-aria="patientNameAria">
         </div>
-        <div class="field-label">Clinics (at least one)</div>
+        <div class="field-label" data-i18n="clinicsLabel">Clinics (at least one)</div>
         <div class="picker-row">
-          <select id="new-clinic-code" aria-label="Clinic"></select>
-          <button type="button" class="btn" id="add-clinic">Add</button>
+          <select id="new-clinic-code" aria-label="Clinic" data-i18n-aria="clinicAria"></select>
+          <button type="button" class="btn" id="add-clinic" data-i18n="add">Add</button>
         </div>
         <div id="chosen-clinics" class="chips"></div>
-        <div class="field-label">Pre-visit orders (optional, attributed to the first clinic)</div>
+        <div class="field-label" data-i18n="ordersLabel">Pre-visit orders (optional, attributed to the first clinic)</div>
         <div class="picker-row">
-          <select id="new-order-type" aria-label="Order type"></select>
-          <input id="new-order-name" placeholder="order name, e.g. CBC" aria-label="Order name">
-          <button type="button" class="btn" id="add-order">Add</button>
+          <select id="new-order-type" aria-label="Order type" data-i18n-aria="orderTypeAria"></select>
+          <input id="new-order-name" placeholder="order name, e.g. CBC" aria-label="Order name" data-i18n-ph="orderNamePh" data-i18n-aria="orderNameAria">
+          <button type="button" class="btn" id="add-order" data-i18n="add">Add</button>
         </div>
         <div id="chosen-orders" class="chips"></div>
-        <button class="btn btn-primary btn-lg" type="submit">New visit</button>
-        <p class="hint">Clinic and order-type options mirror CarePath's service points (CLINIC:*/ORDERTYPE:*), so a visit staged here always resolves to a destination.</p>
+        <button class="btn btn-primary btn-lg" type="submit" data-i18n="createVisit">New visit</button>
+        <p class="hint" data-i18n="catalogHint">Clinic and order-type options mirror CarePath's service points (CLINIC:*/ORDERTYPE:*), so a visit staged here always resolves to a destination.</p>
       </form>
     </details>
   </section>
 
   <section class="panel" id="detail-panel" aria-labelledby="detail-title">
-    <div class="panel-head"><h2 id="detail-title">Visit detail</h2></div>
-    <div id="detail"><div class="empty">select a visit to drive it</div></div>
+    <div class="panel-head"><h2 id="detail-title" data-i18n="detailTitle">Visit detail</h2></div>
+    <div id="detail"><div class="empty" data-i18n="selectVisitHint">select a visit to drive it</div></div>
   </section>
 
   <section class="panel" id="events-panel" aria-labelledby="events-title">
     <div class="panel-head">
-      <h2 id="events-title">Event feed</h2>
+      <h2 id="events-title" data-i18n="eventsTitle">Event feed</h2>
       <span class="count">canonical</span>
     </div>
-    <ul id="events" class="events"><li class="empty">loading&hellip;</li></ul>
+    <ul id="events" class="events"><li class="empty" data-i18n="loading">loading&hellip;</li></ul>
   </section>
 </main>
 
@@ -376,8 +378,196 @@ function el(tag, cls, text) {
   return n;
 }
 
+// The console speaks its own UI language (ADR-0012 keeps display text
+// client-owned; this embedded page is the client). Thai is the default for
+// the staff running demos; the toggle in the topbar flips to English and
+// remembers the choice. Domain codes (VISIT-001, MED, PLACED, event types,
+// APPOINTMENT/WALKIN) stay untranslated everywhere — they are identifiers,
+// not prose. Static markup below stays English as the no-JS fallback.
+let lang = "th";
+const STRINGS = {
+  th: {
+    docTitle: "คอนโซล Mock HIS",
+    tag: "เครื่องมือเดโม",
+    note: "ขับเคลื่อน HIS จำลองสำหรับเดโม — ทุกการกระทำจะปรากฏเป็น canonical facts บน event feed (ADR-0009)",
+    loading: "กำลังโหลด…",
+    visitsTitle: "รายการ visit",
+    detailTitle: "รายละเอียด visit",
+    eventsTitle: "Event feed",
+    newVisit: "สร้าง visit ใหม่",
+    createVisit: "สร้าง visit ใหม่",
+    visitTypeAria: "ประเภท visit",
+    hnPh: "HN (ไม่บังคับ)",
+    hnAria: "HN ผู้ป่วย",
+    patientNamePh: "ชื่อผู้ป่วย (ไม่บังคับ)",
+    patientNameAria: "ชื่อผู้ป่วย",
+    clinicsLabel: "คลินิก (อย่างน้อยหนึ่งคลินิก)",
+    clinicAria: "คลินิก",
+    add: "เพิ่ม",
+    ordersLabel: "ออเดอร์ก่อน visit (ไม่บังคับ, บันทึกให้คลินิกแรก)",
+    orderTypeAria: "ประเภทออเดอร์",
+    orderNamePh: "ชื่อออเดอร์ เช่น CBC",
+    orderNameAria: "ชื่อออเดอร์",
+    orderedByClinicAria: "คลินิกที่สั่ง",
+    catalogHint: "ตัวเลือกคลินิกและประเภทออเดอร์มาจาก service points ของ CarePath (CLINIC:*/ORDERTYPE:*) เพื่อให้ visit ที่สร้างที่นี่ชี้ไปยังปลายทางได้เสมอ",
+    selectVisitHint: "เลือก visit เพื่อเริ่มขับเคลื่อน",
+    noVisits: "ไม่มี visit",
+    visitNotFound: "ไม่พบ visit",
+    noEvents: "ไม่มี event",
+    noOrdersYet: "ยังไม่มีออเดอร์",
+    openedAt: "เปิด {time}",
+    allClinicsAssigned: "คลินิกทุกแห่งของ CarePath อยู่ใน visit นี้แล้ว",
+    colType: "ประเภท", colName: "ชื่อ", colByClinic: "โดยคลินิก", colStatus: "สถานะ", colActions: "การจัดการ",
+    clinicsSubhead: "คลินิก",
+    ordersSubhead: "ออเดอร์",
+    completeVisit: "ปิด visit",
+    cancelVisit: "ยกเลิก visit",
+    callPatientIn: "เรียกผู้ป่วย",
+    completeEncounter: "ปิด encounter",
+    performed: "ทำแล้ว",
+    resulted: "ออกผลแล้ว",
+    cancel: "ยกเลิก",
+    addClinic: "เพิ่มคลินิก",
+    placeOrder: "สั่งออเดอร์",
+    openPatientView: "เปิดหน้าผู้ป่วย",
+    copyLink: "คัดลอกลิงก์",
+    qrAlt: "QR code ของ {id}",
+    confirmCancel: "ยกเลิก {id}? ออเดอร์ที่ยังเปิดอยู่จะถูกยกเลิกทั้งหมด",
+    chipRemove: "ลบ {label}",
+    toastCreated: "สร้าง {id} แล้ว",
+    toastCreateFailed: "สร้างล้มเหลว: {err}",
+    toastVisitCompleted: "{id} ปิดแล้ว",
+    toastCompleteFailed: "ปิด visit ล้มเหลว: {err}",
+    toastVisitCancelled: "{id} ถูกยกเลิก",
+    toastCancelFailed: "ยกเลิกล้มเหลว: {err}",
+    toastCalledIn: "เรียกผู้ป่วย {code} แล้ว",
+    toastCallInFailed: "เรียกผู้ป่วยล้มเหลว: {err}",
+    toastEncounterCompleted: "ปิด encounter ของ {code} แล้ว",
+    toastEncounterFailed: "ปิด encounter ล้มเหลว: {err}",
+    toastClinicAdded: "เพิ่มคลินิก {code} แล้ว",
+    toastAddClinicFailed: "เพิ่มคลินิกล้มเหลว: {err}",
+    toastOrderPlaced: "สั่งออเดอร์ {type} แล้ว",
+    toastPlaceOrderFailed: "สั่งออเดอร์ล้มเหลว: {err}",
+    toastOrderAction: "{ref} → {action}",
+    toastOrderActionFailed: "การกระทำกับออเดอร์ล้มเหลว: {err}",
+    toastLinkCopied: "คัดลอกลิงก์ผู้ป่วยแล้ว",
+    toastCopyUnavailable: "คัดลอกไม่ได้ — เปิดลิงก์แทน",
+    toastOrderNameRequired: "ต้องระบุชื่อออเดอร์",
+    toastClinicFirst: "เพิ่มคลินิกก่อน",
+    toastOneClinic: "ต้องเพิ่มอย่างน้อยหนึ่งคลินิก",
+    toastRefreshFailed: "โหลดข้อมูลใหม่ล้มเหลว: {err}",
+  },
+  en: {
+    docTitle: "Mock HIS Console",
+    tag: "demo driver",
+    note: "drives the fake HIS for demos — every action surfaces as canonical facts on the event feed (ADR-0009)",
+    loading: "loading…",
+    visitsTitle: "Visits",
+    detailTitle: "Visit detail",
+    eventsTitle: "Event feed",
+    newVisit: "New visit",
+    createVisit: "New visit",
+    visitTypeAria: "Visit type",
+    hnPh: "HN (optional)",
+    hnAria: "Patient HN",
+    patientNamePh: "patient name (optional)",
+    patientNameAria: "Patient name",
+    clinicsLabel: "Clinics (at least one)",
+    clinicAria: "Clinic",
+    add: "Add",
+    ordersLabel: "Pre-visit orders (optional, attributed to the first clinic)",
+    orderTypeAria: "Order type",
+    orderNamePh: "order name, e.g. CBC",
+    orderNameAria: "Order name",
+    orderedByClinicAria: "Ordered by clinic",
+    catalogHint: "Clinic and order-type options mirror CarePath's service points (CLINIC:*/ORDERTYPE:*), so a visit staged here always resolves to a destination.",
+    selectVisitHint: "select a visit to drive it",
+    noVisits: "no visits",
+    visitNotFound: "visit not found",
+    noEvents: "no events",
+    noOrdersYet: "no orders yet",
+    openedAt: "opened {time}",
+    allClinicsAssigned: "Every CarePath clinic is already assigned to this visit.",
+    colType: "Type", colName: "Name", colByClinic: "By clinic", colStatus: "Status", colActions: "Actions",
+    clinicsSubhead: "Clinics",
+    ordersSubhead: "Orders",
+    completeVisit: "Complete visit",
+    cancelVisit: "Cancel visit",
+    callPatientIn: "Call patient in",
+    completeEncounter: "Complete encounter",
+    performed: "Performed",
+    resulted: "Resulted",
+    cancel: "Cancel",
+    addClinic: "Add clinic",
+    placeOrder: "Place order",
+    openPatientView: "Open patient view",
+    copyLink: "Copy link",
+    qrAlt: "QR code for {id}",
+    confirmCancel: "Cancel {id}? Every open order will be cancelled.",
+    chipRemove: "Remove {label}",
+    toastCreated: "Created {id}",
+    toastCreateFailed: "Create failed: {err}",
+    toastVisitCompleted: "{id} completed",
+    toastCompleteFailed: "Complete failed: {err}",
+    toastVisitCancelled: "{id} cancelled",
+    toastCancelFailed: "Cancel failed: {err}",
+    toastCalledIn: "{code} called patient in",
+    toastCallInFailed: "Call patient in failed: {err}",
+    toastEncounterCompleted: "{code} encounter completed",
+    toastEncounterFailed: "Complete encounter failed: {err}",
+    toastClinicAdded: "Clinic {code} added",
+    toastAddClinicFailed: "Add clinic failed: {err}",
+    toastOrderPlaced: "Order placed: {type}",
+    toastPlaceOrderFailed: "Place order failed: {err}",
+    toastOrderAction: "{ref} → {action}",
+    toastOrderActionFailed: "Order action failed: {err}",
+    toastLinkCopied: "Patient link copied",
+    toastCopyUnavailable: "Copy not available — open the link instead",
+    toastOrderNameRequired: "order name is required",
+    toastClinicFirst: "add a clinic first",
+    toastOneClinic: "add at least one clinic",
+    toastRefreshFailed: "Refresh failed: {err}",
+  },
+};
+
+function t(key, vars) {
+  let s = (STRINGS[lang] && STRINGS[lang][key]) || STRINGS.en[key] || key;
+  if (vars) {
+    for (const [k, v] of Object.entries(vars)) s = s.split("{" + k + "}").join(String(v));
+  }
+  return s;
+}
+
+function timeLocale() {
+  return lang === "th" ? "th-TH" : "en-US";
+}
+
+// Swaps every statically-annotated node to the current language; the
+// data-driven panels rebuild on the next render tick, which toggleLang()
+// forces by dropping their diff caches.
+function applyStaticTexts() {
+  document.documentElement.lang = lang;
+  document.title = t("docTitle");
+  for (const n of document.querySelectorAll("[data-i18n]")) n.textContent = t(n.dataset.i18n);
+  for (const n of document.querySelectorAll("[data-i18n-ph]")) n.placeholder = t(n.dataset.i18nPh);
+  for (const n of document.querySelectorAll("[data-i18n-aria]")) n.setAttribute("aria-label", t(n.dataset.i18nAria));
+  $("#lang-toggle").textContent = lang === "th" ? "EN" : "ไทย";
+}
+
+function toggleLang() {
+  lang = lang === "th" ? "en" : "th";
+  try { localStorage.setItem("console-lang", lang); } catch { /* private mode */ }
+  applyStaticTexts();
+  lastVisitsJSON = "";
+  lastDetailJSON = "";
+  renderNewClinicPicker();
+  renderOrderTypePicker();
+  refresh(true);
+}
+$("#lang-toggle").onclick = toggleLang;
+
 function fmtTime(iso) {
-  return iso ? new Date(iso).toLocaleTimeString() : "";
+  return iso ? new Date(iso).toLocaleTimeString(timeLocale()) : "";
 }
 
 function toast(msg, isError) {
@@ -457,7 +647,7 @@ function renderOrderTypePicker() {
 }
 
 function tick() {
-  $("#clock").textContent = new Date().toLocaleTimeString();
+  $("#clock").textContent = new Date().toLocaleTimeString(timeLocale());
 }
 
 function renderVisits(visits) {
@@ -470,7 +660,7 @@ function renderVisits(visits) {
   count.hidden = !visits.length;
   count.textContent = String(visits.length);
   const box = $("#visits");
-  if (!visits.length) { box.replaceChildren(el("div", "empty", "no visits")); return; }
+  if (!visits.length) { box.replaceChildren(el("div", "empty", t("noVisits"))); return; }
   box.replaceChildren(...visits.map((v) => {
     const row = el("button", "visit" + (v.visitId === selectedVisit ? " sel" : ""));
     row.type = "button";
@@ -495,30 +685,30 @@ function orderRow(order) {
     return cell;
   };
 
-  const typeTd = td("Type");
+  const typeTd = td(t("colType"));
   typeTd.append(el("span", "code", order.orderType));
-  const nameTd = td("Name");
+  const nameTd = td(t("colName"));
   nameTd.textContent = order.orderName;
-  const byTd = td("By clinic");
+  const byTd = td(t("colByClinic"));
   byTd.textContent = order.orderedByClinic;
-  const statusTd = td("Status");
+  const statusTd = td(t("colStatus"));
   statusTd.append(el("span", "badge b-" + order.status, order.status));
 
   const actions = el("div", "actions");
   if (order.status === "PLACED" || order.status === "PERFORMED") {
     if (order.status === "PLACED") {
-      const perform = el("button", "btn", "Performed");
+      const perform = el("button", "btn", t("performed"));
       perform.type = "button";
       perform.onclick = () => orderAction(order.orderRef, "performed");
       actions.appendChild(perform);
     }
     if (order.status === "PERFORMED") {
-      const result = el("button", "btn btn-primary", "Resulted");
+      const result = el("button", "btn btn-primary", t("resulted"));
       result.type = "button";
       result.onclick = () => orderAction(order.orderRef, "resulted");
       actions.appendChild(result);
     }
-    const cancel = el("button", "btn btn-danger", "Cancel");
+    const cancel = el("button", "btn btn-danger", t("cancel"));
     cancel.type = "button";
     cancel.onclick = () => orderAction(order.orderRef, "cancel");
     actions.appendChild(cancel);
@@ -534,10 +724,10 @@ function orderRow(order) {
 async function orderAction(orderRef, action) {
   try {
     await api("POST", "/api/v1/demo/orders/" + encodeURIComponent(orderRef) + "/" + action, {});
-    toast(orderRef + " → " + action);
+    toast(t("toastOrderAction", { ref: orderRef, action }));
     lastDetailJSON = "";
     refresh(true);
-  } catch (err) { toast("Order action failed: " + err.message, true); }
+  } catch (err) { toast(t("toastOrderActionFailed", { err: err.message }), true); }
 }
 
 function renderDetail(visit) {
@@ -547,7 +737,7 @@ function renderDetail(visit) {
 
   const box = $("#detail");
   box.replaceChildren();
-  if (!visit) { box.append(el("div", "empty", "visit not found")); return; }
+  if (!visit) { box.append(el("div", "empty", t("visitNotFound"))); return; }
 
   const head = el("div", "detail-head");
   const info = el("div", "detail-info");
@@ -556,31 +746,31 @@ function renderDetail(visit) {
   info.append(idRow);
   const subBits = [visit.patientRef];
   if (visit.patientName) subBits.push(visit.patientName);
-  subBits.push(visit.visitType, "opened " + fmtTime(visit.openedAt));
+  subBits.push(visit.visitType, t("openedAt", { time: fmtTime(visit.openedAt) }));
   info.append(el("div", "detail-sub", subBits.join(", ")));
 
   if (visit.status === "ACTIVE") {
     const btnRow = el("div", "actions");
-    const complete = el("button", "btn btn-primary", "Complete visit");
+    const complete = el("button", "btn btn-primary", t("completeVisit"));
     complete.type = "button";
     complete.onclick = async () => {
       try {
         await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/complete", {});
-        toast(visit.visitId + " completed");
+        toast(t("toastVisitCompleted", { id: visit.visitId }));
         lastDetailJSON = "";
         refresh(true);
-      } catch (err) { toast("Complete failed: " + err.message, true); }
+      } catch (err) { toast(t("toastCompleteFailed", { err: err.message }), true); }
     };
-    const cancel = el("button", "btn btn-danger", "Cancel visit");
+    const cancel = el("button", "btn btn-danger", t("cancelVisit"));
     cancel.type = "button";
     cancel.onclick = async () => {
-      if (!window.confirm("Cancel " + visit.visitId + "? Every open order will be cancelled.")) return;
+      if (!window.confirm(t("confirmCancel", { id: visit.visitId }))) return;
       try {
         await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/cancel", {});
-        toast(visit.visitId + " cancelled");
+        toast(t("toastVisitCancelled", { id: visit.visitId }));
         lastDetailJSON = "";
         refresh(true);
-      } catch (err) { toast("Cancel failed: " + err.message, true); }
+      } catch (err) { toast(t("toastCancelFailed", { err: err.message }), true); }
     };
     btnRow.append(complete, cancel);
     info.appendChild(btnRow);
@@ -595,13 +785,13 @@ function renderDetail(visit) {
   qrLink.rel = "noopener";
   const img = document.createElement("img");
   img.src = "/api/v1/demo/visits/" + encodeURIComponent(visit.visitId) + "/qrcode.png";
-  img.alt = "QR code for " + visit.visitId;
+  img.alt = t("qrAlt", { id: visit.visitId });
   img.width = 148;
   img.height = 148;
   qrLink.appendChild(img);
   qr.appendChild(qrLink);
   const qrActions = el("div", "qr-actions");
-  const open = el("a", "btn", "Open patient view");
+  const open = el("a", "btn", t("openPatientView"));
   open.href = patientLink;
   open.target = "_blank";
   open.rel = "noopener";
@@ -619,20 +809,20 @@ function renderDetail(visit) {
       }
     } catch { /* mint not configured — the legacy VN link stays */ }
   })();
-  const copy = el("button", "btn", "Copy link");
+  const copy = el("button", "btn", t("copyLink"));
   copy.type = "button";
   copy.onclick = async () => {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      try { await navigator.clipboard.writeText(patientLink); toast("Patient link copied"); return; } catch { /* fall through */ }
+      try { await navigator.clipboard.writeText(patientLink); toast(t("toastLinkCopied")); return; } catch { /* fall through */ }
     }
-    toast("Copy not available — open the link instead", true);
+    toast(t("toastCopyUnavailable"), true);
   };
   qrActions.append(copy);
   qr.append(qrActions);
   head.append(info, qr);
   box.appendChild(head);
 
-  box.append(el("h3", "subhead", "Clinics"));
+  box.append(el("h3", "subhead", t("clinicsSubhead")));
   const clinics = el("div", "clinics");
   visit.clinics.forEach((c) => {
     const chip = el("div", "clinic");
@@ -640,25 +830,25 @@ function renderDetail(visit) {
     if (c.name) chip.append(el("span", "clinic-name", c.name));
     if (visit.status === "ACTIVE") {
       const actions = el("div", "actions");
-      const call = el("button", "btn", "Call patient in");
+      const call = el("button", "btn", t("callPatientIn"));
       call.type = "button";
       call.onclick = async () => {
         try {
           await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/clinics/" + encodeURIComponent(c.code) + "/start-encounter", {});
-          toast(c.code + " called patient in");
+          toast(t("toastCalledIn", { code: c.code }));
           lastDetailJSON = "";
           refresh(true);
-        } catch (err) { toast("Call patient in failed: " + err.message, true); }
+        } catch (err) { toast(t("toastCallInFailed", { err: err.message }), true); }
       };
-      const done = el("button", "btn", "Complete encounter");
+      const done = el("button", "btn", t("completeEncounter"));
       done.type = "button";
       done.onclick = async () => {
         try {
           await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/clinics/" + encodeURIComponent(c.code) + "/complete-encounter", {});
-          toast(c.code + " encounter completed");
+          toast(t("toastEncounterCompleted", { code: c.code }));
           lastDetailJSON = "";
           refresh(true);
-        } catch (err) { toast("Complete encounter failed: " + err.message, true); }
+        } catch (err) { toast(t("toastEncounterFailed", { err: err.message }), true); }
       };
       actions.append(call, done);
       chip.appendChild(actions);
@@ -673,9 +863,9 @@ function renderDetail(visit) {
       addClinicForm.className = "form";
       const row = el("div", "picker-row");
       const select = el("select");
-      select.setAttribute("aria-label", "Clinic");
+      select.setAttribute("aria-label", t("clinicAria"));
       setSelectOptions(select, clinicOptions(remaining));
-      const btn = el("button", "btn", "Add clinic");
+      const btn = el("button", "btn", t("addClinic"));
       btn.type = "submit";
       row.append(select, btn);
       addClinicForm.appendChild(row);
@@ -684,26 +874,26 @@ function renderDetail(visit) {
         if (!select.value) return;
         try {
           await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/clinics", { clinicCode: select.value, clinicName: clinicName(select.value) });
-          toast("Clinic " + select.value + " added");
+          toast(t("toastClinicAdded", { code: select.value }));
           lastDetailJSON = "";
           refresh(true);
-        } catch (err) { toast("Add clinic failed: " + err.message, true); }
+        } catch (err) { toast(t("toastAddClinicFailed", { err: err.message }), true); }
       };
       box.appendChild(addClinicForm);
     } else {
-      box.append(el("div", "hint", "Every CarePath clinic is already assigned to this visit."));
+      box.append(el("div", "hint", t("allClinicsAssigned")));
     }
   }
 
-  box.append(el("h3", "subhead", "Orders"));
+  box.append(el("h3", "subhead", t("ordersSubhead")));
   if (!visit.orders.length) {
-    box.append(el("div", "empty", "no orders yet"));
+    box.append(el("div", "empty", t("noOrdersYet")));
   } else {
     const table = el("table", "orders");
     const thead = document.createElement("thead");
     const hr = document.createElement("tr");
-    ["Type", "Name", "By clinic", "Status"].forEach((h) => hr.append(el("th", null, h)));
-    const actionsTh = el("th", "th-actions", "Actions");
+    [t("colType"), t("colName"), t("colByClinic"), t("colStatus")].forEach((h) => hr.append(el("th", null, h)));
+    const actionsTh = el("th", "th-actions", t("colActions"));
     hr.append(actionsTh);
     thead.appendChild(hr);
     const tbody = document.createElement("tbody");
@@ -717,34 +907,34 @@ function renderDetail(visit) {
     form.className = "form";
     const picker = el("div", "picker-row");
     const typeSelect = el("select");
-    typeSelect.setAttribute("aria-label", "Order type");
+    typeSelect.setAttribute("aria-label", t("orderTypeAria"));
     setSelectOptions(typeSelect, orderTypeCatalog.map((t) => ({ value: t, label: t })));
     const nameInput = el("input");
-    nameInput.placeholder = "order name, e.g. CBC";
-    nameInput.setAttribute("aria-label", "Order name");
+    nameInput.placeholder = t("orderNamePh");
+    nameInput.setAttribute("aria-label", t("orderNameAria"));
     const clinicSelect = el("select");
-    clinicSelect.setAttribute("aria-label", "Ordered by clinic");
+    clinicSelect.setAttribute("aria-label", t("orderedByClinicAria"));
     visit.clinics.forEach((c) => {
       const opt = document.createElement("option");
       opt.value = c.code;
       opt.textContent = c.code;
       clinicSelect.appendChild(opt);
     });
-    const btn = el("button", "btn btn-primary", "Place order");
+    const btn = el("button", "btn btn-primary", t("placeOrder"));
     btn.type = "submit";
     picker.append(typeSelect, nameInput, clinicSelect, btn);
     form.appendChild(picker);
     form.onsubmit = async (e) => {
       e.preventDefault();
-      if (!nameInput.value.trim()) { toast("order name is required", true); return; }
+      if (!nameInput.value.trim()) { toast(t("toastOrderNameRequired"), true); return; }
       try {
         await api("POST", "/api/v1/demo/visits/" + visit.visitId + "/orders", {
           orderType: typeSelect.value, orderName: nameInput.value.trim(), orderedByClinic: clinicSelect.value,
         });
-        toast("Order placed: " + typeSelect.value);
+        toast(t("toastOrderPlaced", { type: typeSelect.value }));
         lastDetailJSON = "";
         refresh(true);
-      } catch (err) { toast("Place order failed: " + err.message, true); }
+      } catch (err) { toast(t("toastPlaceOrderFailed", { err: err.message }), true); }
     };
     box.appendChild(form);
   }
@@ -752,7 +942,7 @@ function renderDetail(visit) {
 
 function renderEvents(events) {
   const list = $("#events");
-  if (!events.length) { list.replaceChildren(el("li", "empty", "no events")); return; }
+  if (!events.length) { list.replaceChildren(el("li", "empty", t("noEvents"))); return; }
   list.replaceChildren(...events.map((e) => {
     const li = document.createElement("li");
     const kind = e.type.split(".")[0];
@@ -774,7 +964,7 @@ function renderChipList(box, items, cls, labelOf, onRemove) {
     const chip = el("span", cls, labelOf(item));
     const remove = el("button", null, "×");
     remove.type = "button";
-    remove.setAttribute("aria-label", "Remove " + labelOf(item));
+    remove.setAttribute("aria-label", t("chipRemove", { label: labelOf(item) }));
     remove.onclick = () => onRemove(i);
     chip.appendChild(remove);
     return chip;
@@ -807,8 +997,8 @@ $("#add-clinic").onclick = () => {
 $("#add-order").onclick = () => {
   const orderType = $("#new-order-type").value;
   const orderName = $("#new-order-name").value.trim();
-  if (!orderName) { toast("order name is required", true); return; }
-  if (!chosenClinics.length) { toast("add a clinic first", true); return; }
+  if (!orderName) { toast(t("toastOrderNameRequired"), true); return; }
+  if (!chosenClinics.length) { toast(t("toastClinicFirst"), true); return; }
   chosenOrders.push({ orderType, orderName, orderedByClinic: chosenClinics[0].clinicCode });
   $("#new-order-name").value = "";
   renderChosenOrders();
@@ -816,7 +1006,7 @@ $("#add-order").onclick = () => {
 
 $("#create-form").onsubmit = async (e) => {
   e.preventDefault();
-  if (!chosenClinics.length) { toast("add at least one clinic", true); return; }
+  if (!chosenClinics.length) { toast(t("toastOneClinic"), true); return; }
   const body = {
     visitType: $("#new-visit-type").value,
     clinics: chosenClinics,
@@ -828,7 +1018,7 @@ $("#create-form").onsubmit = async (e) => {
   if (chosenOrders.length) body.orders = chosenOrders;
   try {
     const visit = await api("POST", "/api/v1/demo/visits", body);
-    toast("Created " + visit.visitId);
+    toast(t("toastCreated", { id: visit.visitId }));
     $("#new-patient-ref").value = "";
     $("#new-patient-name").value = "";
     chosenClinics = [];
@@ -838,7 +1028,7 @@ $("#create-form").onsubmit = async (e) => {
     selectedVisit = visit.visitId;
     lastVisitsJSON = "";
     refresh(true);
-  } catch (err) { toast("Create failed: " + err.message, true); }
+  } catch (err) { toast(t("toastCreateFailed", { err: err.message }), true); }
 };
 
 let refreshing = false;
@@ -861,12 +1051,17 @@ async function refresh(force) {
       if (!visit) selectedVisit = null;
     }
   } catch (err) {
-    toast("Refresh failed: " + err.message, true);
+    toast(t("toastRefreshFailed", { err: err.message }), true);
   } finally {
     refreshing = false;
   }
 }
 
+// Thai is the default; a stored choice (set by the toggle) wins.
+try {
+  if (localStorage.getItem("console-lang") === "en") lang = "en";
+} catch { /* private mode keeps the default */ }
+applyStaticTexts();
 tick();
 setInterval(tick, 1000);
 renderNewClinicPicker();
