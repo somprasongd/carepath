@@ -133,7 +133,7 @@ func BuildSharedJourney(view journey.View, expiresAt time.Time) SharedJourney {
 	if sp := current.ServicePoint; sp != nil {
 		step.ServicePointName = displayServicePointName(sp.Name)
 		if sp.Place != nil && sp.Place.Floor != nil {
-			step.FloorName = sp.Place.Floor.Name
+			step.FloorName = displayFloorName(sp.Place.Floor.Code, sp.Place.Floor.Name)
 		}
 	}
 	shared.CurrentStep = step
@@ -161,6 +161,18 @@ func stepTitle(step journey.StepView) string {
 		return title
 	}
 	return "ขั้นตอนการรักษา"
+}
+
+// displayFloorName renders the floor line a relative reads ("ชั้น 1") from
+// the floor code — the same label the patient screens derive client-side
+// (common.floor). The DB name ("Ground Floor") is the English staff label
+// and must not reach this Thai surface (ADR-0012); it survives only as the
+// unmapped-code fallback.
+func displayFloorName(code, name string) string {
+	if code != "" {
+		return "ชั้น " + code
+	}
+	return name
 }
 
 // codeSuffix strips the parenthesised internal code service points carry in
