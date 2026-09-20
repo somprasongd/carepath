@@ -33,6 +33,7 @@ This directory is the working source of truth for architecture, requirements, de
 - [ADR-0010 Staff/Admin Authentication (argon2id + JWT)](adr/0010-staff-auth-jwt-argon2.md)
 - [ADR-0011 Visit Share Link (relative tracking token)](adr/0011-visit-share-link.md)
 - [ADR-0012 Client-Owned Display Text (i18n)](adr/0012-client-owned-display-text.md)
+- [ADR-0013 Queue-Proximity Notification (outbound channel port)](adr/0013-queue-proximity-notification.md)
 
 ## Integration
 

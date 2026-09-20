@@ -88,6 +88,9 @@ export const th = {
   'journey.navigateCta': 'นำทางไป{title}',
   'journey.shareWithFamily': 'แชร์ความคืบหน้าให้ญาติ',
   'journey.shareDemoHint': 'โหมดสาธิต: ยังขอสิทธิ์แชร์ไม่สำเร็จ',
+  'journey.notifyToggleLabel': 'แจ้งเตือนเมื่อใกล้ถึงคิว — หนึ่งครั้งต่อขั้นตอน ผ่าน LINE',
+  'journey.notifyOn': 'เปิดแจ้งเตือน',
+  'journey.notifyOff': 'ปิดแจ้งเตือน',
   'journey.recommendReason.nearest': 'แนะนำจุดที่ใกล้จากตำแหน่งล่าสุดของคุณ',
   'journey.recommendReason.planOrder':
     'แนะนำตามลำดับขั้นตอนของแผน — สแกน QR หน้าจุดบริการเพื่อให้ระบบเลือกจุดที่ใกล้ที่สุดจากตำแหน่งคุณ',

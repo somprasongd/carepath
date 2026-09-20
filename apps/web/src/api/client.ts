@@ -31,6 +31,14 @@ export async function apiPost<TReturn>(path: string, body: unknown): Promise<TRe
   })
 }
 
+export async function apiPut<TReturn>(path: string, body: unknown): Promise<TReturn> {
+  return request(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 /**
  * DELETE expecting no body (204 today: stop-sharing, #89). Goes through the
  * patient bearer like the other patient-surface commands.

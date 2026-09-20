@@ -21,6 +21,7 @@ import {
 import { ShareSheet } from '@/features/share'
 import {
   journeyProgressLabel,
+  NotificationToggle,
   QueueCard,
   recommendationReasonLabel,
   servicePointLabel,
@@ -157,6 +158,15 @@ export function JourneyScreen({
             {t('journey.shareWithFamily')}
           </Button>
           {!shareReady && <Meta className="mt-1">{t('journey.shareDemoHint')}</Meta>}
+        </div>
+      )}
+      {/* The queue-proximity toggle (#104) sits in the share row's visual
+          family and shows only while the visit runs — a finished visit has
+          no queue to be near, so there is nothing left to be notified
+          about. */}
+      {!outcome && (
+        <div className="mt-5">
+          <NotificationToggle visitId={journey?.visitId ?? visitId} />
         </div>
       )}
       {shareOpen && (
