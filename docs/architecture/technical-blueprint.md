@@ -4,16 +4,13 @@
 
 ### Frontend
 
-- React
+- React 19
 - TypeScript
 - Vite
 - Tailwind CSS
-- shadcn/ui
+- Radix UI primitives + class-variance-authority (shadcn/ui-style components, hand-assembled rather than scaffolded via the shadcn CLI)
 - TanStack Query
 - TanStack Router
-- TanStack Table where needed
-- React Hook Form + Zod
-- Zustand for small client-side state
 - LINE LIFF SDK for patient channel
 - SVG for floor-plan rendering
 

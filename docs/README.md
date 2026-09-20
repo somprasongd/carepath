@@ -62,6 +62,7 @@ Hackathon submission deliverables (brief §10), assembled from the docs above:
 - [5. Test Result](deliverables/05-test-result.md)
 - [6. Presentation Slides (outline)](deliverables/06-presentation-slides.md)
 - [7. Demo Script (ซ้อมจริงแล้ว)](deliverables/07-demo-script.md)
+- [Presentation Outline — Hospital/Stakeholder Review](deliverables/presentation-outline-hospital-review.md) — separate script for the HIS-integration/executive-dashboard presentation round, not the hackathon brief's numbered deliverables
 
 ## Process
 
