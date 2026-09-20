@@ -94,9 +94,12 @@ Note: FR-16 ("unplanned step insertion," Must/M7) is in the requirements doc but
 
 Be explicit about what's built today vs. proposed, per the brief's honesty expectation (see [06. Presentation Slides §8](06-presentation-slides.md)).
 
-### 3.1 The idea (proposed, not yet built)
+### 3.1 Two entry paths — one built, one proposed
 
-The hospital's existing printed **ใบนำทาง** (referral/queue slip handed to the patient at registration) could carry a QR code that deep-links straight into that patient's CarePath journey (VN lookup, FR-02) — replacing the manual "ค้นหาการนัดหมาย" search step in the demo today with a scan. This is a natural extension of the existing QR location-provider pattern (FR-06, [ADR-0004](../adr/0004-location-provider-abstraction.md)); it's a new entry-point QR rather than a new subsystem.
+Frame this as "how does a patient/visitor activate CarePath," not just a QR idea in isolation — both paths converge on the same journey screen:
+
+- **Path 1 — LINE LIFF (built today).** Open via LINE OA/LIFF directly, or look up by VN (FR-01, FR-02).
+- **Path 2 — scan a QR on the existing ใบนำทาง (proposed, not yet built).** Every hospital already hands patients a printed ใบนำทาง (referral/queue slip) at registration; adding a QR code to it deep-links straight into that patient's CarePath journey — replacing the manual "ค้นหาการนัดหมาย" search step in the demo today with a scan. This is a natural extension of the existing QR location-provider pattern (FR-06, [ADR-0004](../adr/0004-location-provider-abstraction.md)); it's a new entry-point QR rather than a new subsystem, and it works precisely because every hospital already has this document — no new artifact to design or print.
 
 ### 3.2 What can be shared with relatives, and why (this part is built — ADR-0011)
 
