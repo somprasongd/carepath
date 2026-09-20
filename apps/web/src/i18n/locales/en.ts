@@ -44,6 +44,8 @@ export const en: Catalog = {
   'common.locale.th': 'ไทย',
   'common.locale.en': 'EN',
 
+  'prefs.largeText': 'Large text',
+
   'auth.checking': 'Checking your access…',
   'auth.redirecting': 'Taking you to LINE sign-in…',
   'auth.errorTitle': 'Sign-in failed',
@@ -91,6 +93,7 @@ export const en: Catalog = {
   'navigate.scanCta': 'Scan the QR at the service point',
   'navigate.pickInstead': 'Or pick where you are',
   'navigate.updateLocation': 'Scan QR / pick a point to update your location',
+  'navigate.avoidStairs': 'Avoid stairs (use the lift)',
 
   'navigate.routeTitle': 'Directions to {name}',
   'navigate.subtitle': '{floor} · {name} · {place}',

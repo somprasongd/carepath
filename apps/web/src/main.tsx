@@ -4,6 +4,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { LocaleProvider } from './i18n'
 import { resolveInitialLocale } from './i18n/initial-locale'
+import { LARGE_TEXT_STORAGE_KEY, applyLargeText, readStoredFlag } from './preferences'
 import { routeTree } from './routeTree.gen'
 import './styles/index.css'
 
@@ -31,6 +32,9 @@ function render(lineLanguage: string | undefined) {
   // bootstrap) — so a foreign patient's first paint is already English:
   // stored choice → LINE language → Thai (i18n/initial-locale.ts).
   const initialLocale = resolveInitialLocale(lineLanguage)
+  // Same first-paint rule as the locale (#99): a stored large-text choice
+  // applies before the first render, so there is no flash of small text.
+  applyLargeText(readStoredFlag(LARGE_TEXT_STORAGE_KEY) ?? false)
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <LocaleProvider initialLocale={initialLocale}>

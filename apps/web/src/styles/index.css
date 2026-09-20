@@ -267,3 +267,22 @@ body,
   }
 }
 
+/* ── 7. Large-text mode (#99, FR-20) ──────────────────────────────────────
+ * `html.carepath-large-text` (toggled by preferences/LargeTextToggle) grows
+ * the eight reading tokens ~2px in place: every text-* utility resolves to
+ * var(--text-…) at use time, so re-declaring the variables under this
+ * class rescales the whole app without a single point override. The two
+ * display tokens stay put — a counter read from across a room
+ * (display-queue) and a stat figure (display-stat) are already sized for
+ * their jobs, and growing them is what breaks "ไม่ล้นกรอบ ไม่ทับกัน"
+ * (issue #99's no-overflow bar). Line heights keep their ratios. */
+html.carepath-large-text {
+  --text-h1: 28px;
+  --text-h2: 18px;
+  --text-body-md: 16px;
+  --text-body-sm: 15px;
+  --text-label-code: 15px;
+  --text-caption: 14px;
+  --text-button: 18px;
+}
+

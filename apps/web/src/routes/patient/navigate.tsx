@@ -15,6 +15,11 @@ import {
   useNavigationRoute,
 } from '@/features/navigation'
 import { useJourney } from '@/features/visit'
+import {
+  ACCESSIBLE_ONLY_STORAGE_KEY,
+  readStoredFlag,
+  storeFlag,
+} from '@/preferences'
 import { NavigateScreen } from './-NavigateScreen'
 import { ScanOverlay } from './-ScanOverlay'
 
@@ -46,6 +51,18 @@ function PatientNavigateRoute() {
   // the default". An override the current route no longer contains simply
   // falls through to the default — no effect needed to expire it.
   const [floorOverride, setFloorOverride] = useState<string | null>(null)
+  // Avoid-stairs routing (#99, FR-20): a device-local preference like the
+  // locale (#94) — a wheelchair user should not re-opt-in every visit.
+  const [accessibleOnly, setAccessibleOnly] = useState(
+    () => readStoredFlag(ACCESSIBLE_ONLY_STORAGE_KEY) ?? false,
+  )
+  const toggleAccessibleOnly = () => {
+    setAccessibleOnly((value) => {
+      const next = !value
+      storeFlag(ACCESSIBLE_ONLY_STORAGE_KEY, next)
+      return next
+    })
+  }
 
   // Same query key as the journey screen, so this is a cache read, not a
   // second round trip. The plan resolves the destination's place and floor
@@ -61,7 +78,7 @@ function PatientNavigateRoute() {
   const assumed = location ? null : assumedOrigin(data, locale)
   const originNodeId = location?.nodeId ?? assumed?.nodeId ?? null
   const servicePointCode = plan.state === 'plan' ? plan.servicePointCode : ''
-  const { data: route } = useNavigationRoute(originNodeId, servicePointCode)
+  const { data: route } = useNavigationRoute(originNodeId, servicePointCode, accessibleOnly)
 
   // Cross-floor view (#35 follow-up): show the floor the patient stands on
   // first — the "you are here" mark and the first walking leg — with a
@@ -95,6 +112,8 @@ function PatientNavigateRoute() {
         onFloorChange={setFloorOverride}
         currentLocation={location ? currentLocationLabel(location, floorLabel, locale) : undefined}
         assumedLocation={assumed ? assumedOriginLabel(assumed, locale) : undefined}
+        accessibleOnly={accessibleOnly}
+        onToggleAccessibleOnly={toggleAccessibleOnly}
         onScan={() => setScan(qrScannerSupported() ? 'camera' : 'pick')}
         onPickLocation={() => setScan('pick')}
         onBack={() => navigate({ to: '/patient/journey', search: { visit: visitId } })}

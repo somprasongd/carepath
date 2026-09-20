@@ -54,6 +54,10 @@ export const th = {
   'common.locale.th': 'ไทย',
   'common.locale.en': 'EN',
 
+  // Large-text mode (preferences/LargeTextToggle.tsx, #99/FR-20) — the
+  // accessible name of the A+ button; "A+" itself reads in every language.
+  'prefs.largeText': 'ตัวหนังสือใหญ่',
+
   // LINE LIFF login gate (auth/LoginGate.tsx).
   'auth.checking': 'กำลังตรวจสอบสิทธิ์การเข้าใช้งาน…',
   'auth.redirecting': 'กำลังนำท่านไปยังหน้าเข้าสู่ระบบ LINE…',
@@ -106,6 +110,7 @@ export const th = {
   'navigate.scanCta': 'สแกน QR ที่จุดบริการ',
   'navigate.pickInstead': 'หรือเลือกจุดที่คุณอยู่เอง',
   'navigate.updateLocation': 'สแกน QR / เลือกจุด เพื่ออัปเดทตำแหน่ง',
+  'navigate.avoidStairs': 'เลี่ยงบันได (ใช้ลิฟต์)',
 
   // Destination plan text (features/floorplan/destination.ts).
   'navigate.routeTitle': 'เส้นทางไป{name}',
