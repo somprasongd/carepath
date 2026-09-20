@@ -280,6 +280,54 @@ describe('staff session surface', () => {
     expect(loadStaffRefreshToken()).toBeNull()
   })
 
+  it('keeps the session when the refresh fails transiently (offline, 5xx)', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    adoptStaffTokens(staffPair('staff-access-1', 'refresh-1'))
+    const expired = vi.fn()
+    onStaffSessionExpired(expired)
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'expired' }, 401))
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    // A network blip must not log the staff user out: the transport error
+    // surfaces, the expiry hook stays silent, the refresh token survives.
+    const failure = await apiGet('/api/v1/staff/visits').catch((e: unknown) => e)
+    expect(failure).toBeInstanceOf(ApiError)
+    expect((failure as ApiError).status).toBe(0)
+    expect(expired).not.toHaveBeenCalled()
+    expect(loadStaffRefreshToken()).toBe('refresh-1')
+  })
+
+  it('recovers on the next attempt after a transient refresh failure', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    adoptStaffTokens(staffPair('staff-access-1', 'refresh-1'))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'expired' }, 401))
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+      .mockResolvedValueOnce(jsonResponse({ error: 'expired' }, 401))
+      .mockResolvedValueOnce(jsonResponse(staffPair('staff-access-2', 'refresh-2')))
+      .mockResolvedValueOnce(jsonResponse({ visits: ['V-1'] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const blip = await apiGet('/api/v1/staff/visits').catch((e: unknown) => e)
+    expect((blip as ApiError).status).toBe(0)
+    // Once the API is reachable again, the same call rotates and replays.
+    await expect(apiGet('/api/v1/staff/visits')).resolves.toEqual({ visits: ['V-1'] })
+    expect(loadStaffRefreshToken()).toBe('refresh-2')
+  })
+
+  it('a transient failure at boot rejects the restore but keeps the token', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    localStorage.setItem('carepath.staff.refreshToken', 'refresh-1')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')))
+
+    await expect(restoreStaffSession()).rejects.toBeInstanceOf(ApiError)
+    expect(loadStaffRefreshToken()).toBe('refresh-1')
+  })
+
   it('never retries a 401 on the auth endpoints themselves', async () => {
     vi.stubGlobal('localStorage', memoryStorage())
     adoptStaffTokens(staffPair('staff-access-1', 'refresh-1'))

@@ -32,10 +32,11 @@ func (h *Handler) Register(router fiber.Router, patientGuard fiber.Handler) {
 // RegisterDemo mounts the demo-only simulator routes under the given
 // /api/v1 router (#33): POST /demo/zigbee/location stands in for the
 // external positioning service during demos. It is separate from Register
-// so the canonical per-visit routes and the demo surface can be guarded
-// independently once #43 lands.
-func (h *Handler) RegisterDemo(router fiber.Router) {
-	router.Post("/demo/zigbee/location", h.simulateZigbee)
+// because the guard differs: the simulator is a staff tool, so the same
+// STAFF/ADMIN guard as the other staff surfaces applies — unauthenticated,
+// it would let anyone move any visit's routing origin.
+func (h *Handler) RegisterDemo(router fiber.Router, staffGuard fiber.Handler) {
+	router.Post("/demo/zigbee/location", staffGuard, h.simulateZigbee)
 }
 
 // reportRequestBody is the client-facing scan result. Raw is the scanned
@@ -109,11 +110,14 @@ type zigbeeSimulatorRequestBody struct {
 //	@Summary		Simulate a Zigbee zone fix
 //	@Description	Demo-only simulator for the Zigbee positioning service (#33): reports a zone-level fix for the visit through the canonical ZIGBEE location provider and returns the recorded observation. The zone resolves to its representative navigation node, which becomes the routing start point like any other location. A real Zigbee integration will consume positioning-service pushes through a separate adapter, not this endpoint.
 //	@Tags			location
+//	@Security		bearerAuth
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body	location.zigbeeSimulatorRequestBody	true	"Simulated zone fix: visitId, floorId, zone, optional confidence"
 //	@Success		200	{object}	location.Observation
 //	@Failure		400	{object}	httpx.ErrorResponse	"invalid body, or a floor/zone that does not resolve to a known location"
+//	@Failure		401	{object}	httpx.ErrorResponse	"missing or invalid staff access token"
+//	@Failure		403	{object}	httpx.ErrorResponse	"authenticated, but not STAFF or ADMIN"
 //	@Failure		500	{object}	httpx.ErrorResponse	"internal server error"
 //	@Router			/api/v1/demo/zigbee/location [post]
 func (h *Handler) simulateZigbee(c fiber.Ctx) error {

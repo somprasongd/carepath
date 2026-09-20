@@ -1090,7 +1090,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Demo-only Zigbee simulator (#33): reports a zone-level fix for the visit through the canonical ZIGBEE location provider (ADR-0004). The zone resolves to its representative navigation node, which becomes the routing start point like any other location. Stands in for the external positioning service of docs/integration/ location-zigbee.md during demos; a real Zigbee integration will be a separate adapter consuming positioning pushes, not this endpoint. */
+        /** @description Demo-only Zigbee simulator (#33): reports a zone-level fix for the visit through the canonical ZIGBEE location provider (ADR-0004). The zone resolves to its representative navigation node, which becomes the routing start point like any other location. Stands in for the external positioning service of docs/integration/ location-zigbee.md during demos; a real Zigbee integration will be a separate adapter consuming positioning pushes, not this endpoint. Staff-surface: requires a STAFF or ADMIN access token — the simulator moves the visit's routing origin, so it is a staff tool like the rest of the demo controls. */
         post: {
             parameters: {
                 query?: never;
@@ -1115,6 +1115,24 @@ export interface paths {
                 };
                 /** @description Invalid body, or a floor/zone that does not resolve to a known location */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or invalid staff access token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Authenticated, but not STAFF or ADMIN */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };

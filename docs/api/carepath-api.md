@@ -158,7 +158,7 @@ Reports a scanned location fix (QR today) and normalizes it via the source's pro
 
 `POST /api/v1/demo/zigbee/location`
 
-Demo-only Zigbee simulator (#33): reports a zone-level fix through the `ZIGBEE` location provider, standing in for a real Zigbee integration during demos.
+Demo-only Zigbee simulator (#33): reports a zone-level fix through the `ZIGBEE` location provider, standing in for a real Zigbee integration during demos. Requires a `STAFF`/`ADMIN` access token — it moves the visit's routing origin, so it is a staff tool.
 
 ## Removed
 

@@ -761,10 +761,20 @@ paths:
             location
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
+        "401":
+          description: missing or invalid staff access token
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "403":
+          description: authenticated, but not STAFF or ADMIN
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
         "500":
           description: internal server error
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
       summary: Simulate a Zigbee zone fix
       tags:
       - location
