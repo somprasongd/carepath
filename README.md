@@ -23,6 +23,7 @@
   - [6. ญาติผู้ป่วย](#6-ญาติผู้ป่วย-relative)
 - [การเชื่อมต่อกับ HIS](#การเชื่อมต่อกับ-his)
 - [เริ่มต้นใช้งาน](#เริ่มต้นใช้งาน)
+  - [URL แยกตามบทบาท (ผู้ป่วย vs เจ้าหน้าที่)](#url-แยกตามบทบาท-ผู้ป่วย-vs-เจ้าหน้าที่)
 - [คำสั่งที่ใช้บ่อย](#คำสั่งที่ใช้บ่อย)
 - [โครงสร้าง Repository](#โครงสร้าง-repository)
 - [สถานะการพัฒนา](#สถานะการพัฒนา)
@@ -231,7 +232,7 @@ sequenceDiagram
     end
 ```
 
-**หมายเหตุสถานะ:** หน้าเส้นทางและหน้านำทางอ่านข้อมูลจริงจาก API แล้ว · endpoint QR (`POST/GET /journeys/{visitId}/location`) ทำงานฝั่ง API แล้วแต่ยังไม่ผูกกับ UI · เส้นทางแบบลากเส้น + คำบอกทางทีละก้าวยังรอ navigation API (`/api/v1/navigation/route` ประกาศไว้ใน contract แล้ว ยังไม่มี handler)
+**หมายเหตุสถานะ:** หน้าเส้นทางและหน้านำทางอ่านข้อมูลจริงจาก API แล้ว · endpoint QR (`POST/GET /journeys/{visitId}/location`) ทำงานฝั่ง API แล้วแต่ยังไม่ผูกกับ UI (หน้าจอยังให้สแกน QR แบบ manual instruction ไม่มีกล้องสแกนจริง) · เส้นทางแบบลากเส้น + คำบอกทางทีละก้าว **ทำงานแล้วครบวงจร** ผ่าน `GET /api/v1/navigation/route` — มี handler จริง (`apps/api/internal/navigation`) ต่อเข้า router แล้ว และหน้า `/patient/navigate` เรียกใช้เพื่อวาดเส้นทางบนผัง SVG พร้อมคำบอกทางเป็นข้อความ
 
 ### 2. เจ้าหน้าที่จุดบริการ (Service-Point Staff)
 
@@ -567,7 +568,23 @@ curl -s localhost:8080/api/v1/journeys/VISIT-001 | jq '.steps[] | {stepKey, stat
 
 หน้า **Mock HIS console** (http://localhost:8090/console) ทำแบบเดียวกันได้ผ่าน UI: เปิด visit, สั่ง order, กด performed / resulted, ปิด encounter, ปิด visit
 
-ฝั่งผู้ป่วยเปิดที่ http://localhost:5173/patient/journey (เปลี่ยน visit ด้วย `?visit=<visitId>`) และฝั่งเจ้าหน้าที่ที่ http://localhost:5173/staff/patients
+### URL แยกตามบทบาท (ผู้ป่วย vs เจ้าหน้าที่)
+
+ทั้งสองฝั่งรันบน `apps/web` ตัวเดียวกัน (พอร์ต `5173`) แต่แยกเส้นทางและกลไกยืนยันตัวตนกันชัดเจน — ผู้ป่วยผ่าน session จาก LINE/demo (`AuthProvider`), เจ้าหน้าที่ผ่าน JWT จาก `/login` (`StaffAuthProvider`) ([ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md))
+
+| กลุ่ม | URL | หน้าที่ |
+|---|---|---|
+| ผู้ป่วย | `http://localhost:5173/patient/journey?visit=<visitId>` | เส้นทางทั้งวัน ขั้นตอนถัดไปที่แนะนำ |
+| ผู้ป่วย | `http://localhost:5173/patient/navigate?visit=<visitId>` | ผังชั้น + เส้นทางไปจุดบริการ + คำบอกทาง |
+| เจ้าหน้าที่ | `http://localhost:5173/login` | หน้า login ด้วย username/password (`admin/demo`, `staff/demo`) |
+| เจ้าหน้าที่ | `http://localhost:5173/staff/overview` | ภาพรวมคอนโซลเจ้าหน้าที่ |
+| เจ้าหน้าที่ | `http://localhost:5173/staff/patients` | ผู้ป่วยวันนี้ + เปลี่ยนสถานะขั้นตอน + ปิดรอบตรวจ |
+| เจ้าหน้าที่ | `http://localhost:5173/staff/queue` | เรียกคิว (🚧 หน้าจอ demo ยังไม่มี queue endpoint จริง) |
+| เจ้าหน้าที่ | `http://localhost:5173/staff/service-points` | mapping จุดบริการ ↔ สถานที่ |
+| เจ้าหน้าที่ | `http://localhost:5173/staff/floor-plan` | ผังอาคาร (placeholder) |
+| เจ้าหน้าที่ | `http://localhost:5173/staff/pathway-templates` | กติกาการวางแผนเส้นทาง |
+
+`http://localhost:5173/` จะ redirect ไปหน้าผู้ป่วย (`/patient/journey`) โดย default — ไม่มีหน้ากลางให้เลือกบทบาทเอง เจ้าหน้าที่ต้องเข้าที่ `/login` ตรง ๆ
 
 ### Reset ข้อมูล demo ให้เหมือนเดิมทุกครั้ง
 

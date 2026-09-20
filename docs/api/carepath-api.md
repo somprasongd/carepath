@@ -97,9 +97,17 @@ Returns route node IDs/coordinates for overlay on the floor plan.
 
 ## Location
 
-`POST /api/v1/locations/resolve`
+`GET /api/v1/journeys/{visitId}/location`
 
-Normalizes provider input such as QR into a CarePath location result.
+The visit's current location — the latest recorded observation. Canonical start point for routing. 404 if nothing has been recorded yet.
+
+`POST /api/v1/journeys/{visitId}/location`
+
+Reports a scanned location fix (QR today) and normalizes it via the source's provider (ADR-0004) into a canonical navigation node, recorded as the current location.
+
+`POST /api/v1/demo/zigbee/location`
+
+Demo-only Zigbee simulator (#33): reports a zone-level fix through the `ZIGBEE` location provider, standing in for a real Zigbee integration during demos.
 
 ## Removed
 

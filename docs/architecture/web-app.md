@@ -17,23 +17,31 @@ apps/web/src/
   routes/            File-based routing — one file per URL
     __root.tsx       Base font/colour only, no chrome
     index.tsx        Redirects / → /patient/journey
+    login.tsx        Staff/admin login (patients never see this — LINE only)
     patient/         journey, navigate (?visit=<id> search param)
-    staff/           overview, service-points, patients*, floor-plan*
+    staff/           overview*, service-points, patients, queue*, floor-plan*,
+                     pathway-templates* (`*` = screen still reads mocks/demo-data.ts)
     design.tsx       The living DESIGN.md catalogue (components + screens)
     -design/         Components for the design page (`-` prefix = not a route)
   design-system/     Presentation primitives — must stay ignorant of the API
     ui/              shadcn CLI output, edited in place
     tokens.ts, …     CarePath-authored primitives (Button, Card, JourneyRail, …)
-  auth/              Patient (LINE LIFF) auth: AuthProvider, LoginGate, RequireAuth
+  auth/              Both auth surfaces (ADR-0010): AuthProvider, LoginGate,
+                     RequireAuth, DemoAuthProvider, LiffAuthProvider for
+                     `/patient/*` (LINE/demo identity) · StaffAuthProvider,
+                     StaffAuthContext, RequireStaffAuth for `/staff/*` (JWT)
   features/          Domain compositions — where the API is allowed in
     visit/           queries.ts (useVisit), journey.ts (VisitView → JourneyRail),
-                     components/AttentionCard.tsx
-    servicepoint/    ServicePointRow and friends (demo data for now)
-    auth/            Staff/admin auth (ADR-0010) — login/refresh/logout queries,
-                     the token store, StaffAuthProvider + RequireStaffAuth
+                     staff.ts (staff visit list + transitions), components/
+    servicepoint/    queries.ts — live GET /api/v1/service-points
+    navigation/      queries.ts (useNavigationRoute), route.ts (polylines +
+                     turn-by-turn cues from the route response)
+    floorplan/       destination.ts, plans.ts — SVG floor-plan lookups
+    queue/           components only — no query layer yet (queue is still demo)
   api/               client.ts (fetch wrapper, ApiError, token attach + refresh)
                      + schema.d.ts (generated)
-  mocks/             demo-data.ts — static data for /design and staff screens
+  mocks/             demo-data.ts — static data for /design and the screens
+                     still marked `*` above (overview, queue, pathway-templates)
   styles/            index.css — the single token source (@theme)
 ```
 
@@ -54,11 +62,14 @@ Status per screen today:
 
 | Screen | Data |
 | --- | --- |
-| `/patient/journey` | Live — `GET /api/v1/visits/:id` (default `VISIT-001`, override with `?visit=`) |
-| `/patient/navigate` | Destination live from the same query; schematic floor plan still demo (only the pharmacy plan exists — other places render the "ยังไม่รองรับเส้นทาง" state until `/api/v1/navigation/route` is implemented) |
-| `/staff/*` | Live for the patient list and step transitions (`/api/v1/staff/visits`); queue and overview are still `mocks/demo-data.ts`. Once ADR-0010 lands, the whole group mounts behind `RequireStaffAuth` and every request carries a staff access token |
-| `/login` | Currently inert (local state, role cards). Becomes a real `POST /api/v1/auth/login` form under ADR-0010 — no role picker, the landing screen is derived from the role in the token |
+| `/patient/journey` | Live — `GET /api/v1/journeys/:visitId` (default `VISIT-001`, override with `?visit=`); polls every 15s |
+| `/patient/navigate` | Live end-to-end — floor plan from `packages/floorplans`, route + turn-by-turn cues from `GET /api/v1/navigation/route` (`features/navigation`). QR-based current-location is API-only; the screen still shows a static "scan the QR at the service point" instruction, no camera/scanner wired in |
+| `/staff/patients`, `/staff/service-points` | Live (`/api/v1/staff/visits` + transitions, `/api/v1/service-points`) |
+| `/staff/overview`, `/staff/queue`, `/staff/pathway-templates` | Still `mocks/demo-data.ts` — no backing endpoint exists yet (queue has no call-next API at all) |
+| `/login` | Live — real `POST /api/v1/auth/login` (ADR-0010); no role picker, the landing screen is derived from the role in the returned token |
 | `/design` | Demo data by design; it must never depend on the API |
+
+The whole `/staff/*` group mounts behind `RequireStaffAuth` and every request carries a staff access token, regardless of whether that individual screen's data is live or still demo.
 
 ## Commands
 
@@ -74,9 +85,10 @@ Linting uses oxlint rather than eslint + typescript-eslint: the app builds with 
 
 ## Staff authentication (ADR-0010)
 
-Two auth surfaces coexist and must not be merged: `src/auth/` gates `/patient/*`
-on a LINE (or demo) identity; `src/features/auth/` gates `/staff/*` on a
-username/password login.
+Two auth surfaces coexist and must not be merged: `AuthProvider`/`LoginGate`/
+`RequireAuth` gate `/patient/*` on a LINE (or demo) identity; `StaffAuthProvider`/
+`RequireStaffAuth` gate `/staff/*` on a username/password login. Both live under
+`src/auth/`, but each surface keeps its own token store and context.
 
 - **The access token lives in memory only** (React context state) — it is on
   every request, so keeping it out of `localStorage` shrinks the XSS payoff.
