@@ -1,5 +1,50 @@
 basePath: /
 definitions:
+  analytics.Overview:
+    properties:
+      asOf:
+        type: string
+      servicePoints:
+        items:
+          $ref: '#/definitions/analytics.ServicePointMetrics'
+        type: array
+      summary:
+        $ref: '#/definitions/analytics.Summary'
+      window:
+        type: string
+    type: object
+  analytics.ServicePointMetrics:
+    properties:
+      avgServiceMinutes:
+        type: number
+      avgWaitMinutes:
+        type: number
+      code:
+        type: string
+      completedCount:
+        type: integer
+      inProgressNow:
+        type: integer
+      longestWaitingMinutes:
+        type: number
+      name:
+        type: string
+      servicePointId:
+        type: string
+      waitingNow:
+        type: integer
+    type: object
+  analytics.Summary:
+    properties:
+      activeVisits:
+        type: integer
+      avgVisitMinutes:
+        type: number
+      avgWaitMinutes:
+        type: number
+      bottleneckServicePointId:
+        type: string
+    type: object
   auth.identityResponse:
     properties:
       displayName:
@@ -286,6 +331,46 @@ info:
   title: CarePath API
   version: 1.0.0
 paths:
+  /api/v1/analytics/overview:
+    get:
+      description: 'Operational metrics for the executive dashboard (#86): per-service-point
+        wait/service numbers and visit-wide summary, aggregated in SQL from the append-only
+        step timeline (#85). window=today means midnight-to-now in the analytics timezone
+        (Asia/Bangkok by default). Executives get EXECUTIVE logins that reach this
+        surface and nothing else (ADR-0010); no patient-level data (NFR-03).'
+      parameters:
+      - description: Aggregation window; only \
+        enum:
+        - today
+        in: query
+        name: window
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/analytics.Overview'
+        "400":
+          description: unsupported window
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "401":
+          description: missing, malformed, or expired staff access token
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "403":
+          description: authenticated, but the user's roles do not allow this action
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Get the executive analytics overview
+      tags:
+      - analytics
   /api/v1/auth/login:
     post:
       consumes:

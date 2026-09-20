@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.10.0
+  version: 0.11.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -510,6 +510,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/analytics/overview:
+    get:
+      description: >
+        Executive insights dashboard (#86, epic #83): operational metrics
+        aggregated from the append-only step timeline
+        (carepath.journey_step_status_event, #85) — never patient-level data
+        (NFR-03). window=today means midnight-to-now in the configured
+        analytics timezone (Asia/Bangkok by default), not the server's UTC
+        clock. Executives get EXECUTIVE logins that reach this surface and
+        nothing else (ADR-0010).
+      security:
+        - staffAuth: []
+      parameters:
+        - in: query
+          name: window
+          description: Aggregation window. Only "today" exists in the MVP;
+            anything else is a 400.
+          schema: { type: string, default: today, example: today }
+      responses:
+        '200':
+          description: Aggregated overview for the requested window
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsOverview'
+        '400':
+          description: Unsupported window
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing, malformed, or expired staff access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Authenticated, but the user's roles do not allow this action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/navigation/route:
     get:
       description: >
@@ -901,3 +950,76 @@ components:
         confidence:
           type: [number, 'null']
           description: Optional 0..1 confidence of the simulated fix.
+    AnalyticsOverview:
+      type: object
+      description: >
+        Executive overview for one window (#86). Every average is null —
+        never 0 — when no sample exists for it: "no data yet" and "zero
+        minutes" are different facts, and the dashboard renders null as an
+        em dash rather than a misleading 0.
+      required: [asOf, window, summary, servicePoints]
+      properties:
+        asOf: { type: string, format: date-time }
+        window:
+          type: string
+          description: The window requested (and validated) — "today".
+        summary: { $ref: '#/components/schemas/AnalyticsSummary' }
+        servicePoints:
+          type: array
+          description: One entry per active service point, ordered by code.
+          items: { $ref: '#/components/schemas/ServicePointMetrics' }
+    AnalyticsSummary:
+      type: object
+      description: Visit-wide numbers for the window.
+      required: [activeVisits, avgWaitMinutes, avgVisitMinutes, bottleneckServicePointId]
+      properties:
+        activeVisits:
+          type: integer
+          description: Visits currently ACTIVE (a "now" number, not windowed).
+        avgWaitMinutes:
+          type: [number, 'null']
+          description: Average over steps that started within the window of
+            (time entering STARTED − time entering READY the latest time
+            before that). Null when no step started in the window.
+        avgVisitMinutes:
+          type: [number, 'null']
+          description: Average of (last timeline event − first timeline
+            event) over visits that are COMPLETED and whose last event falls
+            within the window. Null when no visit finished.
+        bottleneckServicePointId:
+          type: [string, 'null']
+          description: Service point with the highest avgWaitMinutes; ties
+            break by waitingNow. Null when no service point has wait data.
+    ServicePointMetrics:
+      type: object
+      description: Per-service-point operational metrics for the window.
+      required: [servicePointId, code, name, waitingNow, inProgressNow, longestWaitingMinutes, avgWaitMinutes, avgServiceMinutes, completedCount]
+      properties:
+        servicePointId: { type: string }
+        code: { type: string }
+        name: { type: string }
+        waitingNow:
+          type: integer
+          description: Steps currently READY and bound to this service point
+            (a "now" number, from current state, not windowed).
+        inProgressNow:
+          type: integer
+          description: Steps currently STARTED and bound to this service
+            point ("now", not windowed).
+        longestWaitingMinutes:
+          type: [number, 'null']
+          description: now − (time the still-READY step entered READY),
+            longest among currently waiting steps. Null when nobody is
+            waiting.
+        avgWaitMinutes:
+          type: [number, 'null']
+          description: Same definition as AnalyticsSummary.avgWaitMinutes,
+            restricted to this service point. Null when no sample.
+        avgServiceMinutes:
+          type: [number, 'null']
+          description: Average of (time entering COMPLETED − time entering
+            STARTED) over steps that completed within the window. Null when
+            no step completed.
+        completedCount:
+          type: integer
+          description: Steps that reached COMPLETED within the window.

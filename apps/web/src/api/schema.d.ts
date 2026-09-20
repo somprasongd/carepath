@@ -864,6 +864,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Executive insights dashboard (#86, epic #83): operational metrics aggregated from the append-only step timeline (carepath.journey_step_status_event, #85) — never patient-level data (NFR-03). window=today means midnight-to-now in the configured analytics timezone (Asia/Bangkok by default), not the server's UTC clock. Executives get EXECUTIVE logins that reach this surface and nothing else (ADR-0010). */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Aggregation window. Only "today" exists in the MVP; anything else is a 400. */
+                    window?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Aggregated overview for the requested window */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AnalyticsOverview"];
+                    };
+                };
+                /** @description Unsupported window */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing, malformed, or expired staff access token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Authenticated, but the user's roles do not allow this action */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/navigation/route": {
         parameters: {
             query?: never;
@@ -1141,6 +1216,45 @@ export interface components {
             zone: string;
             /** @description Optional 0..1 confidence of the simulated fix. */
             confidence?: number | null;
+        };
+        /** @description Executive overview for one window (#86). Every average is null — never 0 — when no sample exists for it: "no data yet" and "zero minutes" are different facts, and the dashboard renders null as an em dash rather than a misleading 0. */
+        AnalyticsOverview: {
+            /** Format: date-time */
+            asOf: string;
+            /** @description The window requested (and validated) — "today". */
+            window: string;
+            summary: components["schemas"]["AnalyticsSummary"];
+            /** @description One entry per active service point, ordered by code. */
+            servicePoints: components["schemas"]["ServicePointMetrics"][];
+        };
+        /** @description Visit-wide numbers for the window. */
+        AnalyticsSummary: {
+            /** @description Visits currently ACTIVE (a "now" number, not windowed). */
+            activeVisits: number;
+            /** @description Average over steps that started within the window of (time entering STARTED − time entering READY the latest time before that). Null when no step started in the window. */
+            avgWaitMinutes: number | null;
+            /** @description Average of (last timeline event − first timeline event) over visits that are COMPLETED and whose last event falls within the window. Null when no visit finished. */
+            avgVisitMinutes: number | null;
+            /** @description Service point with the highest avgWaitMinutes; ties break by waitingNow. Null when no service point has wait data. */
+            bottleneckServicePointId: string | null;
+        };
+        /** @description Per-service-point operational metrics for the window. */
+        ServicePointMetrics: {
+            servicePointId: string;
+            code: string;
+            name: string;
+            /** @description Steps currently READY and bound to this service point (a "now" number, from current state, not windowed). */
+            waitingNow: number;
+            /** @description Steps currently STARTED and bound to this service point ("now", not windowed). */
+            inProgressNow: number;
+            /** @description now − (time the still-READY step entered READY), longest among currently waiting steps. Null when nobody is waiting. */
+            longestWaitingMinutes: number | null;
+            /** @description Same definition as AnalyticsSummary.avgWaitMinutes, restricted to this service point. Null when no sample. */
+            avgWaitMinutes: number | null;
+            /** @description Average of (time entering COMPLETED − time entering STARTED) over steps that completed within the window. Null when no step completed. */
+            avgServiceMinutes: number | null;
+            /** @description Steps that reached COMPLETED within the window. */
+            completedCount: number;
         };
     };
     responses: never;

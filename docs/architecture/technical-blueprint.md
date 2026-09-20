@@ -48,7 +48,8 @@ This section is the canonical description of the `apps/api` internal structure. 
 Planned module list — a module gets a package when it has real features, never as an empty skeleton:
 
 ```text
-auth           (specified, ADR-0010 — staff/admin users, argon2id passwords, JWT access + rotating refresh tokens, RequireRole middleware)
+auth           (implemented, ADR-0010 — staff/admin/executive users, argon2id passwords, JWT access + rotating refresh tokens, RequireRole middleware)
+analytics      (implemented, #86 — read-only aggregates over the #85 timeline for the executive dashboard; EXECUTIVE reaches only this surface)
 identity       (implemented — Verifier port; LINE ID-token verification adapter)
 journey        (implemented — CarePath-owned journey plan derived from HIS facts, ADR-0008 amended by ADR-0009; superseded and removed the visit module)
 servicepoint   (implemented)

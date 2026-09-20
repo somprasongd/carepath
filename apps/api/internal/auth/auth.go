@@ -13,10 +13,12 @@ import (
 )
 
 // Role codes enforced by the MVP (ADR-0010 §5). Splitting STAFF or adding
-// EXECUTIVE later is a data change, not a schema change.
+// more roles later is a data change, not a schema change. EXECUTIVE (#86)
+// reaches the analytics overview and nothing else — least privilege.
 const (
-	RoleAdmin = "ADMIN"
-	RoleStaff = "STAFF"
+	RoleAdmin     = "ADMIN"
+	RoleStaff     = "STAFF"
+	RoleExecutive = "EXECUTIVE"
 )
 
 // ErrInvalidCredentials covers every login failure — unknown username, wrong

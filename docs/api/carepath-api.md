@@ -51,7 +51,13 @@ a valid token without a permitted role is 403.
 | `GET /api/v1/staff/visits` | `STAFF`, `ADMIN` |
 | `POST /api/v1/journeys/{visitId}/steps/{stepKey}/transition` | `STAFF`, `ADMIN` |
 | `POST /api/v1/journeys/{visitId}/clinics/{clinicCode}/close-round` | `STAFF`, `ADMIN` |
+| `GET /api/v1/analytics/overview` | `STAFF`, `ADMIN`, `EXECUTIVE` |
 | `GET /api/v1/auth/me` | any authenticated staff user |
+
+The `EXECUTIVE` role (#86, seeded as `exec`/`demo`) exists for exactly one
+surface: the analytics overview. An executive token on any other staff
+endpoint is 403 — least privilege, so a dashboard login never doubles as an
+operations login.
 
 Everything else — the journey read, service points, location, and route — is
 open in the MVP, because the patient screens consume it. Binding the journey
@@ -76,6 +82,22 @@ Staff override: confirms a clinic is done with the patient for this round even w
 `GET /api/v1/staff/visits`
 
 The projected journey of every visit CarePath knows, freshest sync first — same per-visit shape as the single-journey read (#37). Requires a `STAFF` or `ADMIN` access token; the `/api/v1/staff` prefix exists so one middleware covers the whole group.
+
+## Analytics
+
+`GET /api/v1/analytics/overview?window=today`
+
+Executive dashboard numbers (#86, epic #83), aggregated in SQL from the
+append-only step timeline (#85): per service point — currently waiting /
+in-progress counts, longest current wait, average wait, average service
+time, completed today; visit-wide — active visits, average visit length,
+average wait, and the bottleneck service point (highest average wait, ties
+by who is still waiting). Only `window=today` exists; anything else is 400.
+"Today" is midnight-to-now in the analytics timezone
+(`ANALYTICS_TIMEZONE`, default `Asia/Bangkok`) — resolved by the database,
+not the API process's clock. Averages with no samples are `null`, never 0:
+no-data and zero-minutes are different facts. Requires a `STAFF`, `ADMIN`,
+or `EXECUTIVE` token; never returns patient-level data (NFR-03).
 
 ## Service points
 

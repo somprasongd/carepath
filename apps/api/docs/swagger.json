@@ -8,6 +8,61 @@
     },
     "basePath": "/",
     "paths": {
+        "/api/v1/analytics/overview": {
+            "get": {
+                "description": "Operational metrics for the executive dashboard (#86): per-service-point wait/service numbers and visit-wide summary, aggregated in SQL from the append-only step timeline (#85). window=today means midnight-to-now in the analytics timezone (Asia/Bangkok by default). Executives get EXECUTIVE logins that reach this surface and nothing else (ADR-0010); no patient-level data (NFR-03).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "analytics"
+                ],
+                "summary": "Get the executive analytics overview",
+                "parameters": [
+                    {
+                        "enum": [
+                            "today"
+                        ],
+                        "type": "string",
+                        "description": "Aggregation window; only \\",
+                        "name": "window",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/analytics.Overview"
+                        }
+                    },
+                    "400": {
+                        "description": "unsupported window",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "missing, malformed, or expired staff access token",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "authenticated, but the user's roles do not allow this action",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/login": {
             "post": {
                 "description": "Verifies a username against an argon2id password hash and returns a short-lived JWT access token plus a rotating opaque refresh token. Unknown username, wrong password, and deactivated account are deliberately indistinguishable (same 401 body, same timing).",
@@ -717,6 +772,75 @@
         }
     },
     "definitions": {
+        "analytics.Overview": {
+            "type": "object",
+            "properties": {
+                "asOf": {
+                    "type": "string"
+                },
+                "servicePoints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.ServicePointMetrics"
+                    }
+                },
+                "summary": {
+                    "$ref": "#/definitions/analytics.Summary"
+                },
+                "window": {
+                    "type": "string"
+                }
+            }
+        },
+        "analytics.ServicePointMetrics": {
+            "type": "object",
+            "properties": {
+                "avgServiceMinutes": {
+                    "type": "number"
+                },
+                "avgWaitMinutes": {
+                    "type": "number"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "completedCount": {
+                    "type": "integer"
+                },
+                "inProgressNow": {
+                    "type": "integer"
+                },
+                "longestWaitingMinutes": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "servicePointId": {
+                    "type": "string"
+                },
+                "waitingNow": {
+                    "type": "integer"
+                }
+            }
+        },
+        "analytics.Summary": {
+            "type": "object",
+            "properties": {
+                "activeVisits": {
+                    "type": "integer"
+                },
+                "avgVisitMinutes": {
+                    "type": "number"
+                },
+                "avgWaitMinutes": {
+                    "type": "number"
+                },
+                "bottleneckServicePointId": {
+                    "type": "string"
+                }
+            }
+        },
         "auth.identityResponse": {
             "type": "object",
             "properties": {
