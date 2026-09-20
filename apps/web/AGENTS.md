@@ -63,6 +63,11 @@ patients see, so a silent regression there is a UX bug, not a crash.
   (`setApiShareToken`), and it is attached to exactly one endpoint — see
   ADR-0011. Role checks in the UI hide affordances — the API is what
   enforces them.
+- **Patient-facing display text lives in the i18n catalog** (`src/i18n/locales/`,
+  ADR-0012): step titles and service point names are keyed by their stable
+  codes and mapped per locale — never hardcoded in a component. Staff screens
+  pin locale `'th'` explicitly. Proper nouns (patient names) and the server's
+  `service_point.name` (staff label / fallback) are not UI text.
 - **Demo data is scoped.** `src/mocks/demo-data.ts` feeds only `/design` and
   the staff screens (no endpoints yet). Patient screens must render live
   visit data via `features/visit`; when a staff endpoint lands, move that

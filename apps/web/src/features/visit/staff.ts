@@ -1,10 +1,11 @@
-import { thaiStepTitle } from './journey'
+import { stepTitle } from './journey'
 import type { Journey } from './queries'
 
 /**
  * Staff-facing labels and tones for the visit monitor (#37). Staff screens
  * may show operational vocabulary — DESIGN.md's plain-Thai rule is a patient
- * rule — so the raw status stays visible where staff needs it.
+ * rule — so the raw status stays visible where staff needs it. The staff
+ * console is out of FR-19's scope and pins the locale to Thai (ADR-0012 §2).
  */
 export type StaffTone = 'routable' | 'busy' | 'ready' | 'quiet'
 
@@ -65,8 +66,8 @@ export function visitPosition(journey: Journey): string {
   if (journey.completed) return 'เสร็จสิ้นทุกขั้นตอน'
   if (journey.status === 'CANCELLED') return 'การมารับบริการถูกยกเลิก'
   const started = journey.steps.find((step) => step.status === 'STARTED')
-  if (started) return `กำลัง${thaiStepTitle(started)}`
-  if (journey.recommended) return `ถัดไป · ${thaiStepTitle(journey.recommended)}`
+  if (started) return `กำลัง${stepTitle(started, 'th')}`
+  if (journey.recommended) return `ถัดไป · ${stepTitle(journey.recommended, 'th')}`
   return 'ไม่มีขั้นตอนที่ดำเนินการได้'
 }
 

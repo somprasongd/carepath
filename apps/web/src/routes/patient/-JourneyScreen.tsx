@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useAuth } from '@/auth/AuthContext'
+import { useLocale } from '@/i18n'
 import {
   AppBar,
   Button,
@@ -18,12 +19,13 @@ import {
 } from '@/design-system'
 import { ShareSheet } from '@/features/share'
 import {
-  thaiStepTitle,
+  journeyProgressLabel,
+  servicePointLabel,
+  stepTitle,
   toJourneySteps,
   useJourney,
   visitLoadErrorMessage,
   visitOutcome,
-  journeyProgressLabel,
   VisitOutcomeCard,
 } from '@/features/visit'
 
@@ -42,6 +44,7 @@ export function JourneyScreen({
   onNavigate?: () => void
 }) {
   const { identity } = useAuth()
+  const { locale } = useLocale()
   const { data: journey, isPending, isError, error, refetch } = useJourney(visitId)
   const [shareOpen, setShareOpen] = useState(false)
   // Sharing needs a real patient session (ADR-0011). In demo fallback — API
@@ -87,15 +90,18 @@ export function JourneyScreen({
   }
 
   const recommended = journey?.recommended
-  const nextTitle = recommended ? thaiStepTitle(recommended) : undefined
+  const nextTitle = recommended ? stepTitle(recommended, locale) : undefined
   const outcome = journey ? visitOutcome(journey) : null
+  const rail = journey ? toJourneySteps(journey, locale) : []
   // No route to offer once the visit ended — the projection may still carry
   // actionable steps for a CANCELLED visit, so the CTA is gated on the
   // outcome, not on `recommended` alone.
   const next =
     !outcome && recommended && nextTitle
       ? {
-          value: `${nextTitle} · ${recommended.servicePoint?.name ?? ''}`.trim(),
+          value: `${nextTitle} · ${
+            recommended.servicePoint ? servicePointLabel(recommended.servicePoint, locale) : ''
+          }`.trim(),
           cta: `นำทางไป${nextTitle}`,
         }
       : null
@@ -106,14 +112,14 @@ export function JourneyScreen({
   return (
     <JourneyShell
       visitRef={journey?.visitId ?? visitId}
-      steps={journey ? toJourneySteps(journey) : []}
+      steps={rail}
       next={next}
       progress={journey ? journeyProgressLabel(journey) : undefined}
       notice={outcome ? <VisitOutcomeCard outcome={outcome} /> : undefined}
       onNavigate={onNavigate}
       displayName={identity?.displayName}
     >
-      <JourneyRail steps={journey ? toJourneySteps(journey) : []} />
+      <JourneyRail steps={rail} />
       {shareable && (
         <div className="mt-5 flex flex-col items-start">
           <Button variant="ghost" onClick={() => setShareOpen(true)} disabled={!shareReady}>

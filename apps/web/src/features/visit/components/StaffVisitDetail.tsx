@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Card, Code, Meta, RefPill, SectionTitle } from '@/design-system'
-import { thaiStepTitle } from '../journey'
+import { stepTitle } from '../journey'
 import type { Journey, JourneyStep } from '../queries'
 import { StaffStatusBadge } from './StaffStatusBadge'
 import { syncedAtLabel } from '../staff'
@@ -65,7 +65,7 @@ export function StaffVisitDetail({
                 <Code className="text-ink-muted">{step.sequence}</Code>
                 <div className="min-w-0 flex-1">
                   <div className="font-sans text-body-sm font-semibold text-ink">
-                    {thaiStepTitle(step)}
+                    {stepTitle(step, 'th')}
                   </div>
                   <Meta className="m-0">
                     {step.stepKey}
@@ -87,7 +87,7 @@ function PositionLine({ label, step }: { label: string; step?: JourneyStep | nul
   return (
     <Meta className="m-0">
       <span className="text-ink-muted">{label}: </span>
-      <span className="font-semibold text-ink">{step ? thaiStepTitle(step) : '—'}</span>
+      <span className="font-semibold text-ink">{step ? stepTitle(step, 'th') : '—'}</span>
     </Meta>
   )
 }
