@@ -34,6 +34,7 @@ This directory is the working source of truth for architecture, requirements, de
 - [ADR-0011 Visit Share Link (relative tracking token)](adr/0011-visit-share-link.md)
 - [ADR-0012 Client-Owned Display Text (i18n)](adr/0012-client-owned-display-text.md)
 - [ADR-0013 Queue-Proximity Notification (outbound channel port)](adr/0013-queue-proximity-notification.md)
+- [ADR-0014 HIS-Minted Visit Link (slip QR grants the session claim)](adr/0014-his-visit-link.md)
 
 ## Integration
 

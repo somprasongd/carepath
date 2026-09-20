@@ -71,7 +71,7 @@ func newGuardApp() (*fiber.App, *fakeService, *fakeClaims) {
 		claims: map[[3]string]bool{},
 	}
 	app := fiber.New()
-	session.NewHandler(svc, claims).Register(app.Group("/api/v1"))
+	session.NewHandler(svc, claims).Register(app.Group("/api/v1"), true)
 	app.Get("/api/v1/journeys/:visitId", session.RequirePatientVisit(svc, claims),
 		func(c fiber.Ctx) error { return c.SendString("journey-body") })
 	return app, svc, claims

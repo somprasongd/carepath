@@ -37,8 +37,9 @@ function PatientNavigateRoute() {
   const { locale } = useLocale()
   const floorLabel = (floorId: string) => floorLabelFor(floorId, locale)
 
-  // Reached without a visit (bookmark, stale link): send them to the VN
-  // entry screen rather than guessing a journey for them.
+  // Reached without a visit (bookmark, stale link): send them to the
+  // journey route's front door (slip-link exchange / demo VN entry) rather
+  // than guessing a journey for them.
   if (visit === undefined) {
     return <Navigate to="/patient/journey" replace />
   }

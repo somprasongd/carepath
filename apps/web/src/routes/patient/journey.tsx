@@ -1,10 +1,16 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { authMode } from '@/auth/auth-mode'
+import { readVisitLinkToken } from '@/features/visit/visit-link'
 import { JourneyScreen } from './-JourneyScreen'
+import { NoVisitScreen, VisitLinkExchange } from './-VisitLinkExchange'
 import { VisitEntryScreen } from './-VisitEntryScreen'
 
 /**
- * `?visit=<VN>` — the HIS visit reference this journey renders. Required:
- * without it the VN entry screen asks for it first (no demo default).
+ * `?visit=<VN>` — the visit this journey renders, reached one of two ways:
+ * the slip-link token (#136, `#vt=` captured at bootstrap and redeemed for
+ * the visit id — production's only front door), or the demo VN entry screen
+ * (ALLOW_DEMO_AUTH deployments). In line mode with neither, the no-visit
+ * screen points back to the hospital's slip instead of accepting a typed VN.
  */
 export const Route = createFileRoute('/patient/journey')({
   validateSearch: (search: Record<string, unknown>): { visit?: string } => ({
@@ -18,9 +24,16 @@ function PatientJourneyRoute() {
   const { visit } = Route.useSearch()
 
   if (visit === undefined) {
+    if (readVisitLinkToken() !== undefined) {
+      return (
+        <div className="h-dvh">
+          <VisitLinkExchange />
+        </div>
+      )
+    }
     return (
       <div className="h-dvh">
-        <VisitEntryScreen />
+        {authMode === 'demo' ? <VisitEntryScreen /> : <NoVisitScreen />}
       </div>
     )
   }

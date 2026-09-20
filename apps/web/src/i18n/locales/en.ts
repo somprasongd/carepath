@@ -59,6 +59,16 @@ export const en: Catalog = {
   'entry.vnPlaceholder': 'e.g. VISIT-001',
   'entry.required': 'Please enter your visit number',
   'entry.submit': 'View my care plan',
+  'entry.exchanging': 'Opening your visit…',
+  'entry.exchangingLead': 'One moment while we bring up your care plan.',
+  'entry.linkInvalidTitle': 'This link is invalid or expired',
+  'entry.linkInvalidLead':
+    'Please scan the QR code on the navigation slip the hospital gave you again.',
+  'entry.linkErrorTitle': 'We could not open your visit',
+  'entry.linkErrorLead': 'The service did not answer. Please try again.',
+  'entry.noVisitTitle': 'Open your visit from your slip',
+  'entry.noVisitLead':
+    'Scan the QR code on the navigation slip the hospital gave you to see your care plan.',
 
   'journey.title': 'Your hospital visit today',
   'journey.lead': 'Follow your steps and use the button below to reach your next service point.',

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.20.0
+  version: 0.21.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -171,6 +171,125 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/his/visits/{visitId}/patient-link:
+    post:
+      description: >
+        Mint the visit's patient link (#136, ADR-0014) — the credential the
+        printed navigation slip carries. Returns the visit's URL with a
+        high-entropy token in the fragment (`#vt=…`): redeeming it at POST
+        /api/v1/journeys/claim records the #96 claim for the patient's
+        session. Repeat calls return the same URL, so re-printing a slip
+        never invalidates the one already in a patient's hand; rotate=true
+        discards the current token (lost slip, suspected leak) and the
+        previous link stops redeeming. The link's lifetime follows the
+        visit: ACTIVE is live, COMPLETED lives out
+        VISIT_LINK_COMPLETED_GRACE (default 30m) from the projection's
+        completed_at, CANCELLED dies at once. Service-to-service: the
+        system's only inbound HIS→CarePath call, authenticated by the
+        deployment's HIS API key. Registered only when both HIS_API_KEY and
+        VISIT_LINK_SECRET are set (fail closed). format=qr answers the same
+        URL as a PNG QR ready for the slip.
+      security:
+        - hisApiKey: []
+      parameters:
+        - in: path
+          name: visitId
+          required: true
+          schema: { type: string }
+          description: Visit id (VN)
+        - in: query
+          name: format
+          schema: { type: string, enum: [url, qr], default: url }
+          description: url answers the link as JSON; qr answers it as a
+            PNG QR code of the same URL.
+        - in: query
+          name: rotate
+          schema: { type: boolean, default: false }
+          description: Discard the current token and mint a new one.
+      responses:
+        '200':
+          description: The visit's link (format=url as JSON, format=qr as
+            image/png)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitLink'
+            image/png:
+              schema: { type: string, format: binary }
+        '400':
+          description: Unknown format value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid HIS API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Visit not projected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/journeys/claim:
+    post:
+      description: >
+        Redeem a slip-held visit link token (#136, ADR-0014) for the visit
+        it addresses and record the #96 claim — the identity behind the
+        patient session becomes the visit's owner, exactly as typing a VN
+        used to do on demo deployments. The token rides the request body,
+        never a URL. Unknown, rotated, cancelled, past-grace, and
+        secret-rotated tokens all answer the same 404 the journey read
+        gives — indistinguishable by design.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemVisitLinkRequest'
+      responses:
+        '200':
+          description: Claim recorded; the visit the token addressed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RedeemVisitLinkResponse'
+        '400':
+          description: Missing request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing, malformed, or invalid patient session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Visit unknown or link not redeemable —
+            indistinguishable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/journeys/{visitId}:
     get:
       description: >
@@ -223,7 +342,10 @@ paths:
         the identity behind the patient session may read this visit. Naming
         the VN is the credential, matching the patient front door. Idempotent
         — re-claiming a visit this identity already owns succeeds. This is
-        the only way read access to a journey is granted.
+        the only way read access to a journey is granted. Demo deployments
+        only (ALLOW_DEMO_AUTH): production mints ownership through the
+        slip-held link token instead (POST /api/v1/journeys/claim, #136) —
+        this route is not registered when the demo bypass is off.
       security:
         - bearerAuth: []
       parameters:
@@ -1070,6 +1192,16 @@ components:
         time-limited, revocable. Valid only on GET /api/v1/shared/journey;
         every other surface rejects it with 401, and it is never accepted in
         a URL or query string (NFR-08).
+    hisApiKey:
+      type: apiKey
+      in: header
+      name: X-HIS-API-Key
+      description: >
+        The deployment's shared service key authenticating the HIS on
+        CarePath's one inbound service-to-service surface: the visit-link
+        mint (POST /api/v1/his/visits/{visitId}/patient-link, #136). Unlike
+        the three credential kinds above it grants no patient or staff
+        identity — it mints a credential, it is not one.
   schemas:
     Error:
       type: object
@@ -1081,6 +1213,32 @@ components:
       properties:
         error: { type: string }
         code: { type: string }
+    VisitLink:
+      type: object
+      description: >
+        The visit's patient link (#136): the slip-held credential. visitUrl
+        carries the token in its fragment (#vt=…), never a query string, so
+        it cannot reach an access log. The raw token is never stored
+        server-side (sha256 only, ADR-0011 precedent).
+      required: [visitId, visitUrl]
+      properties:
+        visitId: { type: string, example: VISIT-001 }
+        visitUrl:
+          type: string
+          example: https://carepath.example/patient/journey#vt=5Xy_EHiOtUrt9xEv4NqzRQ
+    RedeemVisitLinkRequest:
+      type: object
+      description: The vt token from the slip URL's fragment.
+      required: [token]
+      properties:
+        token: { type: string }
+    RedeemVisitLinkResponse:
+      type: object
+      description: The visit the redeemed token addressed, now claimed by
+        this session's identity.
+      required: [visitId]
+      properties:
+        visitId: { type: string, example: VISIT-001 }
     LoginRequest:
       type: object
       description: Staff/admin credentials (ADR-0010). The demo deployment seeds

@@ -6,6 +6,7 @@ import { LocaleProvider } from './i18n'
 import { resolveInitialLocale } from './i18n/initial-locale'
 import { LARGE_TEXT_STORAGE_KEY, applyLargeText, readStoredFlag } from './preferences'
 import { routeTree } from './routeTree.gen'
+import { stashVisitLinkToken } from './features/visit/visit-link'
 import './styles/index.css'
 
 const router = createRouter({ routeTree })
@@ -59,6 +60,11 @@ function render(lineLanguage: string | undefined) {
  * idempotent), which is what LiffAuthProvider still does to read status.
  */
 async function bootstrap() {
+  // First, before anything can rewrite the URL: capture a slip-link token
+  // (#136) from the fragment. LIFF's OAuth redirect rewrites the address
+  // bar and would drop it; the exchange itself runs later, inside the
+  // auth-gated journey route.
+  stashVisitLinkToken()
   const liffId = import.meta.env.VITE_LIFF_ID
   if (import.meta.env.VITE_AUTH_MODE === 'line' && liffId) {
     try {

@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +24,9 @@ const seedEventBase = 1789000000
 
 var testClock = func() time.Time { return time.Unix(seedEventBase, 0) }
 
-func newApp() *fiber.App { return New(discardLogger(), "", "", WithClock(testClock)) }
+func newApp() *fiber.App {
+	return New(discardLogger(), "", "", "", "", WithClock(testClock))
+}
 
 // do runs one request against the app and decodes the JSON response body.
 func do(t *testing.T, app *fiber.App, method, path, body string) (int, map[string]any) {
@@ -471,6 +474,80 @@ func TestVisitQrcode(t *testing.T) {
 	}
 }
 
+// #136: with the mint configured, the console QR and patient link are the
+// ones CarePath minted — the same service-to-service call a real HIS makes
+// to print a navigation slip. The HIS key is presented server-side only.
+func TestConsoleLinkMintedFromCarepath(t *testing.T) {
+	var gotPath, gotKey, gotFormat string
+	fakeCarepath := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotKey = r.URL.Path, r.Header.Get("X-HIS-API-Key")
+		gotFormat = r.URL.Query().Get("format")
+		if r.Method != http.MethodPost {
+			t.Errorf("mint method = %s, want POST", r.Method)
+		}
+		switch {
+		case gotFormat == "qr":
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write([]byte("\x89PNG\r\n\x1a\nfake-minted-qr"))
+		case gotFormat == "url":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"visitId":"VISIT-001","visitUrl":"https://carepath.test/patient/journey#vt=tok"}`))
+		default:
+			http.Error(w, "bad format", http.StatusBadRequest)
+		}
+	}))
+	t.Cleanup(fakeCarepath.Close)
+
+	app := New(discardLogger(), "", "", fakeCarepath.URL, "his-key", WithClock(testClock))
+
+	status, png := doRaw(t, app, http.MethodGet, "/api/v1/demo/visits/VISIT-001/qrcode.png", "")
+	if status != http.StatusOK {
+		t.Fatalf("qr status = %d, want 200", status)
+	}
+	if string(png) != "\x89PNG\r\n\x1a\nfake-minted-qr" {
+		t.Fatal("qr body is not the PNG CarePath minted")
+	}
+	if gotPath != "/api/v1/his/visits/VISIT-001/patient-link" || gotKey != "his-key" || gotFormat != "qr" {
+		t.Fatalf("mint call = %s key=%q format=%q, want the patient-link mint with the HIS key", gotPath, gotKey, gotFormat)
+	}
+
+	status, body := doRaw(t, app, http.MethodGet, "/api/v1/demo/visits/VISIT-001/patient-link", "")
+	if status != http.StatusOK || !strings.Contains(string(body), `"visitUrl":"https://carepath.test/patient/journey#vt=tok"`) {
+		t.Fatalf("patient-link status = %d body = %s, want the minted URL JSON", status, body)
+	}
+}
+
+// The mint's failure modes stay honest to the console: an unprojected visit
+// on CarePath's side is its 404, a refused key is a gateway error, and a
+// stack without the key says so instead of quietly minting raw VN links.
+func TestConsoleLinkMintFailures(t *testing.T) {
+	fakeCarepath := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-HIS-API-Key") == "wrong-key-side" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "journey not found", http.StatusNotFound)
+	}))
+	t.Cleanup(fakeCarepath.Close)
+
+	app := New(discardLogger(), "", "", fakeCarepath.URL, "his-key", WithClock(testClock))
+	status, body := doRaw(t, app, http.MethodGet, "/api/v1/demo/visits/VISIT-001/patient-link", "")
+	if status != http.StatusNotFound || !strings.Contains(string(body), "carepath mint: 404") {
+		t.Fatalf("unprojected visit: status = %d body = %s, want the passthrough 404", status, body)
+	}
+
+	appBadKey := New(discardLogger(), "", "", fakeCarepath.URL, "wrong-key-side", WithClock(testClock))
+	status, body = doRaw(t, appBadKey, http.MethodGet, "/api/v1/demo/visits/VISIT-001/patient-link", "")
+	if status != http.StatusBadGateway {
+		t.Fatalf("refused key: status = %d body = %s, want 502", status, body)
+	}
+
+	status, body = doRaw(t, newApp(), http.MethodGet, "/api/v1/demo/visits/VISIT-001/patient-link", "")
+	if status != http.StatusServiceUnavailable || !strings.Contains(string(body), "not configured") {
+		t.Fatalf("no key: status = %d body = %s, want 503 not configured", status, body)
+	}
+}
+
 // A QR is read by a phone camera, so its URL must be absolute even when
 // PATIENT_APP_BASE_URL is unset (the prod single-origin default): derive the
 // origin from the forwarded request the same way the live chain does —
@@ -617,7 +694,7 @@ func TestConsoleServed(t *testing.T) {
 // carry the injected base URLs for the browser to call when the apps run on
 // separate origins (dev).
 func TestConsoleInjectsBaseURLs(t *testing.T) {
-	app := New(discardLogger(), "http://localhost:5173", "http://localhost:8080")
+	app := New(discardLogger(), "http://localhost:5173", "http://localhost:8080", "", "")
 
 	req, _ := http.NewRequest(http.MethodGet, "/console", nil)
 	resp, err := app.Test(req)
