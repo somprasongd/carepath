@@ -5,6 +5,7 @@ package main
 import (
 	"log/slog"
 	"os"
+	"strings"
 
 	"carepath/apps/mock-his/internal/mockhis"
 	"carepath/apps/mock-his/internal/platform/logger"
@@ -18,8 +19,9 @@ func main() {
 	if port == "" {
 		port = "8090"
 	}
+	patientAppBaseURL := strings.TrimRight(os.Getenv("PATIENT_APP_BASE_URL"), "/")
 	log.Info("starting mock-his", "addr", ":"+port)
-	if err := mockhis.New(log).Listen(":" + port); err != nil {
+	if err := mockhis.New(log, patientAppBaseURL).Listen(":" + port); err != nil {
 		log.Error("server exited", "error", err.Error())
 		os.Exit(1)
 	}

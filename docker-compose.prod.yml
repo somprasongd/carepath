@@ -32,6 +32,7 @@ services:
       dockerfile: infra/docker/mock-his.Dockerfile
     environment:
       PORT: 8090
+      PATIENT_APP_BASE_URL: ${PATIENT_APP_BASE_URL:-}
 
   migrate:
     image: migrate/migrate:v4.18.1

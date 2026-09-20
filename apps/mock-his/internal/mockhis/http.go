@@ -1,6 +1,7 @@
 package mockhis
 
 import (
+	"bytes"
 	_ "embed"
 	"log/slog"
 	"net/http"
@@ -21,10 +22,20 @@ var consoleHTML []byte
 // has its own operator tooling (see docs/integration/mock-his.md). The base
 // logger feeds the request-logging middleware; state changes log through the
 // request-scoped logger it stores in ctx.
-func New(log *slog.Logger) *fiber.App {
+func New(log *slog.Logger, patientAppBaseURL string) *fiber.App {
 	store := NewStore()
 	app := fiber.New()
 	app.Use(logger.Middleware(log))
+
+	// The console's "open patient view" link needs the patient web app's
+	// origin to build an absolute URL when mock-his and web aren't
+	// same-origin (local dev); inject it once at startup rather than
+	// templating the page on every request.
+	consolePage := consoleHTML
+	if patientAppBaseURL != "" {
+		script := []byte(`<script>window.PATIENT_APP_BASE_URL=` + strconv.Quote(patientAppBaseURL) + `;</script></head>`)
+		consolePage = bytes.Replace(consoleHTML, []byte("</head>"), script, 1)
+	}
 
 	app.Get("/health", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok", "service": "mock-his"})
@@ -36,7 +47,7 @@ func New(log *slog.Logger) *fiber.App {
 	})
 	app.Get("/console", func(c fiber.Ctx) error {
 		c.Set(fiber.HeaderContentType, "text/html; charset=utf-8")
-		return c.Send(consoleHTML)
+		return c.Send(consolePage)
 	})
 
 	app.Get("/api/v1/visits/:visitId", func(c fiber.Ctx) error {

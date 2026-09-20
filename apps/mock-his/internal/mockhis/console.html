@@ -55,7 +55,8 @@
   .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
   .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
   .qr { text-align: center; }
-  .qr img { display: block; width: 132px; height: 132px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  .qr-link { display: block; padding: 10px 14px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600; font-size: 12px; text-decoration: none; white-space: nowrap; }
+  .qr-link:hover { opacity: .9; }
   .empty { color: var(--muted); padding: 12px 0; text-align: center; }
   .clinics { display: flex; flex-wrap: wrap; gap: 8px; }
   .clinic { display: flex; align-items: center; gap: 8px; background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
@@ -269,11 +270,12 @@ function renderDetail(visit) {
     btnRow.append(complete, cancel);
     info.appendChild(btnRow);
   }
+  const patientAppBaseUrl = window.PATIENT_APP_BASE_URL || "";
+  const patientLink = patientAppBaseUrl + "/patient/journey?visit=" + encodeURIComponent(visit.visitId);
   const qr = document.createElement("div");
   qr.className = "qr";
   qr.innerHTML =
-    '<img src="/api/v1/demo/visits/' + encodeURIComponent(visit.visitId) + '/qrcode.png"' +
-    ' alt="QR code for ' + visit.visitId + '" width="132" height="132">' +
+    '<a class="qr-link" href="' + patientLink + '" target="_blank" rel="noopener">Open patient view &rarr;</a>' +
     '<div class="hint">' + visit.visitId + "</div>";
   head.append(info, qr);
   box.appendChild(head);

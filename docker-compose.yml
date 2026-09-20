@@ -21,6 +21,7 @@ services:
       dockerfile: infra/docker/mock-his.Dockerfile
     environment:
       PORT: 8090
+      PATIENT_APP_BASE_URL: ${PATIENT_APP_BASE_URL:-http://localhost:5173}
     ports:
       - "${MOCK_HIS_PORT:-8090}:8090"
 
@@ -78,6 +79,10 @@ services:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL-}
       # Where the Vite /api proxy forwards inside the docker network.
       API_PROXY_TARGET: ${API_PROXY_TARGET:-http://api:8080}
+      # LIFF entry disabled for now — flip both to re-enable (see
+      # apps/web/src/auth/AuthProvider.tsx).
+      VITE_AUTH_MODE: ${VITE_AUTH_MODE:-demo}
+      VITE_LIFF_ID: ${VITE_LIFF_ID:-}
     depends_on:
       - api
     ports:

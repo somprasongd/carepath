@@ -15,7 +15,7 @@ import (
 func capturingApp(t *testing.T) (*fiber.App, *bytes.Buffer) {
 	t.Helper()
 	var buf bytes.Buffer
-	app := New(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	app := New(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})), "")
 	return app, &buf
 }
 
