@@ -47,6 +47,8 @@ Every status change on a visit, visit step, or queue ticket records who made the
 
 "Who" means the authenticated user behind the request, not just the surface it came from: `carepath.journey_command_audit` carries both — `source` for the surface (`staff-web`) and the actor's user id/username from the access token ([ADR-0010](../adr/0010-staff-auth-jwt-argon2.md) §11). Both actor columns are nullable, because system-initiated writes (the HIS ingest poller) legitimately have no user.
 
+Status changes the *system itself* makes — gates opening on replan (`PENDING→WAITING→READY`), HIS-fact-driven completions, steps withdrawn by a replan — are recorded in `carepath.journey_step_status_event` (#85), the append-only timeline of every step status change, with `source='planner'` and empty actor columns: there is no user behind them. Staff-commanded changes land in the same timeline with the command's `source` and actor, so the full from/to history of a step (including previous status, which the audit table never had) is answerable from that one table. `journey_step` itself keeps only current state — replans replace its rows wholesale — so it is never a source of history.
+
 ## NFR-10 Usability
 
 A user with no IT background can operate the system without training. Error messages are human-readable; raw system errors or error codes are never shown to end users.

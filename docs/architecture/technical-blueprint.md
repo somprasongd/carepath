@@ -75,7 +75,7 @@ apps/api/
     ├── servicepoint/       # domain type + Repo port + Service
     │   └── postgres/       # pgx adapter implementing the Repo port
     ├── journey/            # journey plan derived from HIS facts (ADR-0009); the pure planner lives here too
-    │   └── postgres/       # pgx adapter implementing the Repo port
+    │   └── postgres/       # pgx adapter implementing the Repo port (+ journey_step_status_event append-only timeline, #85)
     ├── identity/           # Verifier port for patient login
     │   └── line/           # LINE ID-token verification (JWKS)
     ├── session/            # patient sessions bound to visits (+ HTTP handler)

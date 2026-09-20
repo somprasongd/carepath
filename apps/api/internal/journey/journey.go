@@ -58,6 +58,12 @@ const (
 	CommandToCancelled = "CANCELLED"
 )
 
+// EventSourcePlanner names a status change the planner itself made (a gate
+// opening, an HIS-fact-driven completion, a replan withdrawal). Staff-
+// commanded changes carry the command's own source and actor instead, so
+// NFR-09's "who" stays a user, not a surface string.
+const EventSourcePlanner = "planner"
+
 // TransitionCommand is a staff command changing one step's status.
 // CommandID is caller-assigned: replaying it is a no-op that re-audits but
 // does not re-apply an already-applied change.
@@ -108,6 +114,25 @@ type CommandAudit struct {
 	ActorUsername string
 }
 
+// StepStatusEvent is one observed status change of one step, appended to the
+// journey_step_status_event timeline (#85, NFR-09). Kind and ServicePointID
+// are copies taken at event time: a later replan may withdraw the step from
+// the plan entirely (ADR-0009 §7), and the timeline must still describe it.
+// FromStatus is nil when the step had just entered the plan. Source names
+// what made the change — EventSourcePlanner, or the commanding surface of a
+// staff command, whose actor fields are then filled.
+type StepStatusEvent struct {
+	VisitID        string
+	StepKey        string
+	Kind           string
+	ServicePointID *string
+	FromStatus     *string
+	ToStatus       string
+	Source         string
+	ActorUserID    string
+	ActorUsername  string
+}
+
 // Actor is the acting user behind a staff command, mapped from the auth
 // principal at the HTTP boundary. The zero value means the system itself.
 type Actor struct {
@@ -133,4 +158,8 @@ type Repo interface {
 	CloseRound(ctx context.Context, visitID, stepKey string) error
 	// ClosedRounds returns every stepKey closed for this visit.
 	ClosedRounds(ctx context.Context, visitID string) (map[string]bool, error)
+	// AppendStatusEvents appends one batch of timeline rows for a single
+	// replan round (#85). Append-only by design: nothing ever updates or
+	// deletes these rows; only the visit-level cascade removes them.
+	AppendStatusEvents(ctx context.Context, events []StepStatusEvent) error
 }

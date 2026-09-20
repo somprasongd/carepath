@@ -4,10 +4,11 @@
 
 | Name | Type | Default | Nullable | Children | Parents | Comment |
 | ---- | ---- | ------- | -------- | -------- | ------- | ------- |
-| visit_id | text |  | false | [carepath.journey_step](carepath.journey_step.md) |  |  |
+| visit_id | text |  | false | [carepath.journey_step](carepath.journey_step.md) [carepath.journey_closed_round](carepath.journey_closed_round.md) [carepath.journey_step_status_event](carepath.journey_step_status_event.md) |  |  |
 | patient_ref | text |  | false |  |  |  |
 | status | text |  | false |  |  |  |
 | synced_at | timestamp with time zone | now() | false |  |  |  |
+| patient_name | text |  | true |  |  |  |
 
 ## Constraints
 
@@ -27,19 +28,44 @@
 erDiagram
 
 "carepath.journey_step" }o--|| "carepath.journey_visit" : "FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE"
+"carepath.journey_closed_round" }o--|| "carepath.journey_visit" : "FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE"
+"carepath.journey_step_status_event" }o--|| "carepath.journey_visit" : "FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE"
 
 "carepath.journey_visit" {
   text visit_id
   text patient_ref
   text status
   timestamp_with_time_zone synced_at
+  text patient_name
 }
 "carepath.journey_step" {
   text visit_id FK
+  text step_key
   integer sequence
-  text service_code
+  text kind
+  text clinic_code
+  integer round
+  text__ order_refs
   text status
   text service_point_id
+}
+"carepath.journey_closed_round" {
+  text visit_id FK
+  text step_key
+  timestamp_with_time_zone closed_at
+}
+"carepath.journey_step_status_event" {
+  bigint event_id
+  text visit_id FK
+  text step_key
+  text kind
+  text service_point_id
+  text from_status
+  text to_status
+  text source
+  text actor_user_id
+  text actor_username
+  timestamp_with_time_zone occurred_at
 }
 ```
 

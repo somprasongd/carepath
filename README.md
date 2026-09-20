@@ -362,7 +362,7 @@ sequenceDiagram
     W-->>E: จัดสรรกำลังคนไปยังจุดที่ติดขัด
 ```
 
-ข้อมูลดิบที่ dashboard ต้องใช้ถูกเก็บอยู่แล้วในตาราง `carepath.journey_step` (ทุกการเปลี่ยนสถานะมี timestamp) สิ่งที่ขาดคือชั้น aggregate และหน้าจอ
+ข้อมูลดิบที่ dashboard ต้องใช้ถูกเก็บอยู่ในตาราง `carepath.journey_step_status_event` (#85) — timeline แบบ append-only ที่บันทึกทุกการเปลี่ยนสถานะของ step พร้อมเวลา (`occurred_at`) ทั้งที่ planner เป็นคนขยับ (เช่น `PENDING→WAITING→READY`) และที่เจ้าหน้าที่สั่ง ส่วน `carepath.journey_step` เก็บเฉพาะสถานะปัจจุบันเท่านั้น (replan ลบแล้วสร้างใหม่ทุกรอบ จึงใช้ย้อนอดีตไม่ได้) สิ่งที่ยังขาดคือชั้น aggregate และหน้าจอ
 
 ### 6. ญาติผู้ป่วย (Relative)
 

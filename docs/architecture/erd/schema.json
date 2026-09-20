@@ -70,6 +70,19 @@
           "columns": [
             "code"
           ]
+        },
+        {
+          "name": "service_point_place_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (place_id) REFERENCES place(place_id)",
+          "table": "carepath.service_point",
+          "referenced_table": "carepath.place",
+          "columns": [
+            "place_id"
+          ],
+          "referenced_columns": [
+            "place_id"
+          ]
         }
       ]
     },
@@ -97,6 +110,11 @@
           "type": "timestamp with time zone",
           "nullable": false,
           "default": "now()"
+        },
+        {
+          "name": "patient_name",
+          "type": "text",
+          "nullable": true
         }
       ],
       "indexes": [
@@ -118,74 +136,6 @@
           "referenced_table": "",
           "columns": [
             "visit_id"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "carepath.journey_step",
-      "type": "BASE TABLE",
-      "columns": [
-        {
-          "name": "visit_id",
-          "type": "text",
-          "nullable": false
-        },
-        {
-          "name": "sequence",
-          "type": "integer",
-          "nullable": false
-        },
-        {
-          "name": "service_code",
-          "type": "text",
-          "nullable": false
-        },
-        {
-          "name": "status",
-          "type": "text",
-          "nullable": false
-        },
-        {
-          "name": "service_point_id",
-          "type": "text",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        {
-          "name": "journey_step_pkey",
-          "def": "CREATE UNIQUE INDEX journey_step_pkey ON carepath.journey_step USING btree (visit_id, sequence)",
-          "table": "carepath.journey_step",
-          "columns": [
-            "visit_id",
-            "sequence"
-          ]
-        }
-      ],
-      "constraints": [
-        {
-          "name": "journey_step_visit_id_fkey",
-          "type": "FOREIGN KEY",
-          "def": "FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE",
-          "table": "carepath.journey_step",
-          "referenced_table": "carepath.journey_visit",
-          "columns": [
-            "visit_id"
-          ],
-          "referenced_columns": [
-            "visit_id"
-          ]
-        },
-        {
-          "name": "journey_step_pkey",
-          "type": "PRIMARY KEY",
-          "def": "PRIMARY KEY (visit_id, sequence)",
-          "table": "carepath.journey_step",
-          "referenced_table": "",
-          "columns": [
-            "visit_id",
-            "sequence"
           ]
         }
       ]
@@ -289,11 +239,1435 @@
           ]
         }
       ]
+    },
+    {
+      "name": "carepath.patient_session",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "token",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "external_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "display_name",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "patient_session_pkey",
+          "def": "CREATE UNIQUE INDEX patient_session_pkey ON carepath.patient_session USING btree (token)",
+          "table": "carepath.patient_session",
+          "columns": [
+            "token"
+          ]
+        },
+        {
+          "name": "patient_session_expires_at_idx",
+          "def": "CREATE INDEX patient_session_expires_at_idx ON carepath.patient_session USING btree (expires_at)",
+          "table": "carepath.patient_session",
+          "columns": [
+            "expires_at"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "patient_session_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (token)",
+          "table": "carepath.patient_session",
+          "referenced_table": "",
+          "columns": [
+            "token"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.journey_command_audit",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "command_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "visit_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "to_status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false,
+          "default": "'unknown'::text"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "step_key",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "actor_user_id",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_username",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "journey_command_audit_pkey",
+          "def": "CREATE UNIQUE INDEX journey_command_audit_pkey ON carepath.journey_command_audit USING btree (command_id)",
+          "table": "carepath.journey_command_audit",
+          "columns": [
+            "command_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "journey_command_audit_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (command_id)",
+          "table": "carepath.journey_command_audit",
+          "referenced_table": "",
+          "columns": [
+            "command_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.building",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "building_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "building_pkey",
+          "def": "CREATE UNIQUE INDEX building_pkey ON carepath.building USING btree (building_id)",
+          "table": "carepath.building",
+          "columns": [
+            "building_id"
+          ]
+        },
+        {
+          "name": "building_code_key",
+          "def": "CREATE UNIQUE INDEX building_code_key ON carepath.building USING btree (code)",
+          "table": "carepath.building",
+          "columns": [
+            "code"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "building_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (building_id)",
+          "table": "carepath.building",
+          "referenced_table": "",
+          "columns": [
+            "building_id"
+          ]
+        },
+        {
+          "name": "building_code_key",
+          "type": "UNIQUE",
+          "def": "UNIQUE (code)",
+          "table": "carepath.building",
+          "referenced_table": "",
+          "columns": [
+            "code"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.floor",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "floor_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "building_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "level_order",
+          "type": "integer",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "floor_pkey",
+          "def": "CREATE UNIQUE INDEX floor_pkey ON carepath.floor USING btree (floor_id)",
+          "table": "carepath.floor",
+          "columns": [
+            "floor_id"
+          ]
+        },
+        {
+          "name": "floor_building_id_code_key",
+          "def": "CREATE UNIQUE INDEX floor_building_id_code_key ON carepath.floor USING btree (building_id, code)",
+          "table": "carepath.floor",
+          "columns": [
+            "building_id",
+            "code"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "floor_building_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (building_id) REFERENCES building(building_id)",
+          "table": "carepath.floor",
+          "referenced_table": "carepath.building",
+          "columns": [
+            "building_id"
+          ],
+          "referenced_columns": [
+            "building_id"
+          ]
+        },
+        {
+          "name": "floor_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (floor_id)",
+          "table": "carepath.floor",
+          "referenced_table": "",
+          "columns": [
+            "floor_id"
+          ]
+        },
+        {
+          "name": "floor_building_id_code_key",
+          "type": "UNIQUE",
+          "def": "UNIQUE (building_id, code)",
+          "table": "carepath.floor",
+          "referenced_table": "",
+          "columns": [
+            "building_id",
+            "code"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.place",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "place_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "floor_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "place_type",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "x",
+          "type": "numeric",
+          "nullable": true
+        },
+        {
+          "name": "y",
+          "type": "numeric",
+          "nullable": true
+        },
+        {
+          "name": "entry_node_id",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "place_pkey",
+          "def": "CREATE UNIQUE INDEX place_pkey ON carepath.place USING btree (place_id)",
+          "table": "carepath.place",
+          "columns": [
+            "place_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "place_place_type_check",
+          "type": "CHECK",
+          "def": "CHECK ((place_type = ANY (ARRAY['ROOM'::text, 'COUNTER'::text, 'WAITING_AREA'::text, 'RESTROOM'::text, 'ELEVATOR'::text, 'STAIRWAY'::text, 'RAMP'::text, 'ENTRANCE'::text, 'AMENITY'::text])))",
+          "table": "carepath.place",
+          "referenced_table": "",
+          "columns": [
+            "place_type"
+          ]
+        },
+        {
+          "name": "place_floor_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (floor_id) REFERENCES floor(floor_id)",
+          "table": "carepath.place",
+          "referenced_table": "carepath.floor",
+          "columns": [
+            "floor_id"
+          ],
+          "referenced_columns": [
+            "floor_id"
+          ]
+        },
+        {
+          "name": "place_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (place_id)",
+          "table": "carepath.place",
+          "referenced_table": "",
+          "columns": [
+            "place_id"
+          ]
+        },
+        {
+          "name": "place_entry_node_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (entry_node_id) REFERENCES nav_node(node_id)",
+          "table": "carepath.place",
+          "referenced_table": "carepath.nav_node",
+          "columns": [
+            "entry_node_id"
+          ],
+          "referenced_columns": [
+            "node_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.nav_node",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "node_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "floor_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "x",
+          "type": "numeric",
+          "nullable": false
+        },
+        {
+          "name": "y",
+          "type": "numeric",
+          "nullable": false
+        },
+        {
+          "name": "node_type",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "zone",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "nav_node_pkey",
+          "def": "CREATE UNIQUE INDEX nav_node_pkey ON carepath.nav_node USING btree (node_id)",
+          "table": "carepath.nav_node",
+          "columns": [
+            "node_id"
+          ]
+        },
+        {
+          "name": "nav_node_floor_idx",
+          "def": "CREATE INDEX nav_node_floor_idx ON carepath.nav_node USING btree (floor_id)",
+          "table": "carepath.nav_node",
+          "columns": [
+            "floor_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "nav_node_node_type_check",
+          "type": "CHECK",
+          "def": "CHECK ((node_type = ANY (ARRAY['ENTRANCE'::text, 'PLACE_ENTRY'::text, 'CORRIDOR'::text, 'ELEVATOR'::text, 'STAIRS'::text])))",
+          "table": "carepath.nav_node",
+          "referenced_table": "",
+          "columns": [
+            "node_type"
+          ]
+        },
+        {
+          "name": "nav_node_floor_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (floor_id) REFERENCES floor(floor_id)",
+          "table": "carepath.nav_node",
+          "referenced_table": "carepath.floor",
+          "columns": [
+            "floor_id"
+          ],
+          "referenced_columns": [
+            "floor_id"
+          ]
+        },
+        {
+          "name": "nav_node_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (node_id)",
+          "table": "carepath.nav_node",
+          "referenced_table": "",
+          "columns": [
+            "node_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.nav_edge",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "edge_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "from_node_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "to_node_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "edge_type",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "distance",
+          "type": "numeric",
+          "nullable": false
+        },
+        {
+          "name": "accessible",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "nav_edge_pkey",
+          "def": "CREATE UNIQUE INDEX nav_edge_pkey ON carepath.nav_edge USING btree (edge_id)",
+          "table": "carepath.nav_edge",
+          "columns": [
+            "edge_id"
+          ]
+        },
+        {
+          "name": "nav_edge_from_node_idx",
+          "def": "CREATE INDEX nav_edge_from_node_idx ON carepath.nav_edge USING btree (from_node_id)",
+          "table": "carepath.nav_edge",
+          "columns": [
+            "from_node_id"
+          ]
+        },
+        {
+          "name": "nav_edge_to_node_idx",
+          "def": "CREATE INDEX nav_edge_to_node_idx ON carepath.nav_edge USING btree (to_node_id)",
+          "table": "carepath.nav_edge",
+          "columns": [
+            "to_node_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "nav_edge_check",
+          "type": "CHECK",
+          "def": "CHECK ((from_node_id \u003c\u003e to_node_id))",
+          "table": "carepath.nav_edge",
+          "referenced_table": "",
+          "columns": [
+            "from_node_id",
+            "to_node_id"
+          ]
+        },
+        {
+          "name": "nav_edge_edge_type_check",
+          "type": "CHECK",
+          "def": "CHECK ((edge_type = ANY (ARRAY['CORRIDOR'::text, 'ELEVATOR'::text, 'STAIRS'::text])))",
+          "table": "carepath.nav_edge",
+          "referenced_table": "",
+          "columns": [
+            "edge_type"
+          ]
+        },
+        {
+          "name": "nav_edge_from_node_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (from_node_id) REFERENCES nav_node(node_id)",
+          "table": "carepath.nav_edge",
+          "referenced_table": "carepath.nav_node",
+          "columns": [
+            "from_node_id"
+          ],
+          "referenced_columns": [
+            "node_id"
+          ]
+        },
+        {
+          "name": "nav_edge_to_node_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (to_node_id) REFERENCES nav_node(node_id)",
+          "table": "carepath.nav_edge",
+          "referenced_table": "carepath.nav_node",
+          "columns": [
+            "to_node_id"
+          ],
+          "referenced_columns": [
+            "node_id"
+          ]
+        },
+        {
+          "name": "nav_edge_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (edge_id)",
+          "table": "carepath.nav_edge",
+          "referenced_table": "",
+          "columns": [
+            "edge_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.location_observation",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "visit_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "node_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "floor_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "zone",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "confidence",
+          "type": "double precision",
+          "nullable": true
+        },
+        {
+          "name": "observed_at",
+          "type": "timestamp with time zone",
+          "nullable": false
+        },
+        {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "location_observation_pkey",
+          "def": "CREATE UNIQUE INDEX location_observation_pkey ON carepath.location_observation USING btree (id)",
+          "table": "carepath.location_observation",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "location_observation_visit_idx",
+          "def": "CREATE INDEX location_observation_visit_idx ON carepath.location_observation USING btree (visit_id, id DESC)",
+          "table": "carepath.location_observation",
+          "columns": [
+            "visit_id",
+            "id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "location_observation_node_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (node_id) REFERENCES nav_node(node_id)",
+          "table": "carepath.location_observation",
+          "referenced_table": "carepath.nav_node",
+          "columns": [
+            "node_id"
+          ],
+          "referenced_columns": [
+            "node_id"
+          ]
+        },
+        {
+          "name": "location_observation_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (id)",
+          "table": "carepath.location_observation",
+          "referenced_table": "",
+          "columns": [
+            "id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.journey_step",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "visit_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "step_key",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "sequence",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "clinic_code",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "round",
+          "type": "integer",
+          "nullable": true
+        },
+        {
+          "name": "order_refs",
+          "type": "text[]",
+          "nullable": false,
+          "default": "'{}'::text[]"
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "service_point_id",
+          "type": "text",
+          "nullable": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "journey_step_pkey",
+          "def": "CREATE UNIQUE INDEX journey_step_pkey ON carepath.journey_step USING btree (visit_id, step_key)",
+          "table": "carepath.journey_step",
+          "columns": [
+            "visit_id",
+            "step_key"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "journey_step_visit_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE",
+          "table": "carepath.journey_step",
+          "referenced_table": "carepath.journey_visit",
+          "columns": [
+            "visit_id"
+          ],
+          "referenced_columns": [
+            "visit_id"
+          ]
+        },
+        {
+          "name": "journey_step_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (visit_id, step_key)",
+          "table": "carepath.journey_step",
+          "referenced_table": "",
+          "columns": [
+            "visit_id",
+            "step_key"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.journey_closed_round",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "visit_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "step_key",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "journey_closed_round_pkey",
+          "def": "CREATE UNIQUE INDEX journey_closed_round_pkey ON carepath.journey_closed_round USING btree (visit_id, step_key)",
+          "table": "carepath.journey_closed_round",
+          "columns": [
+            "visit_id",
+            "step_key"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "journey_closed_round_visit_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE",
+          "table": "carepath.journey_closed_round",
+          "referenced_table": "carepath.journey_visit",
+          "columns": [
+            "visit_id"
+          ],
+          "referenced_columns": [
+            "visit_id"
+          ]
+        },
+        {
+          "name": "journey_closed_round_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (visit_id, step_key)",
+          "table": "carepath.journey_closed_round",
+          "referenced_table": "",
+          "columns": [
+            "visit_id",
+            "step_key"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.app_user",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "username",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "password_hash",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "full_name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "app_user_pkey",
+          "def": "CREATE UNIQUE INDEX app_user_pkey ON carepath.app_user USING btree (user_id)",
+          "table": "carepath.app_user",
+          "columns": [
+            "user_id"
+          ]
+        },
+        {
+          "name": "app_user_username_key",
+          "def": "CREATE UNIQUE INDEX app_user_username_key ON carepath.app_user USING btree (username)",
+          "table": "carepath.app_user",
+          "columns": [
+            "username"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "app_user_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (user_id)",
+          "table": "carepath.app_user",
+          "referenced_table": "",
+          "columns": [
+            "user_id"
+          ]
+        },
+        {
+          "name": "app_user_username_key",
+          "type": "UNIQUE",
+          "def": "UNIQUE (username)",
+          "table": "carepath.app_user",
+          "referenced_table": "",
+          "columns": [
+            "username"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.role",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "role_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "role_pkey",
+          "def": "CREATE UNIQUE INDEX role_pkey ON carepath.role USING btree (role_id)",
+          "table": "carepath.role",
+          "columns": [
+            "role_id"
+          ]
+        },
+        {
+          "name": "role_code_key",
+          "def": "CREATE UNIQUE INDEX role_code_key ON carepath.role USING btree (code)",
+          "table": "carepath.role",
+          "columns": [
+            "code"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "role_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (role_id)",
+          "table": "carepath.role",
+          "referenced_table": "",
+          "columns": [
+            "role_id"
+          ]
+        },
+        {
+          "name": "role_code_key",
+          "type": "UNIQUE",
+          "def": "UNIQUE (code)",
+          "table": "carepath.role",
+          "referenced_table": "",
+          "columns": [
+            "code"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.user_role",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "role_id",
+          "type": "text",
+          "nullable": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "user_role_pkey",
+          "def": "CREATE UNIQUE INDEX user_role_pkey ON carepath.user_role USING btree (user_id, role_id)",
+          "table": "carepath.user_role",
+          "columns": [
+            "user_id",
+            "role_id"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "user_role_user_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (user_id) REFERENCES app_user(user_id) ON DELETE CASCADE",
+          "table": "carepath.user_role",
+          "referenced_table": "carepath.app_user",
+          "columns": [
+            "user_id"
+          ],
+          "referenced_columns": [
+            "user_id"
+          ]
+        },
+        {
+          "name": "user_role_role_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (role_id) REFERENCES role(role_id)",
+          "table": "carepath.user_role",
+          "referenced_table": "carepath.role",
+          "columns": [
+            "role_id"
+          ],
+          "referenced_columns": [
+            "role_id"
+          ]
+        },
+        {
+          "name": "user_role_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (user_id, role_id)",
+          "table": "carepath.user_role",
+          "referenced_table": "",
+          "columns": [
+            "user_id",
+            "role_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.refresh_token",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "token_hash",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "user_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "issued_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "nullable": false
+        },
+        {
+          "name": "used_at",
+          "type": "timestamp with time zone",
+          "nullable": true
+        },
+        {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "nullable": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "refresh_token_pkey",
+          "def": "CREATE UNIQUE INDEX refresh_token_pkey ON carepath.refresh_token USING btree (token_hash)",
+          "table": "carepath.refresh_token",
+          "columns": [
+            "token_hash"
+          ]
+        },
+        {
+          "name": "refresh_token_user_idx",
+          "def": "CREATE INDEX refresh_token_user_idx ON carepath.refresh_token USING btree (user_id)",
+          "table": "carepath.refresh_token",
+          "columns": [
+            "user_id"
+          ]
+        },
+        {
+          "name": "refresh_token_expires_at_idx",
+          "def": "CREATE INDEX refresh_token_expires_at_idx ON carepath.refresh_token USING btree (expires_at)",
+          "table": "carepath.refresh_token",
+          "columns": [
+            "expires_at"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "refresh_token_user_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (user_id) REFERENCES app_user(user_id) ON DELETE CASCADE",
+          "table": "carepath.refresh_token",
+          "referenced_table": "carepath.app_user",
+          "columns": [
+            "user_id"
+          ],
+          "referenced_columns": [
+            "user_id"
+          ]
+        },
+        {
+          "name": "refresh_token_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (token_hash)",
+          "table": "carepath.refresh_token",
+          "referenced_table": "",
+          "columns": [
+            "token_hash"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carepath.journey_step_status_event",
+      "type": "BASE TABLE",
+      "columns": [
+        {
+          "name": "event_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "visit_id",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "step_key",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "service_point_id",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "from_status",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "to_status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "actor_user_id",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_username",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "journey_step_status_event_pkey",
+          "def": "CREATE UNIQUE INDEX journey_step_status_event_pkey ON carepath.journey_step_status_event USING btree (event_id)",
+          "table": "carepath.journey_step_status_event",
+          "columns": [
+            "event_id"
+          ]
+        },
+        {
+          "name": "journey_step_status_event_visit_idx",
+          "def": "CREATE INDEX journey_step_status_event_visit_idx ON carepath.journey_step_status_event USING btree (visit_id, occurred_at)",
+          "table": "carepath.journey_step_status_event",
+          "columns": [
+            "visit_id",
+            "occurred_at"
+          ]
+        },
+        {
+          "name": "journey_step_status_event_service_point_idx",
+          "def": "CREATE INDEX journey_step_status_event_service_point_idx ON carepath.journey_step_status_event USING btree (service_point_id, occurred_at)",
+          "table": "carepath.journey_step_status_event",
+          "columns": [
+            "service_point_id",
+            "occurred_at"
+          ]
+        },
+        {
+          "name": "journey_step_status_event_to_status_idx",
+          "def": "CREATE INDEX journey_step_status_event_to_status_idx ON carepath.journey_step_status_event USING btree (to_status, occurred_at)",
+          "table": "carepath.journey_step_status_event",
+          "columns": [
+            "to_status",
+            "occurred_at"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "name": "journey_step_status_event_visit_id_fkey",
+          "type": "FOREIGN KEY",
+          "def": "FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE",
+          "table": "carepath.journey_step_status_event",
+          "referenced_table": "carepath.journey_visit",
+          "columns": [
+            "visit_id"
+          ],
+          "referenced_columns": [
+            "visit_id"
+          ]
+        },
+        {
+          "name": "journey_step_status_event_pkey",
+          "type": "PRIMARY KEY",
+          "def": "PRIMARY KEY (event_id)",
+          "table": "carepath.journey_step_status_event",
+          "referenced_table": "",
+          "columns": [
+            "event_id"
+          ]
+        }
+      ]
     }
   ],
   "relations": [
     {
+      "table": "carepath.service_point",
+      "columns": [
+        "place_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.place",
+      "parent_columns": [
+        "place_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (place_id) REFERENCES place(place_id)"
+    },
+    {
+      "table": "carepath.floor",
+      "columns": [
+        "building_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.building",
+      "parent_columns": [
+        "building_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (building_id) REFERENCES building(building_id)"
+    },
+    {
+      "table": "carepath.place",
+      "columns": [
+        "floor_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.floor",
+      "parent_columns": [
+        "floor_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (floor_id) REFERENCES floor(floor_id)"
+    },
+    {
+      "table": "carepath.place",
+      "columns": [
+        "entry_node_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.nav_node",
+      "parent_columns": [
+        "node_id"
+      ],
+      "parent_cardinality": "zero_or_one",
+      "def": "FOREIGN KEY (entry_node_id) REFERENCES nav_node(node_id)"
+    },
+    {
+      "table": "carepath.nav_node",
+      "columns": [
+        "floor_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.floor",
+      "parent_columns": [
+        "floor_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (floor_id) REFERENCES floor(floor_id)"
+    },
+    {
+      "table": "carepath.nav_edge",
+      "columns": [
+        "from_node_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.nav_node",
+      "parent_columns": [
+        "node_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (from_node_id) REFERENCES nav_node(node_id)"
+    },
+    {
+      "table": "carepath.nav_edge",
+      "columns": [
+        "to_node_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.nav_node",
+      "parent_columns": [
+        "node_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (to_node_id) REFERENCES nav_node(node_id)"
+    },
+    {
+      "table": "carepath.location_observation",
+      "columns": [
+        "node_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.nav_node",
+      "parent_columns": [
+        "node_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (node_id) REFERENCES nav_node(node_id)"
+    },
+    {
       "table": "carepath.journey_step",
+      "columns": [
+        "visit_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.journey_visit",
+      "parent_columns": [
+        "visit_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE"
+    },
+    {
+      "table": "carepath.journey_closed_round",
+      "columns": [
+        "visit_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.journey_visit",
+      "parent_columns": [
+        "visit_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (visit_id) REFERENCES journey_visit(visit_id) ON DELETE CASCADE"
+    },
+    {
+      "table": "carepath.user_role",
+      "columns": [
+        "user_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.app_user",
+      "parent_columns": [
+        "user_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (user_id) REFERENCES app_user(user_id) ON DELETE CASCADE"
+    },
+    {
+      "table": "carepath.user_role",
+      "columns": [
+        "role_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.role",
+      "parent_columns": [
+        "role_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (role_id) REFERENCES role(role_id)"
+    },
+    {
+      "table": "carepath.refresh_token",
+      "columns": [
+        "user_id"
+      ],
+      "cardinality": "zero_or_more",
+      "parent_table": "carepath.app_user",
+      "parent_columns": [
+        "user_id"
+      ],
+      "parent_cardinality": "exactly_one",
+      "def": "FOREIGN KEY (user_id) REFERENCES app_user(user_id) ON DELETE CASCADE"
+    },
+    {
+      "table": "carepath.journey_step_status_event",
       "columns": [
         "visit_id"
       ],

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/google/uuid"
 
@@ -110,7 +111,7 @@ func (s *service) ApplyHISEvent(ctx context.Context, event his.Event) error {
 			}
 		}
 
-		visit, err := s.replanFromPrior(ctx, event.VisitID, snapshot, existing)
+		visit, err := s.replanFromPrior(ctx, event.VisitID, snapshot, existing, nil)
 		if err != nil {
 			return err
 		}
@@ -217,7 +218,13 @@ func (s *service) TransitionStep(ctx context.Context, visitID, stepKey string, c
 			existing.Steps[idx].Status = cmd.To
 		}
 
-		if _, err := s.replanFromPrior(ctx, visitID, snapshot, existing); err != nil {
+		// The commanded write above is already in `existing`, so the diff in
+		// replanFromPrior cannot see it — the attribution below records it in
+		// the timeline with the pre-command status and the command's source
+		// and actor (#85, NFR-09).
+		if _, err := s.replanFromPrior(ctx, visitID, snapshot, existing, &commandAttribution{
+			stepKey: stepKey, source: source, actor: actor, fromStatus: current,
+		}); err != nil {
 			return err
 		}
 		return s.repo.InsertCommandAudit(ctx, CommandAudit{
@@ -257,7 +264,12 @@ func (s *service) CloseRound(ctx context.Context, visitID, clinicCode, source st
 		if !found {
 			return ErrNoOpenRound
 		}
-		if _, err := s.replanFromPrior(ctx, visitID, snapshot, existing); err != nil {
+		// The close takes effect through the replan (closed_round → the plan
+		// promotes the round to COMPLETED), so its timeline row is attributed
+		// to the command rather than the planner (#85, NFR-09).
+		if _, err := s.replanFromPrior(ctx, visitID, snapshot, existing, &commandAttribution{
+			stepKey: closedKey, source: source, actor: actor,
+		}); err != nil {
 			return err
 		}
 		// The override is a staff command like a transition (NFR-09): it is
@@ -315,20 +327,25 @@ func (s *service) closeLatestRoundIn(ctx context.Context, visitID, clinicCode st
 	return key, true, nil
 }
 
-// replan recomputes the plan from the visit's currently-stored steps.
-func (s *service) replan(ctx context.Context, visitID string, snapshot his.Visit) (Visit, error) {
-	existing, err := s.repo.GetVisit(ctx, visitID)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return Visit{}, err
-	}
-	return s.replanFromPrior(ctx, visitID, snapshot, existing)
+// commandAttribution attributes one step's status change in a replan to a
+// command instead of the planner: the timeline row then carries the command's
+// source and actor (NFR-09). fromStatus overrides the recorded pre-change
+// status — TransitionStep needs it because it applies the commanded write to
+// `existing` before replanning, leaving the prior map already holding the new
+// status for the diff to see.
+type commandAttribution struct {
+	stepKey    string
+	source     string
+	actor      Actor
+	fromStatus string
 }
 
 // replanFromPrior recomputes the plan against an already-loaded prior visit
 // (letting a caller apply a direct status write to it first, e.g.
-// TransitionStep), resolves service points, and persists the result. Must be
-// called with the transaction-bound ctx.
-func (s *service) replanFromPrior(ctx context.Context, visitID string, snapshot his.Visit, existing Visit) (Visit, error) {
+// TransitionStep), resolves service points, persists the result, and appends
+// one timeline row per status change the round produced (#85). Must be called
+// with the transaction-bound ctx.
+func (s *service) replanFromPrior(ctx context.Context, visitID string, snapshot his.Visit, existing Visit, attribution *commandAttribution) (Visit, error) {
 	prior := make(map[string]string, len(existing.Steps))
 	for _, st := range existing.Steps {
 		prior[st.StepKey] = st.Status
@@ -362,7 +379,86 @@ func (s *service) replanFromPrior(ctx context.Context, visitID string, snapshot 
 	if err := s.repo.UpsertVisit(ctx, visit); err != nil {
 		return Visit{}, err
 	}
+	// Timeline writes are silent by design (#85): the ingest poller replans
+	// every few seconds and one log line per event would dwarf everything
+	// else in the output.
+	if events := statusEventsBetween(visitID, existing, visit, attribution); len(events) > 0 {
+		if err := s.repo.AppendStatusEvents(ctx, events); err != nil {
+			return Visit{}, err
+		}
+	}
 	return visit, nil
+}
+
+// statusEventsBetween diffs the prior plan against the freshly computed one
+// and returns one timeline row per change (#85): a step entering the plan
+// (from_status NULL), a status change, and a step the replan withdrew
+// (to CANCELLED). A round that changes nothing returns nothing — replans run
+// constantly and the timeline must not grow on no-ops. Pure function, so the
+// shape of the timeline is unit-testable without a database.
+func statusEventsBetween(visitID string, prior Visit, next Visit, attribution *commandAttribution) []StepStatusEvent {
+	priorStatus := make(map[string]string, len(prior.Steps))
+	priorSteps := make(map[string]Step, len(prior.Steps))
+	for _, st := range prior.Steps {
+		priorStatus[st.StepKey] = st.Status
+		priorSteps[st.StepKey] = st
+	}
+
+	nextKeys := make(map[string]bool, len(next.Steps))
+	var events []StepStatusEvent
+	for i := range next.Steps {
+		st := next.Steps[i]
+		nextKeys[st.StepKey] = true
+		from, existed := priorStatus[st.StepKey]
+		source, actor := EventSourcePlanner, Actor{}
+		if attribution != nil && attribution.stepKey == st.StepKey {
+			source, actor = attribution.source, attribution.actor
+			if attribution.fromStatus != "" {
+				from, existed = attribution.fromStatus, true
+			}
+		}
+		if existed && from == st.Status {
+			continue
+		}
+		ev := StepStatusEvent{
+			VisitID: visitID, StepKey: st.StepKey, Kind: st.Kind, ServicePointID: st.ServicePointID,
+			ToStatus: st.Status, Source: source, ActorUserID: actor.UserID, ActorUsername: actor.Username,
+		}
+		if existed {
+			f := from
+			ev.FromStatus = &f
+		}
+		events = append(events, ev)
+	}
+
+	// A replan may withdraw a not-yet-started step from the plan (ADR-0009
+	// §7 — steps with history are never withdrawn). Its disappearance is a
+	// status change like any other, recorded as CANCELLED with the kind and
+	// service point copied from the withdrawn step: after the upsert no
+	// journey_step row references it anymore.
+	withdrawn := make([]string, 0)
+	for _, st := range prior.Steps {
+		if nextKeys[st.StepKey] {
+			continue
+		}
+		// Terminal or in-progress steps are never withdrawn by contract; a
+		// CANCELLED one already carries its terminal status. Guarding them
+		// here keeps a planner bug from being recorded as history.
+		if st.Status != StepPending && st.Status != StepWaiting && st.Status != StepReady {
+			continue
+		}
+		withdrawn = append(withdrawn, st.StepKey)
+	}
+	sort.Strings(withdrawn)
+	for _, key := range withdrawn {
+		st := priorSteps[key]
+		from := st.Status
+		events = append(events, StepStatusEvent{
+			VisitID: visitID, StepKey: st.StepKey, Kind: st.Kind, ServicePointID: st.ServicePointID,
+			FromStatus: &from, ToStatus: StepCancelled, Source: EventSourcePlanner,
+		})
+	}
+	return events
 }
 
 func indexOfStep(steps []Step, stepKey string) int {

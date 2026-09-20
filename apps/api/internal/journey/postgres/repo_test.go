@@ -299,3 +299,93 @@ func TestProjectionRollsBackAtomically(t *testing.T) {
 		t.Fatal("event marked applied despite rollback")
 	}
 }
+
+// #85: timeline rows round-trip through every column, and deleting the visit
+// cascades them away with it.
+func TestAppendStatusEventsRoundtripAndCascade(t *testing.T) {
+	database := newDB(t)
+	cleanupJourney(t, database, "TEST-JOURNEY-TL")
+	repo := New(database)
+	ctx := context.Background()
+
+	if err := repo.UpsertVisit(ctx, journey.Visit{
+		VisitID: "TEST-JOURNEY-TL", PatientRef: "PAT-TL", Status: "ACTIVE",
+		Steps: []journey.Step{{StepKey: "CLINIC:MED:1", Sequence: 1, Kind: journey.KindClinic, Status: "READY"}},
+	}); err != nil {
+		t.Fatalf("seed visit: %v", err)
+	}
+
+	from := journey.StepReady
+	events := []journey.StepStatusEvent{
+		{
+			VisitID: "TEST-JOURNEY-TL", StepKey: "CLINIC:MED:1", Kind: journey.KindClinic,
+			ServicePointID: sp("SP-CLINIC-MED"), FromStatus: &from, ToStatus: journey.StepStarted,
+			Source: "staff-web", ActorUserID: "user-1", ActorUsername: "tester",
+		},
+		{
+			VisitID: "TEST-JOURNEY-TL", StepKey: "CASHIER", Kind: journey.KindCashier,
+			ToStatus: journey.StepPending, Source: journey.EventSourcePlanner,
+		},
+	}
+	if err := repo.AppendStatusEvents(ctx, events); err != nil {
+		t.Fatalf("AppendStatusEvents: %v", err)
+	}
+
+	rows, err := database.Querier(ctx).Query(ctx,
+		`SELECT step_key, kind, service_point_id, from_status, to_status, source, actor_user_id, actor_username, occurred_at
+		 FROM carepath.journey_step_status_event WHERE visit_id = $1 ORDER BY event_id`, "TEST-JOURNEY-TL")
+	if err != nil {
+		t.Fatalf("query timeline: %v", err)
+	}
+	defer rows.Close()
+
+	var got []journey.StepStatusEvent
+	var occurred []time.Time
+	for rows.Next() {
+		var ev journey.StepStatusEvent
+		var at time.Time
+		if err := rows.Scan(&ev.StepKey, &ev.Kind, &ev.ServicePointID, &ev.FromStatus, &ev.ToStatus,
+			&ev.Source, &ev.ActorUserID, &ev.ActorUsername, &at); err != nil {
+			t.Fatalf("scan timeline row: %v", err)
+		}
+		ev.VisitID = "TEST-JOURNEY-TL"
+		got = append(got, ev)
+		occurred = append(occurred, at)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate timeline: %v", err)
+	}
+
+	if len(got) != 2 {
+		t.Fatalf("timeline rows = %d, want 2", len(got))
+	}
+	first, second := got[0], got[1]
+	if first.FromStatus == nil || *first.FromStatus != journey.StepReady || first.ToStatus != journey.StepStarted ||
+		first.Source != "staff-web" || first.ActorUserID != "user-1" || first.ActorUsername != "tester" ||
+		first.Kind != journey.KindClinic || first.ServicePointID == nil || *first.ServicePointID != "SP-CLINIC-MED" {
+		t.Fatalf("first row = %+v, want every column of the command event back", first)
+	}
+	if second.FromStatus != nil || second.ToStatus != journey.StepPending ||
+		second.Source != journey.EventSourcePlanner || second.ActorUserID != "" || second.ActorUsername != "" {
+		t.Fatalf("second row = %+v, want a planner row with nil from_status and no actor", second)
+	}
+	for _, at := range occurred {
+		if at.IsZero() {
+			t.Fatal("occurred_at not defaulted")
+		}
+	}
+
+	if _, err := database.Querier(ctx).Exec(ctx,
+		`DELETE FROM carepath.journey_visit WHERE visit_id = $1`, "TEST-JOURNEY-TL"); err != nil {
+		t.Fatalf("delete visit: %v", err)
+	}
+	var count int
+	if err := database.Querier(ctx).QueryRow(ctx,
+		`SELECT count(*) FROM carepath.journey_step_status_event WHERE visit_id = $1`, "TEST-JOURNEY-TL",
+	).Scan(&count); err != nil {
+		t.Fatalf("count after delete: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("timeline rows after visit delete = %d, want 0 (cascade)", count)
+	}
+}
