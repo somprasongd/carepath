@@ -16,9 +16,11 @@ Canonical description of the `apps/web` structure: how the code is organized, wh
 apps/web/src/
   routes/            File-based routing — one file per URL
     __root.tsx       Base font/colour only, no chrome
-    index.tsx        Redirects / → /patient/journey
+    index.tsx        Redirects / → /login (the staff console is the front
+                     door; patients enter by naming their VN, not by default)
     login.tsx        Staff/admin login (patients never see this — LINE only)
-    patient/         journey, navigate (?visit=<id> search param)
+    patient/         journey, navigate (?visit=<VN> search param — the VN
+                     entry screen asks for it when absent; no demo default)
     staff/           overview, service-points, patients, floor-plan
                      (placeholder), queue*, pathway-templates* (`*` = screen
                      still reads mocks/demo-data.ts)
@@ -71,7 +73,7 @@ Status per screen today:
 
 | Screen | Data |
 | --- | --- |
-| `/patient/journey` | Live — `GET /api/v1/journeys/:visitId` (default `VISIT-001`, override with `?visit=`); polls every 15s |
+| `/patient/journey` | Live — `GET /api/v1/journeys/:visitId`; requires `?visit=<VN>` — without it the VN entry screen (`-VisitEntryScreen`) asks first (the old VISIT-001 demo default is gone); polls every 15s |
 | `/patient/navigate` | Live end-to-end — floor plan from `packages/floorplans`, route + turn-by-turn cues from `GET /api/v1/navigation/route` (`features/navigation`). QR-based current-location is API-only; the screen still shows a static "scan the QR at the service point" instruction, no camera/scanner wired in |
 | `/staff/patients`, `/staff/service-points` | Live (`/api/v1/staff/visits` + transitions, `/api/v1/service-points`) |
 | `/staff/overview` | Live — `GET /api/v1/analytics/overview?window=today` (`features/analytics`); polls every 15s; EXECUTIVE role only (ADR-0010), a metric with no data yet renders as "—" |

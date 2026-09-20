@@ -1,8 +1,11 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { DEFAULT_VISIT_ID } from '@/features/visit'
 import { JourneyScreen } from './-JourneyScreen'
+import { VisitEntryScreen } from './-VisitEntryScreen'
 
-/** `?visit=<id>` — which HIS visit this journey renders; demo default for now. */
+/**
+ * `?visit=<VN>` — the HIS visit reference this journey renders. Required:
+ * without it the VN entry screen asks for it first (no demo default).
+ */
 export const Route = createFileRoute('/patient/journey')({
   validateSearch: (search: Record<string, unknown>): { visit?: string } => ({
     visit: typeof search.visit === 'string' && search.visit !== '' ? search.visit : undefined,
@@ -13,13 +16,20 @@ export const Route = createFileRoute('/patient/journey')({
 function PatientJourneyRoute() {
   const navigate = useNavigate()
   const { visit } = Route.useSearch()
-  const visitId = visit ?? DEFAULT_VISIT_ID
+
+  if (visit === undefined) {
+    return (
+      <div className="h-dvh">
+        <VisitEntryScreen />
+      </div>
+    )
+  }
 
   return (
     <div className="h-dvh">
       <JourneyScreen
-        visitId={visitId}
-        onNavigate={() => navigate({ to: '/patient/navigate', search: { visit: visitId } })}
+        visitId={visit}
+        onNavigate={() => navigate({ to: '/patient/navigate', search: { visit } })}
       />
     </div>
   )
