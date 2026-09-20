@@ -663,6 +663,7 @@ carepath-monorepo/
 │   │   └── internal/
 │   │       ├── his/          HIS port + http client + ingest poller
 │   │       ├── journey/      planner (ฟังก์ชันบริสุทธิ์) + projection + handler
+│   │       ├── analytics/    aggregate สำหรับ executive dashboard (#86)
 │   │       ├── servicepoint/ บริการเชิงตรรกะ → สถานที่
 │   │       ├── hospitalmap/  อาคาร/ชั้น/โซน/สถานที่
 │   │       ├── navigation/   กราฟนำทาง + shortest path
@@ -670,7 +671,9 @@ carepath-monorepo/
 │   │       ├── identity/     ตรวจ LINE ID token
 │   │       ├── session/      session token ของผู้ป่วย
 │   │       ├── auth/         login เจ้าหน้าที่ · argon2id + JWT
-│   │       └── platform/     db, logger, apperr, httpx
+│   │       ├── share/        visit share link (ADR-0011, #89/#90)
+│   │       ├── platform/     db, logger, apperr, httpx
+│   │       └── e2e/          API happy-path E2E (รันใน CI)
 │   ├── mock-his/         HIS จำลอง + console ขับ demo
 │   └── web/              React + TS + Vite (มี AGENTS.md ของตัวเอง)
 ├── packages/

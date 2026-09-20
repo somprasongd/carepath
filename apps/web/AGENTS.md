@@ -66,7 +66,9 @@ patients see, so a silent regression there is a UX bug, not a crash.
 - **Patient-facing display text lives in the i18n catalog** (`src/i18n/locales/`,
   ADR-0012): step titles and service point names are keyed by their stable
   codes and mapped per locale — never hardcoded in a component. Staff screens
-  pin locale `'th'` explicitly. Proper nouns (patient names) and the server's
+  don't go through the i18n catalog at all (no `useT`/`useLocale` calls) —
+  they hardcode Thai strings directly, since the TH/EN toggle is a
+  patient-facing feature only. Proper nouns (patient names) and the server's
   `service_point.name` (staff label / fallback) are not UI text.
 - **Demo data is scoped.** `src/mocks/demo-data.ts` feeds only `/design` and
   the staff screens (no endpoints yet). Patient screens must render live

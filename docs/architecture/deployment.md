@@ -94,6 +94,7 @@ rolling forward over `down` unless the data volume is expendable.
 |---|---|---|
 | `JWT_SECRET` | may be left unset — the API generates a random key at boot and warns; tokens then die on restart | **required**, ≥32 random bytes, from a secret store rather than `.env` |
 | `ACCESS_TOKEN_TTL` / `REFRESH_TOKEN_TTL` | `15m` / `168h` | review against the hospital's session policy |
+| `SHARE_LINK_TTL` | `4h` | review against how long a relative should be able to follow a visit ([ADR-0011](../adr/0011-visit-share-link.md)) |
 | Seed users `admin`/`demo`, `staff`/`demo` | created by migration for the demo | delete, deactivate, or change both passwords before exposure |
 | `LINE_CHANNEL_ID` | optional (demo auth) | required for real patient logins |
 | TLS | not used locally | required — a bearer token on plain HTTP is a token in transit |

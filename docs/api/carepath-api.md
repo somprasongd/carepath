@@ -110,7 +110,7 @@ share link for the visit. Idempotent — 204 even when nothing is active.
 
 `GET /api/v1/staff/visits`
 
-The projected journey of every visit CarePath knows, freshest sync first — same per-visit shape as the single-journey read (#37). Requires a `STAFF` or `ADMIN` access token; the `/api/v1/staff` prefix exists so one middleware covers the whole group.
+The projected journey of every visit CarePath knows, freshest sync first — same per-visit shape as the single-journey read (#37). Requires a `STAFF` or `ADMIN` access token, enforced per-route via `staffGuard` (each `/api/v1/staff/*` route applies the guard individually, not as group-level middleware).
 
 ## Analytics
 

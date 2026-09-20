@@ -4,7 +4,7 @@ Canonical description of the `apps/web` structure: how the code is organized, wh
 
 ## Stack
 
-- React 19 + TypeScript, built with Vite (`rolldown-vite`)
+- React 19 + TypeScript, built with Vite 8 (`apps/web/package.json`'s plain `vite` dependency, not a separate `rolldown-vite` package)
 - Tailwind CSS v4, CSS-first configuration — there is **no `tailwind.config.js`**; tokens are declared in `src/styles/index.css` (`:root` palette, `@theme`, `@theme inline`) and everything else reads Tailwind utilities
 - shadcn/ui — generated components live in `src/design-system/ui/`, edited in place to carry CarePath variants; semantic shadcn names (`--background`, `--card`, …) are mapped onto the CarePath palette in `styles/index.css`
 - TanStack Router (file-based routing, route generation via `@tanstack/router-plugin` in `vite.config.ts`)
@@ -51,6 +51,15 @@ apps/web/src/
     queue/           components only — no query layer yet (queue is still demo)
   api/               client.ts (fetch wrapper, ApiError, token attach + refresh)
                      + schema.d.ts (generated)
+  i18n/              Client-owned display text (ADR-0012): LocaleProvider,
+                     useT/useLocale, format() in index.ts; initial-locale.ts
+                     (stored choice → LIFF language → Thai fallback);
+                     locales/{th,en}.ts (th.ts canonical, en.ts must satisfy
+                     the same type); LanguageToggle.tsx. Wraps the whole app
+                     from main.tsx and sets document.documentElement.lang.
+                     Patient-facing screens only — staff screens hardcode
+                     Thai strings directly rather than going through the
+                     catalog.
   mocks/             demo-data.ts — static data for /design and the screens
                      still marked `*` above (queue, pathway-templates)
   styles/            index.css — the single token source (@theme)

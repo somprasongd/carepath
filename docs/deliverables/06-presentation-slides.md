@@ -77,7 +77,7 @@ Keep a **local recording of this exact sequence** as a backup (brief §12 explic
 
 ### 7. Quality — testing & a real bug we caught (0:30) — presenter: สมประสงค์
 
-- 46 automated tests passing (Go + Vitest) across all three services
+- ~400 automated tests passing (Go + Vitest) across all three services (see the update note in [Test Result](05-test-result.md#update-note-post-adr-0009) for current counts)
 - Tell the TC-05 story in one sentence: "while writing our test cases, we found the API was leaking a raw connection error to the client when the HIS was down — we fixed it and added a regression test the same day." (Full writeup: [Test Result TC-05](05-test-result.md#test-cases).) This is a stronger signal to judges than an all-green table with no story behind it.
 
 ### 8. Status & what's next (0:30) — presenter: ปฐมพงศ์
@@ -86,7 +86,8 @@ Be honest here — criterion 3 rewards working Must-Have over broken breadth:
 
 - **Working today**: the patient journey derived from live HIS facts (visit → plan → step status), next-step resolution, the indoor route drawn on the floor plan, service-point mapping, the HIS adapter boundary, and error handling — all live-demoed above
 - **Closed since the prototype was drawn**: the three Must-Have gaps §3.3 of the [Prototype](03-prototype-wireframe.md#33-gap-closed) once listed are now working screens — staff login with role-based access (M8, [ADR-0010](../adr/0010-staff-auth-jwt-argon2.md): argon2id passwords, JWT access + rotating refresh tokens, `STAFF`/`ADMIN` roles), visit lookup for registration staff (M3), and service-point step control (M7)
-- **Honestly still open**: the queue itself — calling a ticket and the wait-time estimate (M7/S1) have no backend yet, so that one screen is still a demo shell; QR location is built on the API side but has no scanner in the web app (S2); the admin screen for reviewing the planning rules (M2) reads static config rather than the real planner; the executive dashboard (S7) and the Thai/English switch (S4) are not started
+- **Honestly still open**: the queue itself — calling a ticket and the wait-time estimate (M7/S1) have no backend yet, so that one screen is still a demo shell; QR location is built on the API side but has no scanner in the web app (S2); the admin screen for reviewing the planning rules (M2) reads static config rather than the real planner
+- **Also closed since**: the executive dashboard (S7, [ADR analytics #86]) and the Thai/English switch (S4, [ADR-0012](../adr/0012-client-owned-display-text.md)) are both built now — call these out as extra wins if there's time
 - One sentence on why: "we prioritized getting the core loop — what's next, how do I get there — fully correct and tested, over partial coverage of everything."
 
 ### 9. Team & thank you (0:10) — presenter: สมประสงค์ & ปฐมพงศ์
@@ -106,7 +107,7 @@ Split questions between the two of you so both get airtime (criterion 4: "สม
 | "เส้นทางเดินคำนวณจากอะไร ไม่ใช่ฝังตายตัวใช่ไหม?" (Is the route hardcoded?) | No — it's Dijkstra over a `nav_node`/`nav_edge` graph in Postgres ([ER Diagram §2.4](02-er-diagram-database.md#24-design-questions-the-brief-raises-7)); the navigation module itself isn't wired to the UI yet, which the demo showed honestly with the fallback message. | สมประสงค์ |
 | "ข้อมูลผู้ป่วยปลอดภัยแค่ไหน?" (How secure is patient data?) | Passwords are one-way hashed with argon2id and never stored or logged in plaintext; staff sessions use a 15-minute signed access token plus a revocable, single-use refresh token, so a leaked credential has a short and cuttable life ([ADR-0010](../adr/0010-staff-auth-jwt-argon2.md)). Queries are parameterized (verified — see [Test Result TC-06](05-test-result.md#test-cases)), and PHI stays off public-facing screens like the queue-call display (NFR-03, NFR-11). | ปฐมพงศ์ |
 | "ทำไม demo ถึง login ด้วย admin/demo ได้?" (Why does the demo log in with admin/demo?) | Those are seed accounts for the hackathon demo, and their hash is in a public repository by design. The pre-deployment checklist in ADR-0010 §12 removes them, sets a real `JWT_SECRET` from a secret store, and requires TLS before anyone outside the team can reach the system. | ปฐมพงศ์ |
-| "ทดสอบระบบยังไงบ้าง?" (How did you test it?) | 46 automated tests plus manual test cases against the live system — [Test Result](05-test-result.md) documents all of them, including a real bug we found and fixed. | สมประสงค์ |
+| "ทดสอบระบบยังไงบ้าง?" (How did you test it?) | Hundreds of automated tests plus manual test cases against the live system — [Test Result](05-test-result.md) documents all of them, including a real bug we found and fixed. | สมประสงค์ |
 | "ทำไมใช้ Mock HIS แทน HIS จริง?" (Why Mock HIS instead of a real HIS?) | The brief explicitly allows/expects this (§3, §5.1 M9-ish, §8) — a hackathon can't get real hospital system access; Mock HIS implements the same contract a real adapter would (ADR-0005). | ปฐมพงศ์ |
 
 ## Backup plan (brief §12)

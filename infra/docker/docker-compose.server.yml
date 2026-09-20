@@ -61,6 +61,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
       REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-168h}
+      SHARE_LINK_TTL: ${SHARE_LINK_TTL:-4h}
     depends_on:
       postgres:
         condition: service_healthy

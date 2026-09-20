@@ -41,7 +41,7 @@ A staff or admin account CarePath owns: username, argon2id password hash, displa
 A revocable, single-use credential a staff session is renewed with. Stored as a hash, with issued/expiry timestamps plus "spent" and "revoked" markers; rotation replaces it on every use, and replaying a spent one revokes the user's whole set.
 
 ### TagAssignment
-Optional mapping of an active visit to a Zigbee tag.
+Optional mapping of an active visit to a Zigbee tag. Not yet a persisted table — the current `location/zigbee` provider produces observations without a durable tag-assignment record; this entity is target-state, per the note at the top of this doc.
 
 ### LocationObservation
 Normalized observation from QR, Zigbee, or another provider.

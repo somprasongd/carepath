@@ -4,7 +4,7 @@
 
 ## 2.1 What's already real vs. what this document adds
 
-Today the only table actually migrated is `carepath.service_point` (`infra/postgres/migrations/000001_init_schema.up.sql`), which is why the tool-generated snapshot at [`docs/architecture/erd/`](../architecture/erd/) shows just that one table — it's accurate, not stale, for what exists right now. Mock HIS (`apps/mock-his`) has no database at all yet; it serves one hardcoded visit from an in-memory map.
+> **Update (2026-09-20):** this section described the schema's state at the time this deliverable was first written, when only `service_point` was migrated. That is no longer current — `infra/postgres/migrations/` now has 18 migrations covering hospital map, navigation graph, location observation, journey plan, staff auth (`000011_staff_auth`), journey audit actor (`000012_journey_audit_actor`), the journey step status timeline, the executive role, demo seed data, visit share links, and clinic seeds. The tool-generated snapshot at [`docs/architecture/erd/`](../architecture/erd/) reflects that real, current schema — regenerate it with `make docs-erd` rather than trusting the narrative below. The two SQL scripts in this section remain useful as the original full-scope design; §2.7 below is stale for the same reason and should be read as historical.
 
 This document designs the full schema needed for the Must/Should/Could scope, as two runnable SQL scripts:
 
@@ -257,9 +257,11 @@ erDiagram
         numeric confidence
     }
     VISIT_SHARE_LINK {
-        text token PK
+        text token_hash PK "sha256(token) — raw token never stored, ADR-0011"
         text visit_id "his.visit, app-level ref"
+        timestamptz created_at
         timestamptz expires_at
+        timestamptz revoked_at
     }
 ```
 
@@ -375,6 +377,6 @@ The original answer here (`visit_step_dependency` self-referencing edges) assume
 
 Apply order: `000001_init_schema.up.sql` → `000002_seed_service_points.up.sql` → `mock-his-schema.sql` → `carepath-schema.sql`.
 
-## 2.7 Next step
+## 2.7 Next step (historical — superseded, see 2.1)
 
-These two scripts are a design deliverable, not yet wired into `golang-migrate`. §E is the next section to be carved out: ADR-0010 schedules `000011_staff_auth.{up,down}.sql` (`app_user`, `role`, `user_role`, `refresh_token`, the two roles, the two seed users) and `000012_journey_audit_actor.{up,down}.sql` (`actor_user_id`, `actor_username` on `journey_command_audit`). When a module in the [technical blueprint](../architecture/technical-blueprint.md)'s "planned" list (`auth`, `notification`) gets built, carve its tables out of these files into `infra/postgres/migrations/NNN_*.up.sql`/`.down.sql`, add the matching `.down.sql` (`DROP TABLE`/`DROP SCHEMA` in reverse order), and run `make docs-erd` so `docs/architecture/erd/` reflects the real, live schema again.
+These two scripts were a design deliverable at a point when nothing beyond `service_point` was wired into `golang-migrate`. That has since happened: `000011_staff_auth` and `000012_journey_audit_actor` both landed (see [migration 000011](../../infra/postgres/migrations/000011_staff_auth.up.sql) and [000012](../../infra/postgres/migrations/000012_journey_audit_actor.up.sql)), along with six further migrations (000013–000018) for demo seeding, the journey status timeline, the executive role, and visit share links. `notification` remains the only module still in the technical blueprint's "planned" (not yet built) list. Run `make docs-erd` for the live, current schema rather than treating this section as the next step.

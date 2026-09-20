@@ -179,7 +179,7 @@ must never be consumed by CarePath.
 - `POST /api/v1/demo/visits/{visitId}/clinics/{clinicCode}/complete-encounter` — this doctor is done with this patient for this round. Emits `encounter.completed`; CarePath drops any not-yet-started "return to this clinic" step it had inferred.
 - `POST /api/v1/demo/visits/{visitId}/complete` — completes an `ACTIVE` visit. Emits `visit.closed` (status `COMPLETED`).
 - `POST /api/v1/demo/visits/{visitId}/cancel` — cancels an `ACTIVE` visit outright: every open order is cancelled and the visit becomes `CANCELLED`. Re-cancelling is a no-op; a `COMPLETED` visit cannot be cancelled (`409`). Emits `visit.closed` (status `CANCELLED`) plus `order.cancelled` per open order.
-- `GET /api/v1/demo/visits/{visitId}/qrcode.png` — PNG QR encoding the visit id, shown in the console's visit detail panel (demo prop for getting the id into the patient view by scanning).
+- `GET /api/v1/demo/visits/{visitId}/qrcode.png` — PNG QR encoding the patient-view journey link (`<patientAppBaseURL>/patient/journey?visit=<id>`), shown in the console's visit detail panel (demo prop for getting into the patient view by scanning).
 
 Every console action mutates only Mock HIS state and surfaces as canonical
 events; CarePath learns through the #21 feed poller exclusively — nothing

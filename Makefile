@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: up down logs api mock-his web fmt migrate-up migrate-up-local swag start stop fetch docs-erd
+.PHONY: up down logs api mock-his web fmt migrate-up swag start stop fetch docs-erd
 
 # `command -v migrate` covers a normal PATH
 # install; non-interactive shells don't source ~/.bashrc so also check the

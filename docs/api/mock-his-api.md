@@ -88,7 +88,7 @@ drive to build a scenario from scratch.
 | `POST /api/v1/demo/visits/{visitId}/clinics/{clinicCode}/complete-encounter` | `encounter.completed` | This doctor is done with this patient for this round |
 | `POST /api/v1/demo/visits/{visitId}/complete` | `visit.closed` (status COMPLETED) | Requires ACTIVE |
 | `POST /api/v1/demo/visits/{visitId}/cancel` | `visit.closed` (status CANCELLED) + `order.cancelled` per open order | No-op if already CANCELLED; rejected if COMPLETED |
-| `GET /api/v1/demo/visits/{visitId}/qrcode.png` | — | QR code encoding the visit id, for the patient hand-off demo prop |
+| `GET /api/v1/demo/visits/{visitId}/qrcode.png` | — | QR code encoding the patient-view journey link (`<patientAppBaseURL>/patient/journey?visit=<id>`), for the patient hand-off demo prop |
 
 `orderType` is one of `LAB`, `XRAY`, `EKG`, `US`, `DRUG`. A `DRUG` order has no
 PERFORMED/RESULTED distinction — CarePath treats it as done once PLACED.
