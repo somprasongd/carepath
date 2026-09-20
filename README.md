@@ -136,7 +136,7 @@ flowchart TB
 | เจ้าหน้าที่ประชาสัมพันธ์ / คัดกรอง | คอนโซลเจ้าหน้าที่ | ค้น visit แล้วดูแผนที่ CarePath คำนวณให้ | ใช้งานได้จริง |
 | ผู้ดูแลระบบ | คอนโซลเจ้าหน้าที่ | ดู mapping จุดบริการ ↔ สถานที่, ผังอาคาร, กติกาการวางแผน | อ่านได้ · หน้าจอแก้ไขยังไม่อยู่ใน MVP |
 | ผู้บริหาร | คอนโซลเจ้าหน้าที่ | ดูภาพรวมวันนี้: จุดที่รอมากสุด, เวลารอเฉลี่ย, รอนานสุดตอนนี้, ภาระต่อจุดบริการ | ใช้งานได้จริง (บัญชีสาธิต `exec/demo` เห็นเฉพาะหน้าภาพรวม) |
-| ญาติผู้ป่วย | ลิงก์จำกัดเวลา | ติดตามว่าผู้ป่วยอยู่ขั้นตอนไหน | ออกแบบไว้ · ยังไม่พัฒนา |
+| ญาติผู้ป่วย | ลิงก์จำกัดเวลา | ติดตามว่าผู้ป่วยอยู่ขั้นตอนไหน | API พร้อม ทดสอบด้วย `curl` ได้ ([ADR-0011](docs/adr/0011-visit-share-link.md)) · ปุ่มแชร์บนหน้าจอผู้ป่วยอยู่ใน #90 |
 
 ### 0. การเข้าสู่ระบบของเจ้าหน้าที่ (Staff / Admin)
 
@@ -364,11 +364,11 @@ sequenceDiagram
 
 ข้อมูลดิบที่ dashboard ต้องใช้ถูกเก็บอยู่ในตาราง `carepath.journey_step_status_event` (#85) — timeline แบบ append-only ที่บันทึกทุกการเปลี่ยนสถานะของ step พร้อมเวลา (`occurred_at`) ทั้งที่ planner เป็นคนขยับ (เช่น `PENDING→WAITING→READY`) และที่เจ้าหน้าที่สั่ง ส่วน `carepath.journey_step` เก็บเฉพาะสถานะปัจจุบันเท่านั้น (replan ลบแล้วสร้างใหม่ทุกรอบ จึงใช้ย้อนอดีตไม่ได้)
 
-ชั้น aggregate พร้อมแล้วในโมดูล `internal/analytics` (#86): `GET /api/v1/analytics/overview?window=today` คืนตัวเลขต่อจุดบริการ (กำลังรอ/กำลังให้บริการ, รอนานสุดตอนนี้, เวลารอเฉลี่ย, เวลาให้บริการเฉลี่ย, จำนวนที่เสร็จในวันนี้) และภาพรวม visit พร้อมจุดคอขวด — ค่าที่ยังไม่มีข้อมูลเป็น `null` (ไม่ใช่ 0) และไม่มีข้อมูลระดับผู้ป่วยเด็ดขาด (NFR-03) บทบาท `EXECUTIVE` (บัญชีสาธิต `exec/demo`) เข้าถึง endpoint นี้ได้เท่านั้น — ยิง API กลุ่มเจ้าหน้าที่อื่นจะได้ 403 ตาม ADR-0010 หน้า "ภาพรวม" ในคอนโซล (#87) ดึงข้อมูลนี้แบบ polling ทุก 15 วินาที และแสดงค่าที่ยังไม่มีข้อมูลเป็นขีด (—) ไม่ใช่ 0 สิ่งที่เหลือคือข้อมูลย้อนหลังสำหรับ demo (#88)
+ชั้น aggregate พร้อมแล้วในโมดูล `internal/analytics` (#86): `GET /api/v1/analytics/overview?window=today` คืนตัวเลขต่อจุดบริการ (กำลังรอ/กำลังให้บริการ, รอนานสุดตอนนี้, เวลารอเฉลี่ย, เวลาให้บริการเฉลี่ย, จำนวนที่เสร็จในวันนี้) และภาพรวม visit พร้อมจุดคอขวด — ค่าที่ยังไม่มีข้อมูลเป็น `null` (ไม่ใช่ 0) และไม่มีข้อมูลระดับผู้ป่วยเด็ดขาด (NFR-03) บทบาท `EXECUTIVE` (บัญชีสาธิต `exec/demo`) เข้าถึง endpoint นี้ได้เท่านั้น — ยิง API กลุ่มเจ้าหน้าที่อื่นจะได้ 403 ตาม ADR-0010 หน้า "ภาพรวม" ในคอนโซล (#87) ดึงข้อมูลนี้แบบ polling ทุก 15 วินาที และแสดงค่าที่ยังไม่มีข้อมูลเป็นขีด (—) ไม่ใช่ 0 ข้อมูลย้อนหลังสำหรับ demo ก็พร้อมแล้ว (#88 — migration 000016 สร้าง visit ย้อนหลัง 60 วันให้ dashboard มีตัวเลขจริงตั้งแต่บูตครั้งแรก)
 
 ### 6. ญาติผู้ป่วย (Relative)
 
-> **ออกแบบไว้ · ยังไม่พัฒนา** — อยู่ในกลุ่ม Could Have (C2)
+> **API ใช้งานได้จริง (#89)** — สาม endpoint ตาม [ADR-0011](docs/adr/0011-visit-share-link.md) · ปุ่ม "แชร์" บนหน้าจอผู้ป่วยและหน้า `/shared` อยู่ใน #90
 
 ```mermaid
 sequenceDiagram
@@ -378,14 +378,16 @@ sequenceDiagram
     participant W as CarePath Web
     participant A as CarePath API
 
-    P->>W: กด "แชร์ความคืบหน้า"
-    W->>A: ขอลิงก์ติดตามแบบจำกัดเวลา (ยังไม่มี)
-    A-->>W: URL + token หมดอายุตามเวลา
+    P->>W: กด "แชร์ความคืบหน้า" (#90)
+    W->>A: POST /api/v1/journeys/{visitId}/share (session ผู้ป่วย)
+    A-->>W: 200 {token, expiresAt} — token คืนครั้งเดียว เก็บเฉพาะ sha256
+    W-->>P: ลิงก์ /shared#<token> (token อยู่ใน fragment ไม่ส่งถึง server)
     P-->>R: ส่งลิงก์ให้ทาง LINE
     R->>W: เปิดลิงก์
-    W->>A: GET journey แบบอ่านอย่างเดียว ด้วย token
-    A-->>W: เฉพาะขั้นตอนปัจจุบัน/ถัดไป ไม่มีข้อมูลคลินิกละเอียด
+    W->>A: GET /api/v1/shared/journey (Authorization: Bearer <token>)
+    A-->>W: เฉพาะขั้นตอนปัจจุบัน/ถัดไป สถานะหยาบ ชื่อจุดบริการ+ชั้น — ไม่มีชื่อ ไม่มีรหัสใด ๆ
     W-->>R: รู้ว่าควรมารับตอนไหน
+    Note over P,A: ลิงก์หมดอายุตาม SHARE_LINK_TTL (ค่าเริ่มต้น 4 ชม.) · ผู้ป่วยกด "หยุดแชร์"<br/>= DELETE /api/v1/journeys/{visitId}/share ถอนทุกลิงก์ที่ยังใช้ได้ทันที
 ```
 
 ---
@@ -703,7 +705,8 @@ carepath-monorepo/
 | Login เจ้าหน้าที่ + RBAC (argon2id · JWT access/refresh) | ✅ ใช้งานได้จริง ([ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md)) |
 | เรียกคิว / เวลารอ | 🚧 หน้าจอ demo |
 | Dashboard ผู้บริหาร (ภาพรวมวันนี้) | ✅ ใช้งานได้ |
-| ลิงก์ติดตามให้ญาติ · แจ้งเตือนใกล้ถึงคิว | 🚧 ยังไม่พัฒนา |
+| ลิงก์ติดตามให้ญาติ | ⚠️ API พร้อม ([ADR-0011](docs/adr/0011-visit-share-link.md)) · ปุ่มแชร์+หน้า `/shared` อยู่ใน #90 |
+| แจ้งเตือนญาติใกล้ถึงคิว | 🔭 นอกขอบเขต MVP (S6) |
 | Zigbee positioning | 🔭 นอกขอบเขต MVP · ออกแบบ interface รองรับไว้แล้ว |
 
 ดูขอบเขตเต็มที่ [`docs/requirements/mvp-scope.md`](docs/requirements/mvp-scope.md)
@@ -722,7 +725,7 @@ carepath-monorepo/
 6. Backend เป็น **modular monolith** ไม่แตกเป็น microservices ([ADR-0001](docs/adr/0001-monorepo-modular-monolith.md))
 7. **CarePath เป็นเจ้าของแผนการเดินทาง · HIS เป็นเจ้าของข้อเท็จจริงเชิงคลินิก** ([ADR-0009](docs/adr/0009-carepath-owns-journey-plan.md))
 8. ระบบภายนอก **ไม่ร่วมใน DB transaction** — อ่าน snapshot ให้เสร็จก่อนเปิด transaction ([ADR-0007](docs/adr/0007-hexagonal-modules-transaction-in-context.md))
-9. **ตัวตนผู้ป่วยกับตัวตนเจ้าหน้าที่แยกกัน** — ผู้ป่วยมาจาก LINE (`session`, opaque token) เจ้าหน้าที่มาจาก username/password ของ CarePath (`auth`, JWT + refresh) ห้ามยุบรวมหรือใช้ token ข้ามฝั่ง ([ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md))
+9. **ตัวตนผู้ป่วยกับตัวตนเจ้าหน้าที่แยกกัน** — ผู้ป่วยมาจาก LINE (`session`, opaque token) เจ้าหน้าที่มาจาก username/password ของ CarePath (`auth`, JWT + refresh) ห้ามยุบรวมหรือใช้ token ข้ามฝั่ง ([ADR-0010](docs/adr/0010-staff-auth-jwt-argon2.md)) · มีกลไกที่สาม: **ลิงก์ติดตามญาติ** (`share`, token ผูกกับ *visit* ไม่ใช่คน อ่านอย่างเดียว หมดอายุตาม `SHARE_LINK_TTL` ถอนได้ ใช้ได้เฉพาะ `GET /api/v1/shared/journey`) — กฎข้ามฝั่งยังเหมือนเดิม: token แต่ละชนิดใช้ได้เฉพาะผิวที่ scheme ของตัวเองระบุ ทุกทิศทาง ([ADR-0011](docs/adr/0011-visit-share-link.md))
 
 ---
 

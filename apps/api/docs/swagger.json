@@ -519,6 +519,90 @@
                 }
             }
         },
+        "/api/v1/journeys/{visitId}/share": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "Mints a read-only, time-limited link token (ADR-0011). Returns the raw token exactly once — store sha256 only — plus its expiry. The response carries no URL: the web app composes /shared#\u003ctoken\u003e itself so the API never needs its own origin. At most 5 active links per visit (409 beyond).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "share"
+                ],
+                "summary": "Create a relative share link for a visit",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit id",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/share.LinkSecret"
+                        }
+                    },
+                    "401": {
+                        "description": "missing or invalid patient session",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "visit not projected",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "active-link cap reached",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "Revokes every still-active share link of the visit. Idempotent — 204 whether or not any link existed.",
+                "tags": [
+                    "share"
+                ],
+                "summary": "Stop sharing a visit (\"หยุดแชร์\")",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Visit id",
+                        "name": "visitId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "401": {
+                        "description": "missing or invalid patient session",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/journeys/{visitId}/steps/{stepKey}/transition": {
             "post": {
                 "description": "Staff command that sets one step's status directly (ADR-0009 — CarePath owns step status; never forwarded to the HIS) and returns the refreshed journey with the plan recomputed. commandId is an optional idempotency key; source names the acting surface for the audit trail.",
@@ -714,6 +798,37 @@
                     },
                     "500": {
                         "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/shared/journey": {
+            "get": {
+                "security": [
+                    {
+                        "shareAuth": []
+                    }
+                ],
+                "description": "Resolves the share token (Authorization: Bearer) to the redacted SharedJourney — current step as Thai text, coarse status, service point name and floor, nothing else (ADR-0011 §3). Unknown, expired, and revoked tokens all answer with the same 401.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "share"
+                ],
+                "summary": "Read the journey a share link points to",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/share.SharedJourney"
+                        }
+                    },
+                    "401": {
+                        "description": "invalid, expired, or revoked share token",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }
@@ -1257,6 +1372,51 @@
                     "type": "string"
                 },
                 "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "share.LinkSecret": {
+            "type": "object",
+            "properties": {
+                "expiresAt": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "share.SharedJourney": {
+            "type": "object",
+            "properties": {
+                "currentStep": {
+                    "$ref": "#/definitions/share.SharedStep"
+                },
+                "expiresAt": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "share.SharedStep": {
+            "type": "object",
+            "properties": {
+                "floorName": {
+                    "type": "string"
+                },
+                "servicePointName": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "title": {
                     "type": "string"
                 }
             }

@@ -322,6 +322,35 @@ definitions:
       source:
         type: string
     type: object
+  share.LinkSecret:
+    properties:
+      expiresAt:
+        type: string
+      token:
+        type: string
+    type: object
+  share.SharedJourney:
+    properties:
+      currentStep:
+        $ref: '#/definitions/share.SharedStep'
+      expiresAt:
+        type: string
+      status:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  share.SharedStep:
+    properties:
+      floorName:
+        type: string
+      servicePointName:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+    type: object
 info:
   contact: {}
   description: |-
@@ -699,6 +728,63 @@ paths:
       summary: Report a scanned location fix
       tags:
       - location
+  /api/v1/journeys/{visitId}/share:
+    delete:
+      description: Revokes every still-active share link of the visit. Idempotent
+        — 204 whether or not any link existed.
+      parameters:
+      - description: Visit id
+        in: path
+        name: visitId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No content
+        "401":
+          description: missing or invalid patient session
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Stop sharing a visit ("หยุดแชร์")
+      tags:
+      - share
+    post:
+      description: 'Mints a read-only, time-limited link token (ADR-0011). Returns
+        the raw token exactly once — store sha256 only — plus its expiry. The response
+        carries no URL: the web app composes /shared#<token> itself so the API never
+        needs its own origin. At most 5 active links per visit (409 beyond).'
+      parameters:
+      - description: Visit id
+        in: path
+        name: visitId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/share.LinkSecret'
+        "401":
+          description: missing or invalid patient session
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: visit not projected
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "409":
+          description: active-link cap reached
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Create a relative share link for a visit
+      tags:
+      - share
   /api/v1/journeys/{visitId}/steps/{stepKey}/transition:
     post:
       consumes:
@@ -842,6 +928,28 @@ paths:
       summary: Get a service point by code
       tags:
       - service-points
+  /api/v1/shared/journey:
+    get:
+      description: 'Resolves the share token (Authorization: Bearer) to the redacted
+        SharedJourney — current step as Thai text, coarse status, service point name
+        and floor, nothing else (ADR-0011 §3). Unknown, expired, and revoked tokens
+        all answer with the same 401.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/share.SharedJourney'
+        "401":
+          description: invalid, expired, or revoked share token
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - shareAuth: []
+      summary: Read the journey a share link points to
+      tags:
+      - share
   /api/v1/staff/visits:
     get:
       description: Every projected journey, freshest sync first — the same per-visit
