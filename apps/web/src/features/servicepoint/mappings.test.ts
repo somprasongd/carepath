@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ServicePoint } from './queries'
-import { toServicePointView } from './mappings'
+import { toServicePointView, zoneForService } from './mappings'
 
 function servicePoint(overrides: Partial<ServicePoint> = {}): ServicePoint {
   return {
@@ -68,5 +68,21 @@ describe('toServicePointView', () => {
     ['NURSE', 'public'],
   ] as const)('maps service %s to zone %s', (code, zone) => {
     expect(toServicePointView(servicePoint({ code })).zone).toBe(zone)
+  })
+})
+
+describe('zoneForService', () => {
+  // #87: the overview rows carry whatever code the service point table has,
+  // including ADR-0009 binding prefixes — classified by the same call.
+  it.each([
+    ['ORDERTYPE:LAB', 'diagnostic'],
+    ['ORDERTYPE:XRAY', 'diagnostic'],
+    ['CLINIC:MED', 'opd'],
+    ['CASHIER', 'public'],
+    ['REGISTRATION', 'public'],
+    ['PHARMACY', 'pharmacy'],
+    ['WELLNESS', 'public'],
+  ] as const)('maps %s to zone %s', (code, zone) => {
+    expect(zoneForService(code)).toBe(zone)
   })
 })

@@ -23,7 +23,25 @@ export const staffRailItems: NavItem[] = [
   { id: 'patients', label: 'ผู้ป่วยวันนี้', icon: <PatientsIcon size={18} /> },
 ]
 
-export const staffRole = 'ประชาสัมพันธ์'
+/**
+ * EXECUTIVE sees only ภาพรวม — the dashboard is their whole console (#87);
+ * the queue and mapping tools stay with STAFF/ADMIN. The API enforces the
+ * same split (403), so hiding items is affordance, not security.
+ */
+export function navItemsForRole(items: NavItem[], roles: string[] | undefined): NavItem[] {
+  const operational = roles?.includes('STAFF') || roles?.includes('ADMIN')
+  if (roles?.includes('EXECUTIVE') && !operational) {
+    return items.filter((item) => item.id === 'overview')
+  }
+  return items
+}
+
+/** Thai role label from the signed-in identity's token — the token decides, not the screen. */
+export function staffRoleLabel(roles: string[] | undefined): string {
+  if (roles?.includes('ADMIN')) return 'ผู้ดูแลระบบ'
+  if (roles?.includes('EXECUTIVE')) return 'ผู้บริหาร'
+  return 'เจ้าหน้าที่'
+}
 
 const paths = {
   overview: '/staff/overview',
