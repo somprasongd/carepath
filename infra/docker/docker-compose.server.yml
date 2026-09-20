@@ -28,6 +28,16 @@ services:
     image: ghcr.io/somprasongd/carepath-mock-his:${IMAGE_TAG:?set in .env}
     environment:
       PORT: 8090
+      # Visit-link mint (ADR-0014) is called server-side over the compose
+      # network — same env names as docker-compose.yml (dev). Leave
+      # CAREPATH_HIS_API_KEY empty to keep the legacy ?visit= QR; set it
+      # (same value as the api's HIS_API_KEY) to serve minted #vt= slip
+      # QRs instead. PATIENT_APP_BASE_URL absolute-izes the console's
+      # fallback link; unset keeps it same-origin relative, which works
+      # behind the edge proxy.
+      CAREPATH_API_INTERNAL_BASE_URL: ${CAREPATH_API_INTERNAL_BASE_URL:-http://api:8080}
+      CAREPATH_HIS_API_KEY: ${CAREPATH_HIS_API_KEY:-}
+      PATIENT_APP_BASE_URL: ${PATIENT_APP_BASE_URL:-}
     restart: unless-stopped
 
   migrate:
@@ -62,6 +72,15 @@ services:
       ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
       REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-168h}
       SHARE_LINK_TTL: ${SHARE_LINK_TTL:-4h}
+      # Visit link (ADR-0014). HIS_API_KEY + VISIT_LINK_SECRET must BOTH be
+      # set or the mint/redeem routes don't register at all (fail-closed) —
+      # same wiring as docker-compose.yml (dev). PATIENT_APP_BASE_URL is
+      # the absolute public origin minted #vt= URLs ride on; unset logs a
+      # warning and mints localhost links, so set it on this stack.
+      HIS_API_KEY: ${HIS_API_KEY:-}
+      VISIT_LINK_SECRET: ${VISIT_LINK_SECRET:-}
+      VISIT_LINK_COMPLETED_GRACE: ${VISIT_LINK_COMPLETED_GRACE:-30m}
+      PATIENT_APP_BASE_URL: ${PATIENT_APP_BASE_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
