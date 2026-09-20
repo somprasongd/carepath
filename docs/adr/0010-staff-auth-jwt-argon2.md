@@ -403,3 +403,12 @@ Minimum tests for the slices above:
 - Middleware: no header, malformed header, expired token → 401; a `STAFF`
   token on an `ADMIN`-only route → 403; a `STAFF` token on a staff route →
   200; a patient endpoint with no token → still 200 (no regression).
+
+## Amendment: the EXECUTIVE role (#86)
+
+The role set gained `EXECUTIVE` — seeded by migration `000015` together with
+the demo login `exec`/`demo` (same argon2id caveats as §9). It is listed by
+`RequireRole` on exactly one route group, `GET /api/v1/analytics/overview`,
+so an executive token is 403 on every other staff surface by construction.
+The decision text above is unchanged: adding a role remains a data change,
+not a schema change, exactly as §5 anticipated.

@@ -179,10 +179,10 @@ sequenceDiagram
 
 | สิ่งที่ต้องรู้ | ค่า |
 |---|---|
-| บัญชี demo | `admin` / `demo` (ADMIN) · `staff` / `demo` (STAFF) — **รหัสผ่านสาธิตเท่านั้น** hash อยู่ใน migration ที่เปิดสาธารณะ |
+| บัญชี demo | `admin` / `demo` (ADMIN) · `staff` / `demo` (STAFF) · `exec` / `demo` (EXECUTIVE — เข้าได้เฉพาะ analytics, #86) — **รหัสผ่านสาธิตเท่านั้น** hash อยู่ใน migration ที่เปิดสาธารณะ |
 | อายุ token | access 15 นาที (`ACCESS_TOKEN_TTL`) · refresh 7 วัน (`REFRESH_TOKEN_TTL`) |
 | คีย์เซ็น JWT | `JWT_SECRET` — ถ้าไม่ตั้ง API จะสุ่มคีย์ใหม่ทุกครั้งที่บูตพร้อม log warning (token เดิมใช้ไม่ได้หลัง restart) |
-| endpoint ที่ต้องมี token | `GET /api/v1/staff/visits` · `POST .../steps/{stepKey}/transition` · `POST .../clinics/{clinicCode}/close-round` · `GET /api/v1/auth/me` |
+| endpoint ที่ต้องมี token | `GET /api/v1/staff/visits` · `POST .../steps/{stepKey}/transition` · `POST .../clinics/{clinicCode}/close-round` · `GET /api/v1/auth/me` · `GET /api/v1/analytics/overview` (`STAFF`/`ADMIN`/`EXECUTIVE`, #86) |
 | ยังเปิดอยู่โดยตั้งใจ | `GET /api/v1/journeys/{visitId}`, service point, location, route — หน้าจอผู้ป่วยใช้ endpoint เดียวกัน การผูก journey กับ session ของผู้ป่วยเองเป็นงานอีกก้อน (ADR-0010 §7) |
 
 ### 1. ผู้ป่วย (Patient)
@@ -345,7 +345,7 @@ sequenceDiagram
 
 ### 5. ผู้บริหารโรงพยาบาล (Executive)
 
-> **ออกแบบไว้ · ยังไม่พัฒนา** — อยู่ในกลุ่ม Should Have (S7) ของ MVP scope
+> **API พร้อมใช้ · หน้าจอ dashboard กำลังตามมา (#87)** — อยู่ในกลุ่ม Should Have (S7) ของ MVP scope
 
 ```mermaid
 sequenceDiagram
@@ -356,13 +356,15 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     E->>W: เปิด dashboard
-    W->>A: GET /api/v1/analytics/... (ยังไม่มี)
-    A->>DB: รวมเวลาที่แต่ละขั้นตอนอยู่ในสถานะ WAITING/STARTED
+    W->>A: GET /api/v1/analytics/overview?window=today
+    A->>DB: รวมจาก journey_step_status_event ตามหน้าต่างเวลา (เที่ยงคืนตาม Asia/Bangkok)
     A-->>W: เวลารอเฉลี่ยต่อจุดบริการ + จุดที่เป็นคอขวด
     W-->>E: จัดสรรกำลังคนไปยังจุดที่ติดขัด
 ```
 
-ข้อมูลดิบที่ dashboard ต้องใช้ถูกเก็บอยู่ในตาราง `carepath.journey_step_status_event` (#85) — timeline แบบ append-only ที่บันทึกทุกการเปลี่ยนสถานะของ step พร้อมเวลา (`occurred_at`) ทั้งที่ planner เป็นคนขยับ (เช่น `PENDING→WAITING→READY`) และที่เจ้าหน้าที่สั่ง ส่วน `carepath.journey_step` เก็บเฉพาะสถานะปัจจุบันเท่านั้น (replan ลบแล้วสร้างใหม่ทุกรอบ จึงใช้ย้อนอดีตไม่ได้) สิ่งที่ยังขาดคือชั้น aggregate และหน้าจอ
+ข้อมูลดิบที่ dashboard ต้องใช้ถูกเก็บอยู่ในตาราง `carepath.journey_step_status_event` (#85) — timeline แบบ append-only ที่บันทึกทุกการเปลี่ยนสถานะของ step พร้อมเวลา (`occurred_at`) ทั้งที่ planner เป็นคนขยับ (เช่น `PENDING→WAITING→READY`) และที่เจ้าหน้าที่สั่ง ส่วน `carepath.journey_step` เก็บเฉพาะสถานะปัจจุบันเท่านั้น (replan ลบแล้วสร้างใหม่ทุกรอบ จึงใช้ย้อนอดีตไม่ได้)
+
+ชั้น aggregate พร้อมแล้วในโมดูล `internal/analytics` (#86): `GET /api/v1/analytics/overview?window=today` คืนตัวเลขต่อจุดบริการ (กำลังรอ/กำลังให้บริการ, รอนานสุดตอนนี้, เวลารอเฉลี่ย, เวลาให้บริการเฉลี่ย, จำนวนที่เสร็จในวันนี้) และภาพรวม visit พร้อมจุดคอขวด — ค่าที่ยังไม่มีข้อมูลเป็น `null` (ไม่ใช่ 0) และไม่มีข้อมูลระดับผู้ป่วยเด็ดขาด (NFR-03) บทบาท `EXECUTIVE` (บัญชีสาธิต `exec/demo`) เข้าถึง endpoint นี้ได้เท่านั้น — ยิง API กลุ่มเจ้าหน้าที่อื่นจะได้ 403 ตาม ADR-0010 สิ่งที่เหลือคือหน้าจอ dashboard (#87) และข้อมูลย้อนหลังสำหรับ demo (#88)
 
 ### 6. ญาติผู้ป่วย (Relative)
 
@@ -521,6 +523,23 @@ docker compose up --build     # หรือ: make up
 | PostgreSQL | localhost:5432 |
 
 migration ของฐานข้อมูลรันอัตโนมัติผ่าน service `migrate` (golang-migrate) ก่อน API จะสตาร์ต
+
+หน้าเว็บคุยกับ API แบบ same-origin ผ่าน `/api` (dev: Vite proxy ส่งต่อให้, ดู `apps/web/vite.config.ts`) — ทดสอบบนมือถือจึง tunnel แค่ port เดียว
+
+### รูปแบบ production (single origin)
+
+```bash
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+สถาปัตยกรรมต่างจาก dev compose: nginx เป็นประตูเดียว (serve static build ของเว็บ + proxy `/api` ไปให้ API — รายละเอียดอยู่ใน `infra/docker/nginx.conf`) API กับ PostgreSQL ไม่เปิดออกนอก docker network เหลือเปิดแค่:
+
+| บริการ | URL |
+|---|---|
+| Edge (web + API) | http://localhost:{`CAREPATH_EDGE_PORT` หรือ 80} |
+| Mock HIS console | http://localhost:8090/console |
+
+ถ้าจะชี้ LIFF endpoint มาที่ stack นี้ ต้องมี TLS ครอบหน้า edge ก่อน (LIFF รับเฉพาะ HTTPS นอกจาก localhost)
 
 ### วิธีที่ 2: รันแยกทีละตัว
 

@@ -33,7 +33,12 @@ services:
       - ./infra/postgres/migrations:/migrations:ro
     command:
       - -path=/migrations
-      - -database=postgres://${POSTGRES_USER:-carepath}:${POSTGRES_PASSWORD:-carepath}@postgres:5432/${POSTGRES_DB:-carepath}?sslmode=disable
+      # search_path=public pins golang-migrate's bookkeeping table to
+      # public.schema_migrations. Without it the CLI resolves "the first
+      # schema in search_path" — which becomes carepath once migration
+      # 000001 creates it — and starts a second, empty schema_migrations
+      # there, re-running already-applied migrations against live tables.
+      - -database=postgres://${POSTGRES_USER:-carepath}:${POSTGRES_PASSWORD:-carepath}@postgres:5432/${POSTGRES_DB:-carepath}?sslmode=disable&search_path=public
       - up
 
   api:
@@ -66,7 +71,12 @@ services:
       context: .
       dockerfile: infra/docker/web.Dockerfile
     environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+      # Empty by default → the browser talks same-origin to the Vite server,
+      # which proxies /api to the backend. (`-` not `:-` so an explicitly
+      # empty value in .env isn't replaced by a default.)
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL-}
+      # Where the Vite /api proxy forwards inside the docker network.
+      API_PROXY_TARGET: ${API_PROXY_TARGET:-http://api:8080}
     depends_on:
       - api
     ports:

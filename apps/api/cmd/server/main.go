@@ -11,11 +11,17 @@ import (
 	"net/url"
 	"os"
 	"time"
+	// The analytics timezone (#86) resolves through the IANA database,
+	// which the minimal container image does not ship — embed it so
+	// ANALYTICS_TIMEZONE works in every deployment shape.
+	_ "time/tzdata"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/swaggo/swag"
 
 	_ "carepath/apps/api/docs"
+	"carepath/apps/api/internal/analytics"
+	analyticspostgres "carepath/apps/api/internal/analytics/postgres"
 	"carepath/apps/api/internal/auth"
 	authpostgres "carepath/apps/api/internal/auth/postgres"
 	"carepath/apps/api/internal/his/httpclient"
@@ -172,6 +178,17 @@ func run(ctx context.Context, log *slog.Logger) error {
 	// (ADR-0010 §7 — a blanket guard would break the patient screens).
 	journey.NewHandler(journeys).Register(app.Group("/api/v1"),
 		auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin))
+	// Executive analytics (#86): read-only aggregates over the timeline the
+	// journey module writes (#85) — journey เขียน · analytics อ่าน. STAFF
+	// and ADMIN keep their existing reach; EXECUTIVE logins reach this
+	// surface and nothing else (they stay 403 on every /staff route above).
+	analyticsService, err := analytics.NewService(analyticspostgres.New(database), database,
+		envOrDefault("ANALYTICS_TIMEZONE", "Asia/Bangkok"))
+	if err != nil {
+		return err
+	}
+	analytics.NewHandler(analyticsService).Register(app.Group("/api/v1"),
+		auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin, auth.RoleExecutive))
 	servicepoint.NewHandler(servicePoints).Register(app.Group("/api/v1"))
 	locationHandler := location.NewHandler(locations)
 	locationHandler.Register(app.Group("/api/v1"))
