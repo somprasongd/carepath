@@ -202,7 +202,7 @@ export const staffRoleOptions: StaffRoleOption[] = [
   {
     id: 'registration',
     label: 'เจ้าหน้าที่ลงทะเบียน',
-    scope: 'ดูรายการรหัสบริการตามแผนการดูแล เพื่อกรอกเข้า HIS ตอนเปิด visit',
+    scope: 'ดูกฎที่ระบบใช้วางแผนการเดินของผู้ป่วย (อ่านอย่างเดียว)',
     landing: '/staff/pathway-templates',
     story: 'US-13',
   },
@@ -226,62 +226,6 @@ export const staffRoleOptions: StaffRoleOption[] = [
     scope: 'ดูภาพรวมเวลารอและจุดคอขวด อ่านอย่างเดียว',
     landing: '/staff/overview',
     story: 'US-18',
-  },
-]
-
-/*
- * ── Pathway templates (FR-13, FR-14) ────────────────────────────────────
- * Per ADR-0008 the HIS opens the visit and orders services itself — these
- * are reference checklists staff read off (or copy) into the HIS, not data
- * CarePath sends anywhere. Every step's `code` is a real service code, since
- * it's meant to be typed into the HIS's own service-code field verbatim.
- */
-
-export type TemplateStep = { title: string; code: string }
-
-export type PathwayTemplate = {
-  id: string
-  name: string
-  description: string
-  steps: TemplateStep[]
-}
-
-export const pathwayTemplates: PathwayTemplate[] = [
-  {
-    id: 'opd-new',
-    name: 'ผู้ป่วยใหม่ OPD',
-    description: 'ผู้ป่วยนอกที่ยังไม่เคยมีประวัติในโรงพยาบาล',
-    steps: [
-      { title: 'ลงทะเบียน', code: 'REG-01' },
-      { title: 'คัดกรอง', code: 'TRIAGE-01' },
-      { title: 'ตรวจที่ห้องตรวจ OPD', code: 'OPD-EXAM-01' },
-      { title: 'การเงิน', code: 'CASHIER-01' },
-      { title: 'รับยา', code: 'PHARMACY-01' },
-    ],
-  },
-  {
-    id: 'dm-followup',
-    name: 'นัดติดตามเบาหวาน',
-    description: 'ผู้ป่วยเดิมที่ต้องเจาะเลือดก่อนพบแพทย์',
-    steps: [
-      { title: 'ลงทะเบียน', code: 'REG-01' },
-      { title: 'เจาะเลือด', code: 'LAB-01' },
-      { title: 'ตรวจที่ห้องตรวจ OPD', code: 'OPD-EXAM-01' },
-      { title: 'การเงิน', code: 'CASHIER-01' },
-      { title: 'รับยา', code: 'PHARMACY-01' },
-    ],
-  },
-  {
-    id: 'annual-checkup',
-    name: 'ตรวจสุขภาพประจำปี',
-    description: 'แพ็กเกจตรวจสุขภาพ ไม่ผ่านห้องตรวจ OPD',
-    steps: [
-      { title: 'ลงทะเบียน', code: 'REG-01' },
-      { title: 'เจาะเลือด', code: 'LAB-01' },
-      { title: 'เอกซเรย์', code: 'XRAY-01' },
-      { title: 'ตรวจร่างกาย', code: 'CHECKUP-01' },
-      { title: 'การเงิน', code: 'CASHIER-01' },
-    ],
   },
 ]
 

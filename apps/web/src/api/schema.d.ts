@@ -1129,6 +1129,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/staff/planning-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description FR-13/US-16 (#100): the journey-planning rules the planner actually runs on — the phase ladder (ADR-0009 §3), the order-type to step-kind mapping, and worked examples computed by calling the real planner over canonical scenarios. Everything is derived from planner.go itself, so editing the planner changes this response and the staff screen can never drift from the rules in force. Read-only: the rules are code, not editable data (ADR-0009 — a CRUD template editor would walk the model back to what was retired). Codes only (ADR-0012); all display text lives in the client. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The planning rules in force */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PlanningRules"];
+                    };
+                };
+                /** @description Missing, malformed, or expired staff access token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Authenticated, but the user's roles do not allow this action */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/overview": {
         parameters: {
             query?: never;
@@ -1420,6 +1474,59 @@ export interface components {
             recommended?: components["schemas"]["JourneyStep"] | null;
             /** Format: date-time */
             syncedAt: string;
+        };
+        /** @description The journey-planning rules in force, derived from the planner itself (#100): the phase ladder, the order-type mapping, and worked examples computed by the real planner. Editing the planner code changes this response — that is the point. */
+        PlanningRules: {
+            /** @description The phase ladder in ascending order (ADR-0009 §3). A step becomes actionable only once every strictly-lower phase is COMPLETED or CANCELLED; steps sharing a phase carry no order between them (§6). */
+            phases: components["schemas"]["PlanningPhase"][];
+            /** @description Every canonical HIS order type and the step kind the planner derives from it, in the his package's canonical order. */
+            orderTypes: components["schemas"]["PlanningOrderType"][];
+            /** @description Worked scenarios — HIS facts fed to the real Plan function and the steps it returned, statuses included. Not illustrative strings: the same inputs produce the same steps a patient would see. */
+            examples: components["schemas"]["PlanningExample"][];
+        };
+        PlanningPhase: {
+            /** @description Phase number; strictly lower means strictly earlier. */
+            number: number;
+            /**
+             * @description Stable phase code (ADR-0012 — the client owns display text).
+             * @enum {string}
+             */
+            key: "REGISTRATION" | "PRE_VISIT" | "CLINIC" | "MID_VISIT" | "RETURN_CLINIC" | "CASHIER" | "PHARMACY";
+        };
+        PlanningOrderType: {
+            orderType: string;
+            /** @description The step kind an order of this type becomes, or empty when the order type deliberately produces no walked step: DRUG only surfaces as the visit-wide PHARMACY step. */
+            stepKind: string;
+        };
+        PlanningExample: {
+            /** @description Stable scenario code the client keys its display text on. */
+            id: string;
+            scenario: components["schemas"]["PlanningExampleScenario"];
+            steps: components["schemas"]["PlanningExampleStep"][];
+        };
+        /** @description The HIS facts a worked scenario feeds the planner. */
+        PlanningExampleScenario: {
+            visitType: string;
+            /** @description Clinic codes the visit belongs to. */
+            clinics: string[];
+            orders: components["schemas"]["PlanningExampleOrder"][];
+        };
+        /** @description One order of a worked scenario. An order placed at or before the visit opened (empty orderedByClinic in the canonical scenarios) is pre-visit; one placed later belongs to the named clinic (mid-visit). */
+        PlanningExampleOrder: {
+            orderRef: string;
+            orderType: string;
+            orderedByClinic: string;
+        };
+        /** @description One step of a worked example — the plan Step shape minus projection concerns (no service-point binding behind a synthetic scenario). */
+        PlanningExampleStep: {
+            stepKey: string;
+            sequence: number;
+            kind: components["schemas"]["StepKind"];
+            clinicCode?: string | null;
+            round?: number | null;
+            orderRefs?: string[];
+            /** @enum {string} */
+            status: "PENDING" | "WAITING" | "READY" | "STARTED" | "COMPLETED" | "CANCELLED";
         };
         /** @description The one-time mint of a visit share link (ADR-0011). The token is the bearer credential the relative's device presents to GET /api/v1/shared/journey; the server keeps only its sha256, so this response is the last time anyone can read it. */
         ShareLinkResponse: {

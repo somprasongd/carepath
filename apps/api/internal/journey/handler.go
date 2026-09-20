@@ -25,6 +25,7 @@ func NewHandler(service Service) *Handler {
 func (h *Handler) Register(router fiber.Router, staffGuard, patientGuard fiber.Handler) {
 	router.Get("/journeys/:visitId", patientGuard, h.getJourney)
 	router.Get("/staff/visits", staffGuard, h.listVisits)
+	router.Get("/staff/planning-rules", staffGuard, h.planningRules)
 	router.Post("/journeys/:visitId/steps/:stepKey/transition", staffGuard, h.transitionStep)
 	router.Post("/journeys/:visitId/clinics/:clinicCode/close-round", staffGuard, h.closeRound)
 }
@@ -74,6 +75,23 @@ func (h *Handler) listVisits(c fiber.Ctx) error {
 		return httpx.Error(c, err)
 	}
 	return c.JSON(views)
+}
+
+// planningRules godoc
+//
+//	@Summary		Get the journey planning rules
+//	@Description	FR-13/US-16: the rules the planner actually runs on — the phase ladder (ADR-0009 §3), the order-type → step-kind mapping, and worked examples computed by the real Plan function. Read-only: editing rules is a code change, not a request. Codes only (ADR-0012); display text lives in the client.
+//	@Tags			staff
+//	@Security		bearerAuth
+//	@Produce		json
+//	@Success		200	{object}	journey.PlanningRules
+//	@Failure		401	{object}	httpx.ErrorResponse	"missing, malformed, or expired staff access token"
+//	@Failure		403	{object}	httpx.ErrorResponse	"authenticated, but the user's roles do not allow this action"
+//	@Router			/api/v1/staff/planning-rules [get]
+func (h *Handler) planningRules(c fiber.Ctx) error {
+	// Derived purely from planner.go (constants, map, Plan) — no database or
+	// HIS access, so the descriptor is served straight from the function.
+	return c.JSON(PlanningRulesDescriptor())
 }
 
 // transitionStep godoc

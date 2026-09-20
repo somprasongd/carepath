@@ -124,6 +124,87 @@ definitions:
         example: visit not found
         type: string
     type: object
+  journey.PlanningExample:
+    properties:
+      id:
+        type: string
+      scenario:
+        $ref: '#/definitions/journey.PlanningExampleScenario'
+      steps:
+        items:
+          $ref: '#/definitions/journey.PlanningExampleStep'
+        type: array
+    type: object
+  journey.PlanningExampleOrder:
+    properties:
+      orderRef:
+        type: string
+      orderType:
+        type: string
+      orderedByClinic:
+        type: string
+    type: object
+  journey.PlanningExampleScenario:
+    properties:
+      clinics:
+        items:
+          type: string
+        type: array
+      orders:
+        items:
+          $ref: '#/definitions/journey.PlanningExampleOrder'
+        type: array
+      visitType:
+        type: string
+    type: object
+  journey.PlanningExampleStep:
+    properties:
+      clinicCode:
+        type: string
+      kind:
+        type: string
+      orderRefs:
+        items:
+          type: string
+        type: array
+      round:
+        type: integer
+      sequence:
+        type: integer
+      status:
+        type: string
+      stepKey:
+        type: string
+    type: object
+  journey.PlanningOrderType:
+    properties:
+      orderType:
+        type: string
+      stepKind:
+        type: string
+    type: object
+  journey.PlanningPhase:
+    properties:
+      key:
+        type: string
+      number:
+        type: integer
+    type: object
+  journey.PlanningRules:
+    properties:
+      examples:
+        items:
+          $ref: '#/definitions/journey.PlanningExample'
+        type: array
+      orderTypes:
+        items:
+          $ref: '#/definitions/journey.PlanningOrderType'
+        type: array
+      phases:
+        items:
+          $ref: '#/definitions/journey.PlanningPhase'
+        type: array
+    type: object
   journey.StepView:
     properties:
       clinicCode:
@@ -1016,6 +1097,32 @@ paths:
       summary: Read the journey a share link points to
       tags:
       - share
+  /api/v1/staff/planning-rules:
+    get:
+      description: 'FR-13/US-16: the rules the planner actually runs on — the phase
+        ladder (ADR-0009 §3), the order-type → step-kind mapping, and worked examples
+        computed by the real Plan function. Read-only: editing rules is a code change,
+        not a request. Codes only (ADR-0012); display text lives in the client.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/journey.PlanningRules'
+        "401":
+          description: missing, malformed, or expired staff access token
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "403":
+          description: authenticated, but the user's roles do not allow this action
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Get the journey planning rules
+      tags:
+      - staff
   /api/v1/staff/visits:
     get:
       description: Every projected journey, freshest sync first — the same per-visit

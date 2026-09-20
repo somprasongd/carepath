@@ -927,6 +927,43 @@
                 }
             }
         },
+        "/api/v1/staff/planning-rules": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "FR-13/US-16: the rules the planner actually runs on — the phase ladder (ADR-0009 §3), the order-type → step-kind mapping, and worked examples computed by the real Plan function. Read-only: editing rules is a code change, not a request. Codes only (ADR-0012); display text lives in the client.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "staff"
+                ],
+                "summary": "Get the journey planning rules",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/journey.PlanningRules"
+                        }
+                    },
+                    "401": {
+                        "description": "missing, malformed, or expired staff access token",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "authenticated, but the user's roles do not allow this action",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/staff/visits": {
             "get": {
                 "description": "Every projected journey, freshest sync first — the same per-visit shape as the single-journey read. Reads the CarePath projection only; a visit not yet ingested is absent until its first fact lands.",
@@ -1165,6 +1202,131 @@
                 "error": {
                     "type": "string",
                     "example": "visit not found"
+                }
+            }
+        },
+        "journey.PlanningExample": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "scenario": {
+                    "$ref": "#/definitions/journey.PlanningExampleScenario"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/journey.PlanningExampleStep"
+                    }
+                }
+            }
+        },
+        "journey.PlanningExampleOrder": {
+            "type": "object",
+            "properties": {
+                "orderRef": {
+                    "type": "string"
+                },
+                "orderType": {
+                    "type": "string"
+                },
+                "orderedByClinic": {
+                    "type": "string"
+                }
+            }
+        },
+        "journey.PlanningExampleScenario": {
+            "type": "object",
+            "properties": {
+                "clinics": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "orders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/journey.PlanningExampleOrder"
+                    }
+                },
+                "visitType": {
+                    "type": "string"
+                }
+            }
+        },
+        "journey.PlanningExampleStep": {
+            "type": "object",
+            "properties": {
+                "clinicCode": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "orderRefs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "round": {
+                    "type": "integer"
+                },
+                "sequence": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "stepKey": {
+                    "type": "string"
+                }
+            }
+        },
+        "journey.PlanningOrderType": {
+            "type": "object",
+            "properties": {
+                "orderType": {
+                    "type": "string"
+                },
+                "stepKind": {
+                    "type": "string"
+                }
+            }
+        },
+        "journey.PlanningPhase": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "number": {
+                    "type": "integer"
+                }
+            }
+        },
+        "journey.PlanningRules": {
+            "type": "object",
+            "properties": {
+                "examples": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/journey.PlanningExample"
+                    }
+                },
+                "orderTypes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/journey.PlanningOrderType"
+                    }
+                },
+                "phases": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/journey.PlanningPhase"
+                    }
                 }
             }
         },
