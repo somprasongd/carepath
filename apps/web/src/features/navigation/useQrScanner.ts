@@ -20,6 +20,36 @@ export function qrScannerSupported(): boolean {
 }
 
 /**
+ * The detection loop, extracted from the hook so its contract is testable
+ * without a camera: one callback per *distinct* raw value (a sticker held in
+ * view fires the detector continuously — the report must not queue per
+ * frame), a throwing frame (video not warmed up yet) skips to the next tick
+ * instead of killing the loop, and a flipped `isCancelled` ends it.
+ */
+export async function runQrDetectionLoop(options: {
+  detectFrame: () => Promise<string | undefined>
+  onDetect: (raw: string) => void
+  isCancelled: () => boolean
+  intervalMs?: number
+}): Promise<void> {
+  const { detectFrame, onDetect, isCancelled, intervalMs = 250 } = options
+  let lastDetected: string | null = null
+  while (!isCancelled()) {
+    try {
+      const raw = await detectFrame()
+      if (raw && raw !== lastDetected) {
+        lastDetected = raw
+        onDetect(raw)
+      }
+    } catch {
+      // A frame too early (readyState < HAVE_METADATA) throws; retry on
+      // the next tick rather than killing the loop.
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+}
+
+/**
  * Live QR scanning for the navigate screen's location report: opens the back
  * camera into `videoRef`, detects in a loop, and calls `onDetect` once per
  * *new* raw value (a sticker held in view fires repeatedly; the report must
@@ -33,7 +63,6 @@ export function useQrScanner(onDetect: (raw: string) => void) {
   const [state, setState] = useState<QrScannerState>(() =>
     qrScannerSupported() ? 'scanning' : 'unsupported',
   )
-  const lastDetected = useRef<string | null>(null)
   const detectRef = useRef(onDetect)
 
   // Keep the latest callback reachable from the detection loop without
@@ -83,20 +112,14 @@ export function useQrScanner(onDetect: (raw: string) => void) {
       }
 
       const detector = new BarcodeDetector({ formats: ['qr_code'] })
-      while (!cancelled) {
-        try {
+      await runQrDetectionLoop({
+        detectFrame: async () => {
           const codes = await detector.detect(video)
-          const raw = codes.find((code) => code.rawValue !== '')?.rawValue
-          if (raw && raw !== lastDetected.current) {
-            lastDetected.current = raw
-            detectRef.current(raw)
-          }
-        } catch {
-          // A frame too early (readyState < HAVE_METADATA) throws; retry on
-          // the next tick rather than killing the loop.
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250))
-      }
+          return codes.find((code) => code.rawValue !== '')?.rawValue
+        },
+        onDetect: (raw) => detectRef.current(raw),
+        isCancelled: () => cancelled,
+      })
     })()
 
     return stop
