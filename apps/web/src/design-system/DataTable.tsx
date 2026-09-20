@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
+import { cn } from 'cn'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
 
 export type Column<Row> = {
@@ -13,6 +14,9 @@ export type DataTableProps<Row> = {
   rows: Row[]
   rowKey: (row: Row) => string
   caption?: string
+  /** Rows become clickable/keyboard-actionable (Enter/Space) — the desktop counterpart of a selectable card list. */
+  onRowClick?: (row: Row) => void
+  isRowSelected?: (row: Row) => boolean
 }
 
 /**
@@ -20,9 +24,18 @@ export type DataTableProps<Row> = {
  * a separate design. Tabular data deserves a real table once there is room.
  *
  * Built on shadcn's Table, minus its row hover: DESIGN.md wants this reading
- * like a printed directory board, so nothing here lights up under the cursor.
+ * like a printed directory board, so nothing here lights up under the cursor
+ * — unless `onRowClick` makes the row a selectable target, in which case it
+ * gets the same hover/selected treatment as the mobile card it stands in for.
  */
-export function DataTable<Row>({ columns, rows, rowKey, caption }: DataTableProps<Row>) {
+export function DataTable<Row>({
+  columns,
+  rows,
+  rowKey,
+  caption,
+  onRowClick,
+  isRowSelected,
+}: DataTableProps<Row>) {
   return (
     <Table className="border-collapse">
       {caption && (
@@ -45,18 +58,39 @@ export function DataTable<Row>({ columns, rows, rowKey, caption }: DataTableProp
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row) => (
-          <TableRow key={rowKey(row)} className="border-line hover:bg-transparent">
-            {columns.map((col) => (
-              <TableCell
-                key={col.key}
-                className="px-0 py-4 align-middle font-sans text-body-sm text-ink"
-              >
-                {col.render(row)}
-              </TableCell>
-            ))}
-          </TableRow>
-        ))}
+        {rows.map((row) => {
+          const selected = isRowSelected?.(row) ?? false
+          const activate = () => onRowClick?.(row)
+          const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return
+            event.preventDefault()
+            activate()
+          }
+          return (
+            <TableRow
+              key={rowKey(row)}
+              className={cn(
+                'border-line',
+                onRowClick ? 'cursor-pointer hover:bg-primary-tint' : 'hover:bg-transparent',
+                selected && 'bg-primary-tint',
+              )}
+              onClick={onRowClick ? activate : undefined}
+              onKeyDown={onRowClick ? onKeyDown : undefined}
+              tabIndex={onRowClick ? 0 : undefined}
+              role={onRowClick ? 'button' : undefined}
+              aria-pressed={onRowClick ? selected : undefined}
+            >
+              {columns.map((col) => (
+                <TableCell
+                  key={col.key}
+                  className="px-0 py-4 align-middle font-sans text-body-sm text-ink"
+                >
+                  {col.render(row)}
+                </TableCell>
+              ))}
+            </TableRow>
+          )
+        })}
       </TableBody>
     </Table>
   )

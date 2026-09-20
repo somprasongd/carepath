@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { cn } from 'cn'
 import { Button, InfoNote, Meta, PageTitle, staffTitle } from '@/design-system'
 import {
   journeyQueryOptions,
@@ -71,15 +72,15 @@ export function Patients() {
             ให้ ingest ดึงเข้า projection
           </InfoNote>
         ) : (
-          <div className="grid grid-cols-1 items-start gap-4 @6xl:grid-cols-[minmax(300px,360px)_1fr] @7xl:gap-6">
-            <div className={explicitId ? 'hidden @6xl:block' : 'block'}>
+          <div className="grid grid-cols-1 items-start gap-4 @6xl:grid-cols-[minmax(300px,360px)_1fr] @7xl:grid-cols-[minmax(460px,560px)_1fr] @7xl:gap-6">
+            <div className={cn('min-w-0', explicitId ? 'hidden @6xl:block' : 'block')}>
               <StaffVisitList
                 journeys={journeys}
                 selectedId={selectedId}
                 onSelect={setExplicitId}
               />
             </div>
-            <div className={explicitId ? 'block' : 'hidden @6xl:block'}>
+            <div className={cn('min-w-0', explicitId ? 'block' : 'hidden @6xl:block')}>
               {detail.data ? (
                 <StaffVisitDetail
                   journey={detail.data}

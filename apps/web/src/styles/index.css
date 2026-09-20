@@ -204,3 +204,20 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 }
+
+/* ── 4. Root sizing ───────────────────────────────────────────────────── */
+
+/*
+ * Screen (design-system/Screen.tsx) fills "whatever box it is given" via
+ * h-full — that only resolves against the viewport if html/body/#root
+ * actually carry a height down to it. Without this, the app grows to its
+ * content's natural height instead, the page (not just ScreenBody) picks up
+ * its own scrollbar, and that scrollbar's width shrinks the @container by
+ * ~15px — enough to drop it under a breakpoint like @7xl's 1280px even when
+ * the window itself is exactly that wide.
+ */
+html,
+body,
+#root {
+  height: 100%;
+}

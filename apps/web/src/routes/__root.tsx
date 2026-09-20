@@ -7,7 +7,7 @@ import { Outlet, createRootRoute } from '@tanstack/react-router'
  */
 export const Route = createRootRoute({
   component: () => (
-    <div className="font-sans text-ink antialiased">
+    <div className="h-full font-sans text-ink antialiased">
       <Outlet />
     </div>
   ),

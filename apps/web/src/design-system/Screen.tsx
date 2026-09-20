@@ -51,7 +51,7 @@ export function ScreenBody({
   return (
     <main
       className={cn(
-        'flex-1 overflow-y-auto px-gutter pt-2 pb-24 @7xl:px-gutter-desktop @7xl:py-8',
+        'min-h-0 flex-1 overflow-y-auto px-gutter pt-2 pb-24 @7xl:px-gutter-desktop @7xl:py-8',
         className
       )}
     >

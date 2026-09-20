@@ -40,7 +40,7 @@ export function StaffShell({
         className="hidden @7xl:flex"
       />
 
-      <div className="relative flex flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <AppBar
           className="@7xl:hidden"
           wordmark={
