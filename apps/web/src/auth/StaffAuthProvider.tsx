@@ -5,6 +5,7 @@ import {
   clearStaffSession,
   loadStaffRefreshToken,
   onStaffSessionExpired,
+  releaseStaffAccessToken,
   restoreStaffSession,
   type StaffIdentity,
   type StaffTokenPair,
@@ -45,6 +46,10 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void restore()
+    // Leaving the console hands the bearer back to the patient surface (#96
+    // made patient routes session-guarded, and a lingering staff JWT would
+    // 401 them). The persisted refresh token restores this session on return.
+    return () => releaseStaffAccessToken()
   }, [restore])
 
   // The client module owns the 401-retry machinery and cannot touch the

@@ -18,11 +18,12 @@ func NewHandler(service Service) *Handler {
 }
 
 // Register mounts the journey routes under the given /api/v1 router. The
-// staff-only routes (the monitor read and both staff commands) are wrapped
-// in the given guard so the composition root decides the policy — per
-// ADR-0010 the patient journey read must stay open.
-func (h *Handler) Register(router fiber.Router, staffGuard fiber.Handler) {
-	router.Get("/journeys/:visitId", h.getJourney)
+// staff-only routes (the monitor read and both staff commands) take the
+// staff guard; the patient journey read takes the patient guard (#96 — the
+// session must have claimed the visit). Both guards are injected so the
+// composition root decides the policy (ADR-0010).
+func (h *Handler) Register(router fiber.Router, staffGuard, patientGuard fiber.Handler) {
+	router.Get("/journeys/:visitId", patientGuard, h.getJourney)
 	router.Get("/staff/visits", staffGuard, h.listVisits)
 	router.Post("/journeys/:visitId/steps/:stepKey/transition", staffGuard, h.transitionStep)
 	router.Post("/journeys/:visitId/clinics/:clinicCode/close-round", staffGuard, h.closeRound)
@@ -40,12 +41,14 @@ type transitionRequestBody struct {
 // getJourney godoc
 //
 //	@Summary		Get the patient journey
-//	@Description	Returns the CarePath-derived journey plan (ADR-0009): steps in display order, each resolved to its service point, with every currently-actionable step and CarePath's recommendation among them. A completed visit is reported with completed=true and no actionable steps.
+//	@Description	Returns the CarePath-derived journey plan (ADR-0009): steps in display order, each resolved to its service point, with every currently-actionable step and CarePath's recommendation among them. A completed visit is reported with completed=true and no actionable steps. Patient-surface (#96): the patient session's identity must have claimed this visit; an unclaimed or unknown visit answers the same 404.
 //	@Tags			journeys
+//	@Security		bearerAuth
 //	@Produce		json
 //	@Param			visitId	path	string	true	"Visit ID"
 //	@Success		200	{object}	journey.View
-//	@Failure		404	{object}	httpx.ErrorResponse	"no journey projected for this visit"
+//	@Failure		401	{object}	httpx.ErrorResponse	"missing or invalid patient session"
+//	@Failure		404	{object}	httpx.ErrorResponse	"visit unknown, or not claimed by this session — indistinguishable"
 //	@Failure		500	{object}	httpx.ErrorResponse	"internal server error"
 //	@Router			/api/v1/journeys/{visitId} [get]
 func (h *Handler) getJourney(c fiber.Ctx) error {

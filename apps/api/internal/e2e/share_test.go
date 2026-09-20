@@ -44,6 +44,7 @@ func newShareApp(t *testing.T, database *db.DB) *fiber.App {
 		auth.NewTokenIssuer([]byte("e2e-test-secret"), time.Minute), time.Hour)
 	sessions := session.NewService(sessionpostgres.New(database), nil,
 		true /* allowDemo */, time.Hour)
+	claims := sessionpostgres.NewClaimRepo(database)
 	// The journey service is fully wired (real service-point resolution), so
 	// GetJourney runs for real — the shared answer must come from the actual
 	// projection, not a stub. The HIS client is never reached: this test only
@@ -55,14 +56,18 @@ func newShareApp(t *testing.T, database *db.DB) *fiber.App {
 	shares := share.NewService(sharepostgres.New(database), journeys, database, time.Hour)
 
 	app := fiber.New()
-	session.NewHandler(sessions).Register(app.Group("/api/v1"))
+	session.NewHandler(sessions, claims).Register(app.Group("/api/v1"))
 	authHandler := auth.NewHandler(authService)
 	authHandler.Register(app.Group("/api/v1"))
 	authHandler.RegisterMe(app.Group("/api/v1"), auth.RequireRole(authService))
+	// The patient surfaces take the real visit-ownership guard (#96): the
+	// session's identity must have claimed the visit before reading or
+	// sharing it.
+	patientVisitGuard := session.RequirePatientVisit(sessions, claims)
 	journey.NewHandler(journeys).Register(app.Group("/api/v1"),
-		auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin))
-	share.NewHandler(shares).Register(app.Group("/api/v1"),
-		session.RequireSession(sessions))
+		auth.RequireRole(authService, auth.RoleStaff, auth.RoleAdmin),
+		patientVisitGuard)
+	share.NewHandler(shares).Register(app.Group("/api/v1"), patientVisitGuard)
 	return app
 }
 
@@ -155,6 +160,16 @@ func TestShareLinkLifecycle(t *testing.T) {
 		t.Fatalf("create without session: status %d: %s, want 401", resp.StatusCode, body)
 	}
 	patient := patientSession(t, app)
+	// #96: a session that has not claimed the visit cannot share it — and the
+	// 404 must not reveal whether the visit exists.
+	resp, body = doJSON(t, app, http.MethodPost, "/api/v1/journeys/"+shareVisit+"/share", patient, "")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("create before claim: status %d: %s, want 404", resp.StatusCode, body)
+	}
+	resp, body = doJSON(t, app, http.MethodPost, "/api/v1/journeys/"+shareVisit+"/claim", patient, "")
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("claim: status %d: %s, want 204", resp.StatusCode, body)
+	}
 	resp, body = doJSON(t, app, http.MethodPost, "/api/v1/journeys/"+shareVisit+"/share", patient, "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("create: status %d: %s, want 200", resp.StatusCode, body)
@@ -226,17 +241,17 @@ func TestShareLinkLifecycle(t *testing.T) {
 		t.Fatalf("share token on create: status %d, want 401", resp.StatusCode)
 	}
 
-	// The open patient journey read stays open (ADR-0010 §7): the share
-	// token is not a credential there and grants nothing beyond what an
-	// anonymous caller already gets — the accepted risk ADR-0011 §7
-	// records, asserted here as equivalence, not as rejection.
+	// Since #96 the journey read is a patient surface behind the session +
+	// visit claim: neither a share token nor an anonymous caller reaches it
+	// — the risk ADR-0011 §7 once recorded as accepted is closed, and the
+	// cross-token rule now holds in this direction too.
 	resp, _ = get(t, app, "/api/v1/journeys/"+shareVisit, link.Token)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("share token on open journey read: status %d, want 200 by design", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("share token on journey read: status %d, want 401", resp.StatusCode)
 	}
 	resp, _ = get(t, app, "/api/v1/journeys/"+shareVisit, "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("anonymous journey read: status %d, want the same 200 by design", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous journey read: status %d, want 401", resp.StatusCode)
 	}
 
 	// Revoking is idempotent and kills the link…

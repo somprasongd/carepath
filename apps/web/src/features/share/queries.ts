@@ -1,5 +1,6 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGetShared, apiPost } from '@/api/client'
+import { ensureVisitClaimed } from '@/features/visit'
 import type { components } from '@/api/schema'
 
 export type ShareLinkResponse = components['schemas']['ShareLinkResponse']
@@ -19,11 +20,16 @@ export function shareUrl(visitId: string): string {
 /**
  * Patient action (#89/#90): mint a tracking link for this visit. The token
  * comes back exactly once — the sheet that triggered it is the only place
- * it is ever held.
+ * it is ever held. Since #96 both share commands sit behind the visit
+ * claim, so the claim is ensured first — a no-op whenever the journey
+ * screen was loaded, which is the only path to this sheet.
  */
 export function useCreateShareLink(visitId: string) {
   return useMutation({
-    mutationFn: () => apiPost<ShareLinkResponse>(shareUrl(visitId), {}),
+    mutationFn: async () => {
+      await ensureVisitClaimed(visitId)
+      return apiPost<ShareLinkResponse>(shareUrl(visitId), {})
+    },
   })
 }
 
@@ -35,7 +41,10 @@ export function useCreateShareLink(visitId: string) {
 export function useStopSharing(visitId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => apiDelete(shareUrl(visitId)),
+    mutationFn: async () => {
+      await ensureVisitClaimed(visitId)
+      return apiDelete(shareUrl(visitId))
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['shared-journey'] })
     },
