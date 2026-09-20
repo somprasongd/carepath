@@ -79,10 +79,12 @@ describe('navigatePlanForJourney', () => {
     expect(plan).toEqual({
       state: 'plan',
       title: format(th, 'navigate.routeTitle', { name: th['step.title.PHARMACY'] }),
-      name: 'Pharmacy',
+      // The destination name rides the catalog by code (ADR-0012 §1), not
+      // the server-authored name in the fixture.
+      name: th['sp.PHARMACY'],
       subtitle: format(th, 'navigate.subtitle', {
         floor: format(th, 'common.floor', { code: '1' }),
-        name: 'Pharmacy',
+        name: th['sp.PHARMACY'],
         place: 'PHARMACY-01',
       }),
       floorId: 'I-1301',
@@ -126,6 +128,8 @@ describe('navigatePlanForJourney', () => {
     expect(plan).toEqual({
       state: 'plan',
       title: 'Directions to Medication pickup',
+      // sp.PHARMACY's catalog name — the fixture's server name happens to
+      // match it here; the unmapped fallback is pinned in its own test.
       name: 'Pharmacy',
       subtitle: 'Floor 1 · Pharmacy · PHARMACY-01',
       floorId: 'I-1301',
@@ -135,6 +139,27 @@ describe('navigatePlanForJourney', () => {
       x: 885,
       y: 190,
     })
+  })
+
+  it('falls back to the server-authored name for an unmapped service point code (#94 AC)', () => {
+    // The live case this pins: CLINIC:MED's server name is Thai; in English
+    // the catalog supplies "Internal Medicine" instead — and when a code has
+    // no catalog entry at all, the server name shows as-is, Thai or not,
+    // because an honest name beats a fabricated one (ADR-0012 §1).
+    const plan = navigatePlanForJourney(
+      journeyWithRecommended({
+        stepKey: 'XRAY',
+        sequence: 2,
+        kind: 'XRAY',
+        status: 'READY',
+        servicePointId: 'SP-X',
+        servicePoint: { id: 'SP-X', code: 'X', name: 'จุดกายภาพบำบัด', placeId: 'NOPE-01' },
+      }),
+      false,
+      'en',
+    )
+
+    expect(plan).toEqual({ state: 'unsupported', title: 'Directions to X-ray', name: 'จุดกายภาพบำบัด' })
   })
 
   it('plans an upper-floor destination — the other seeded plan', () => {

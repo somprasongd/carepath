@@ -1,9 +1,23 @@
-import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
+import { storeLocale } from './initial-locale'
 import { en } from './locales/en'
 import { th, type Catalog, type MessageKey } from './locales/th'
 
 export type Locale = 'th' | 'en'
 export type { Catalog, MessageKey }
+
+// Re-exported for callers that already import useT/useLocale from '@/i18n';
+// the component itself lives in its own file (this one stays JSX-free).
+export { LanguageToggle } from './LanguageToggle'
 
 const CATALOGS: Record<Locale, Catalog> = { th, en }
 
@@ -45,12 +59,13 @@ export function format(
 }
 
 /**
- * App locale context. #92 ships the mechanism with Thai fixed: no toggle,
- * no persistence, no `<html lang>` writes — those land with #94. The default
- * value (rather than a null that throws) keeps provider-less usage — the
- * /design reference screens, tests — rendering in Thai instead of crashing.
- * `initialLocale` exists for the English render test now and for #94's
- * resolved persisted/LINE locale at the app root later.
+ * App locale context (#94). Switching is instant — every screen reads the
+ * locale per render through `useT`/`useLocale`, no reload — and a switch
+ * persists to localStorage (guarded; storage is best effort) and updates
+ * `<html lang>` so screen readers pronounce the visible script. The
+ * provider-less default (rather than a null that throws) keeps
+ * provider-less usage — the /design reference screens, tests — rendering
+ * in Thai instead of crashing.
  */
 type LocaleContextValue = { locale: Locale; setLocale: (locale: Locale) => void }
 
@@ -66,8 +81,18 @@ export function LocaleProvider({
   children: ReactNode
   initialLocale?: Locale
 }) {
-  const [locale, setLocale] = useState<Locale>(initialLocale)
-  const value = useMemo<LocaleContextValue>(() => ({ locale, setLocale }), [locale])
+  const [locale, setLocaleState] = useState<Locale>(initialLocale)
+  const setLocale = useCallback((next: Locale) => {
+    setLocaleState(next)
+    storeLocale(next)
+  }, [])
+  // Covers the resolved boot locale too (index.html ships a Thai default;
+  // a stored/LINE English choice corrects it on mount) — renderToString
+  // tests never run effects, so this stays DOM-only.
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
+  const value = useMemo<LocaleContextValue>(() => ({ locale, setLocale }), [locale, setLocale])
   // createElement instead of JSX so this stays `index.ts`, as the i18n
   // module's plain-TS entry point.
   return createElement(LocaleContext.Provider, { value }, children)

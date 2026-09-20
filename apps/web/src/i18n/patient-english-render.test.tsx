@@ -9,7 +9,7 @@ import { JourneyScreen, JourneyShell } from '@/routes/patient/-JourneyScreen'
 import { NavigateScreen } from '@/routes/patient/-NavigateScreen'
 import { ShareSheet } from '@/features/share'
 import { VisitOutcomeCard } from '@/features/visit'
-import { LocaleProvider } from '@/i18n'
+import { LanguageToggle, LocaleProvider } from '@/i18n'
 import { en } from './locales/en'
 
 /**
@@ -54,7 +54,11 @@ function english(node: ReactNode): string {
 }
 
 function expectNoThai(html: string) {
-  expect(html, `Thai leaked into the English render:\n${html}`).not.toMatch(THAI)
+  // The language switch (#94) names each option in its own script — the
+  // Thai endonym 'ไทย' is expected text in every locale, like any language
+  // picker; it is masked before scanning, same idea as the floor-plan asset.
+  const target = html.split('ไทย').join('')
+  expect(target, `Thai leaked into the English render:\n${html}`).not.toMatch(THAI)
 }
 
 describe('patient screens rendered in English (#93 AC)', () => {
@@ -129,8 +133,24 @@ describe('patient screens rendered in English (#93 AC)', () => {
     expectNoThai(html)
   })
 
-  it('provider-less rendering stays Thai by default — the toggle is #94, not this PR', () => {
+  it('provider-less rendering stays Thai — the /design specimen gallery relies on it', () => {
     const html = renderToString(<JourneyShell visitRef="VISIT-001" steps={[]} next={null} />)
     expect(html).toMatch(THAI)
+  })
+
+  it('language toggle: both options in their own scripts, exactly one pressed (#94)', () => {
+    const html = english(<LanguageToggle />)
+    expect(html).toContain('ไทย')
+    expect(html).toContain('EN')
+    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1)
+
+    // Switching is the provider's job (instant, persisted — browser-verified
+    // for #94); here only the markup contract is asserted.
+    const thai = renderToString(
+      <LocaleProvider initialLocale="th">
+        <LanguageToggle />
+      </LocaleProvider>,
+    )
+    expect(thai.match(/aria-pressed="true"/g)).toHaveLength(1)
   })
 })

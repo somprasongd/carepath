@@ -38,6 +38,11 @@ export const en: Catalog = {
   'sp.DOCTOR': 'Consultation room',
 
   'common.floor': 'Floor {code}',
+  'common.clock': '{time}',
+
+  'common.language': 'Language',
+  'common.locale.th': 'ไทย',
+  'common.locale.en': 'EN',
 
   'auth.checking': 'Checking your access…',
   'auth.redirecting': 'Taking you to LINE sign-in…',
@@ -132,7 +137,6 @@ export const en: Catalog = {
   'shared.expired': 'This link has expired — please ask the patient for a new one.',
   'shared.invalid': 'This page opens only with the link the patient shared — ask them for it.',
   'shared.unreachable': 'We could not connect — try closing and reopening this page.',
-  'shared.clock': '{time}',
   'shared.status.waiting': 'Waiting',
   'shared.status.inService': 'Being seen',
   'shared.status.done': 'Done',

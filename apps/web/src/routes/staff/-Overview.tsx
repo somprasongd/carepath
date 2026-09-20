@@ -59,7 +59,7 @@ const columns: Column<ServicePointLoadView>[] = [
 export function Overview() {
   const { identity } = useStaffAuth()
   const { data, isPending, isError, refetch } = useAnalyticsOverview()
-  const view = data ? toOverviewView(data) : null
+  const view = data ? toOverviewView(data, 'th') : null
   const cards = view?.cards ?? emptyOverviewCards
 
   return (

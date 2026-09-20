@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { setApiShareToken } from '@/api/client'
-import { useLocale, useT } from '@/i18n'
+import { LanguageToggle, useLocale, useT } from '@/i18n'
 import { AppBar, Card, InfoNote, Lead, Meta, PageTitle, Screen, ScreenBody } from '@/design-system'
 import { sharedScreenModel, useSharedJourney } from '@/features/share'
 
@@ -38,7 +38,7 @@ export function SharedScreen() {
 
   return (
     <Screen variant="patient">
-      <AppBar wordmark="CarePath" />
+      <AppBar wordmark="CarePath" trailing={<LanguageToggle />} />
       <ScreenBody className="pt-1.5 pb-10">
         {model.kind === 'loading' && (
           <>

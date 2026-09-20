@@ -1,4 +1,4 @@
-import { stepTitle, type Journey } from '@/features/visit'
+import { servicePointLabel, stepTitle, type Journey } from '@/features/visit'
 import { format, messagesFor, type Locale } from '@/i18n'
 import { floorPlanFor, floorPlanHasPlace } from './plans'
 
@@ -58,11 +58,14 @@ export function navigatePlanForJourney(
     return {
       state: 'unsupported',
       title,
-      name: servicePoint?.name ?? servicePoint?.code ?? '',
+      name: servicePoint ? servicePointLabel(servicePoint, locale) : '',
     }
   }
 
-  const name = servicePoint?.name ?? place.name
+  // The service point's name follows the locale like every patient string
+  // (ADR-0012 §1: catalog by code, server name only as the unmapped-code
+  // fallback — #94's "service point names switch too" line).
+  const name = servicePoint ? servicePointLabel(servicePoint, locale) : place.name
   const floorLabel = format(catalog, 'common.floor', { code: place.floor.code })
   return {
     state: 'plan',

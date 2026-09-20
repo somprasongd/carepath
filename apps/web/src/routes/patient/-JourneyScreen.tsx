@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useAuth } from '@/auth/AuthContext'
-import { useLocale, useT } from '@/i18n'
+import { LanguageToggle, useLocale, useT } from '@/i18n'
 import {
   AppBar,
   Button,
@@ -97,12 +97,17 @@ export function JourneyScreen({
   // No route to offer once the visit ended — the projection may still carry
   // actionable steps for a CANCELLED visit, so the CTA is gated on the
   // outcome, not on `recommended` alone.
+  // Clinic steps already carry the department in their title, so appending the
+  // same service-point label after it would duplicate the department name.
+  const nextSpLabel =
+    recommended?.servicePoint && nextTitle
+      ? servicePointLabel(recommended.servicePoint, locale)
+      : ''
   const next =
     !outcome && recommended && nextTitle
       ? {
-          value: `${nextTitle} · ${
-            recommended.servicePoint ? servicePointLabel(recommended.servicePoint, locale) : ''
-          }`.trim(),
+          value:
+            nextSpLabel && !nextTitle.includes(nextSpLabel) ? `${nextTitle} · ${nextSpLabel}` : nextTitle,
           cta: t('journey.navigateCta', { title: nextTitle }),
         }
       : null
@@ -166,7 +171,15 @@ export function JourneyShell({
   const t = useT()
   return (
     <Screen variant="patient">
-      <AppBar wordmark="CarePath" trailing={<RefPill>{visitRef}</RefPill>} />
+      <AppBar
+        wordmark="CarePath"
+        trailing={
+          <div className="flex items-center gap-2">
+            <LanguageToggle />
+            <RefPill>{visitRef}</RefPill>
+          </div>
+        }
+      />
 
       <ScreenBody className="pt-1.5 pb-40">
         <PageTitle className="mt-3.5 mb-1.5">{t('journey.title')}</PageTitle>

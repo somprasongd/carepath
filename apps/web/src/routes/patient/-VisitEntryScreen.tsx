@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useT } from '@/i18n'
+import { LanguageToggle, useT } from '@/i18n'
 import { Button, Card, PageTitle, TextField } from '@/design-system'
 
 /**
@@ -31,9 +31,15 @@ export function VisitEntryScreen() {
     <div className="@container h-full w-full">
       <div className="flex h-full items-center justify-center overflow-y-auto bg-neutral px-gutter py-12">
         <Card radius="lg" padding="xl" className="w-full max-w-[440px]">
-          <div className="mb-9 flex items-baseline gap-2">
-            <span className="font-code text-[20px] font-bold text-ink">CarePath</span>
-            <span className="font-sans text-body-sm text-ink-muted">{t('entry.role')}</span>
+          <div className="mb-9 flex items-center justify-between gap-4">
+            <div className="flex items-baseline gap-2">
+              <span className="font-code text-[20px] font-bold text-ink">CarePath</span>
+              <span className="font-sans text-body-sm text-ink-muted">{t('entry.role')}</span>
+            </div>
+            {/* No AppBar here (one card, not a page frame), so the language
+                switch rides the card header — it must be reachable from the
+                very first screen (#94). */}
+            <LanguageToggle />
           </div>
 
           <PageTitle className="mb-1.5">{t('entry.title')}</PageTitle>

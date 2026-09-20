@@ -18,8 +18,9 @@ import { describe, expect, it } from 'vitest'
  * - Staff console surfaces pin locale 'th' by design (ADR-0012 §2): the
  *   staff features inside features/visit, and the staff chrome inside
  *   design-system (Navigation, StatusBadge, tokens).
- * - th.ts is the catalog itself; *.test.* files are covered by the
- *   English-render test instead.
+ * - The catalogs are data by definition: th.ts, and en.ts — which carries
+ *   the Thai endonym 'ไทย' as the language switch's self-name (#94).
+ *   *.test.* files are covered by the English-render test instead.
  */
 const WEB_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -45,8 +46,10 @@ const EXCLUDED = new Set([
   'src/design-system/Navigation.tsx',
   'src/design-system/StatusBadge.tsx',
   'src/design-system/tokens.ts',
-  // The Thai catalog itself.
+  // The catalogs themselves — Thai data by definition, and en.ts's Thai
+  // endonym 'ไทย' (common.locale.th) is the switch's self-name (#94).
   'src/i18n/locales/th.ts',
+  'src/i18n/locales/en.ts',
 ])
 
 const THAI = /[\u0E00-\u0E7F]/

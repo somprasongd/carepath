@@ -56,7 +56,7 @@ describe('minutesLabel', () => {
 
 describe('toOverviewView', () => {
   it('maps cards from the summary: bottleneck by id, longest wait across rows', () => {
-    const { cards } = toOverviewView(overview())
+    const { cards } = toOverviewView(overview(), 'th')
 
     expect(cards.activeVisits).toBe('7')
     expect(cards.avgWait).toBe('12.5')
@@ -67,7 +67,7 @@ describe('toOverviewView', () => {
   })
 
   it('marks only the bottleneck row busy and resolves zones per service code', () => {
-    const { rows } = toOverviewView(overview())
+    const { rows } = toOverviewView(overview(), 'th')
 
     expect(rows).toHaveLength(2)
     const lab = rows.find((row) => row.code === 'LAB')
@@ -95,6 +95,7 @@ describe('toOverviewView', () => {
           }),
         ],
       }),
+      'th',
     )
 
     expect(view.cards.activeVisits).toBe('0')
@@ -116,14 +117,24 @@ describe('toOverviewView', () => {
           point({ servicePointId: 'SP-LAB', longestWaitingMinutes: 17.5 }),
         ],
       }),
+      'th',
     )
 
     expect(cards.longestWaiting).toBe('17.5')
   })
 
-  it('formats the snapshot clock time, not a raw timestamp', () => {
-    const { updatedAt } = toOverviewView(overview())
+  it('formats the snapshot clock time through the shared clock, น. and all', () => {
+    const { updatedAt } = toOverviewView(overview(), 'th')
 
-    expect(updatedAt).toMatch(/^[0-9]{2}[:.][0-9]{2}$/)
+    // Timezone-dependent like the old assertion, but now asserts the Thai
+    // marker that the one clock formatter (i18n/time.ts) appends.
+    expect(updatedAt).toMatch(/^[0-9]{2}:[0-9]{2} น\.$/)
+  })
+
+  it('renders the snapshot clock bare in English', () => {
+    const { updatedAt } = toOverviewView(overview(), 'en')
+
+    expect(updatedAt).toMatch(/^[0-9]{2}:[0-9]{2}$/)
+    expect(updatedAt).not.toContain('น.')
   })
 })

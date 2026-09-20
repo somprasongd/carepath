@@ -43,6 +43,16 @@ export const th = {
 
   // Shared composition.
   'common.floor': 'ชั้น {code}',
+  // The น. marker rides the catalog so the one clock formatter
+  // (i18n/time.ts) never embeds Thai script itself.
+  'common.clock': '{time} น.',
+
+  // Language switch (i18n/LanguageToggle.tsx, #94). Each option names its
+  // language in its own script — the Thai endonym stays 'ไทย' in every
+  // locale, which is also why the thai-guard excludes only locales/th.ts.
+  'common.language': 'ภาษา',
+  'common.locale.th': 'ไทย',
+  'common.locale.en': 'EN',
 
   // LINE LIFF login gate (auth/LoginGate.tsx).
   'auth.checking': 'กำลังตรวจสอบสิทธิ์การเข้าใช้งาน…',
@@ -147,7 +157,6 @@ export const th = {
   'shared.expired': 'ลิงก์นี้หมดอายุแล้ว — ขอลิงก์ใหม่จากผู้ป่วยได้เลย',
   'shared.invalid': 'เปิดหน้านี้ด้วยลิงก์ที่ผู้ป่วยแชร์มาเท่านั้น — ขอลิงก์จากผู้ป่วยได้เลย',
   'shared.unreachable': 'เชื่อมต่อไม่สำเร็จ — ลองปิดแล้วเปิดหน้านี้ใหม่อีกครั้ง',
-  'shared.clock': '{time} น.',
   'shared.status.waiting': 'กำลังรอคิว',
   'shared.status.inService': 'กำลังรับบริการ',
   'shared.status.done': 'เสร็จเรียบร้อย',
