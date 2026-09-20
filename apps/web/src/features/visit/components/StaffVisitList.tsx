@@ -15,7 +15,9 @@ const columns: Column<Journey>[] = [
   {
     key: 'synced',
     header: 'ซิงก์ล่าสุด',
-    render: (journey) => <span className="font-code">{syncedAtLabel(journey.syncedAt)}</span>,
+    render: (journey) => (
+      <span className="font-code">{syncedAtLabel(journey.syncedAt, 'th')}</span>
+    ),
   },
   {
     key: 'status',
@@ -67,7 +69,7 @@ export function StaffVisitList({
                 <Meta className="m-0">
                   {journey.patientRef} · ขั้นที่เสร็จ {stepProgress(journey)}
                 </Meta>
-                <Meta className="m-0 font-code">{syncedAtLabel(journey.syncedAt)}</Meta>
+                <Meta className="m-0 font-code">{syncedAtLabel(journey.syncedAt, 'th')}</Meta>
               </div>
             </button>
           )

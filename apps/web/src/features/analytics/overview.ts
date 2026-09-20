@@ -1,3 +1,5 @@
+import type { Locale } from '@/i18n'
+import { clockLabel } from '@/i18n/time'
 import type { Zone } from '@/design-system'
 import { zoneForService } from '@/features/servicepoint/mappings'
 import type { AnalyticsOverview, ServicePointMetrics } from './queries'
@@ -54,12 +56,13 @@ export function minutesLabel(value: number | null): string {
   return `${Math.round(value * 10) / 10}`
 }
 
-/** Clock time of the aggregate snapshot, e.g. "14:05" (the API stamps Asia/Bangkok). */
-export function asOfLabel(asOf: string): string {
-  return new Date(asOf).toLocaleTimeString('th-TH', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+/**
+ * Clock time of the aggregate snapshot, e.g. "14:05 น." (the API stamps
+ * Asia/Bangkok). The console pins 'th' (ADR-0012 §2); the locale parameter
+ * keeps it off hardcoded `toLocaleTimeString` (#94's one-clock rule).
+ */
+export function asOfLabel(asOf: string, locale: Locale): string {
+  return clockLabel(asOf, locale)
 }
 
 function bottleneckRow(overview: AnalyticsOverview): ServicePointMetrics | null {
@@ -78,7 +81,7 @@ function longestWaitingRow(points: ServicePointMetrics[]): ServicePointMetrics |
   return longest
 }
 
-export function toOverviewView(overview: AnalyticsOverview): OverviewView {
+export function toOverviewView(overview: AnalyticsOverview, locale: Locale): OverviewView {
   const bottleneck = bottleneckRow(overview)
   const longest = longestWaitingRow(overview.servicePoints)
   const bottleneckId = overview.summary.bottleneckServicePointId
@@ -102,6 +105,6 @@ export function toOverviewView(overview: AnalyticsOverview): OverviewView {
       avgWait: minutesLabel(sp.avgWaitMinutes),
       busy: sp.servicePointId === bottleneckId,
     })),
-    updatedAt: asOfLabel(overview.asOf),
+    updatedAt: asOfLabel(overview.asOf, locale),
   }
 }

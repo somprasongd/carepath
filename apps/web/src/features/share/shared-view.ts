@@ -1,4 +1,5 @@
 import type { ApiError } from '@/api/client'
+import { clockLabel } from '@/i18n/time'
 import { format, messagesFor, type Locale } from '@/i18n'
 import type { SharedJourney, SharedStep } from './queries'
 
@@ -31,14 +32,6 @@ export function sharedStatusLabel(
     default:
       return catalog['shared.status.awaiting']
   }
-}
-
-/** The share surface's only clock — the Thai clock marker rides the catalog. */
-export function clockLabel(iso: string, locale: Locale): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '—'
-  const clock = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-  return format(messagesFor(locale), 'shared.clock', { time: clock })
 }
 
 export function shareExpiryLabel(expiresAt: string, locale: Locale): string {

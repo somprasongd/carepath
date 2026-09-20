@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/api/client'
 import { format, messagesFor } from '@/i18n'
+import { clockLabel } from '@/i18n/time'
 import type { SharedJourney } from './queries'
 import {
-  clockLabel,
   shareExpiryLabel,
   sharedScreenModel,
   sharedStatusLabel,

@@ -114,8 +114,11 @@ describe('stepProgress', () => {
 })
 
 describe('syncedAtLabel', () => {
-  it('formats the sync timestamp as a clock time', () => {
-    expect(syncedAtLabel('2026-09-19T04:05:00Z')).toMatch(/^\d{2}:\d{2}$/)
+  it('formats the sync clock through the shared formatter, Thai marker included', () => {
+    // The staff console pins 'th' (ADR-0012 §2); the time itself is
+    // timezone-dependent, so assert shape + marker, not a fixed clock.
+    expect(syncedAtLabel('2026-09-19T04:05:00Z', 'th')).toMatch(/^\d{2}:\d{2} น\.$/)
+    expect(syncedAtLabel('2026-09-19T04:05:00Z', 'en')).toMatch(/^\d{2}:\d{2}$/)
   })
 })
 

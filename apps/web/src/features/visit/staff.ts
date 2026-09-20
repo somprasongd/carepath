@@ -1,3 +1,5 @@
+import type { Locale } from '@/i18n'
+import { clockLabel } from '@/i18n/time'
 import { stepTitle } from './journey'
 import type { Journey } from './queries'
 
@@ -77,12 +79,15 @@ export function stepProgress(journey: Journey): string {
   return `${done}/${journey.steps.length}`
 }
 
-/** Clock time of the last projection sync, e.g. "14:05". */
-export function syncedAtLabel(syncedAt: string): string {
-  return new Date(syncedAt).toLocaleTimeString('th-TH', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+/**
+ * Clock time of the last projection sync, e.g. "14:05 น." (#94). Locale-
+ * taking like every other mapper, but the staff console pins 'th'
+ * (ADR-0012 §2) — its callers pass the pin, not the patient toggle's
+ * state. Replaces this file's hardcoded `toLocaleTimeString('th-TH', …)`,
+ * which was the app's one straggler.
+ */
+export function syncedAtLabel(syncedAt: string, locale: Locale): string {
+  return clockLabel(syncedAt, locale)
 }
 
 /** What the staff controls may do to a step (#38) — null when nothing is legal. */

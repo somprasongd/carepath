@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { LocaleProvider } from './i18n'
+import { resolveInitialLocale } from './i18n/initial-locale'
 import { routeTree } from './routeTree.gen'
 import './styles/index.css'
 
@@ -25,10 +26,14 @@ declare module '@tanstack/react-router' {
   }
 }
 
-function render() {
+function render(lineLanguage: string | undefined) {
+  // Resolved once per boot, after liff.init() has run in LINE mode (see
+  // bootstrap) — so a foreign patient's first paint is already English:
+  // stored choice → LINE language → Thai (i18n/initial-locale.ts).
+  const initialLocale = resolveInitialLocale(lineLanguage)
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-      <LocaleProvider>
+      <LocaleProvider initialLocale={initialLocale}>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />
         </QueryClientProvider>
@@ -55,12 +60,17 @@ async function bootstrap() {
     try {
       const { default: liff } = await import('@line/liff')
       await liff.init({ liffId })
+      // Read here, after init, so the very first render can resolve the
+      // boot locale (#94) — there is no flash of Thai for an English LINE
+      // user. getLanguage is only meaningful post-init.
+      render(liff.getLanguage())
+      return
     } catch {
       // Swallowed here — LiffAuthProvider re-runs init() and surfaces the
       // error through the normal loading/error UI states.
     }
   }
-  render()
+  render(undefined)
 }
 
 void bootstrap()

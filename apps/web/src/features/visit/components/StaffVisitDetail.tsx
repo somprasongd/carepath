@@ -37,7 +37,7 @@ export function StaffVisitDetail({
           <StaffStatusBadge status={journey.status} kind="visit" />
         </div>
         <Meta className="m-0">
-          {journey.patientRef} · sync {syncedAtLabel(journey.syncedAt)} น.
+          {journey.patientRef} · sync {syncedAtLabel(journey.syncedAt, 'th')}
         </Meta>
       </div>
 

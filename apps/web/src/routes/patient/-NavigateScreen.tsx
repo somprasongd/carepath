@@ -1,4 +1,4 @@
-import { useT } from '@/i18n'
+import { LanguageToggle, useT } from '@/i18n'
 import {
   AppBar,
   Divider,
@@ -42,6 +42,7 @@ export function NavigateScreen({
         backLabel={t('navigate.back')}
         title={appBarTitle(plan, t)}
         subtitle={plan.state === 'plan' ? plan.subtitle : undefined}
+        trailing={<LanguageToggle />}
       />
 
       {plan.state === 'plan' && floorPlanFor(plan.floorId) ? (
