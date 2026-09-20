@@ -38,7 +38,7 @@ func (f *fakePlaces) ListPlaces(context.Context) ([]hospitalmap.Place, error) { 
 func newTestApp(t *testing.T) (*fiber.App, *fakeRepo) {
 	t.Helper()
 	repo := &fakeRepo{}
-	svc, err := location.NewService(repo, &fakeNavigation{}, qr.New(&fakePlaces{}))
+	svc, err := location.NewService(repo, &fakeNavigation{}, qr.New(&fakePlaces{}, &fakeNavigation{}))
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -162,7 +162,7 @@ func newDemoTestApp(t *testing.T) (*fiber.App, *fakeRepo) {
 	t.Helper()
 	repo := &fakeRepo{}
 	nav := &fakeNavigation{nodes: demoGraph}
-	svc, err := location.NewService(repo, nav, qr.New(&fakePlaces{}), zigbee.New(nav))
+	svc, err := location.NewService(repo, nav, qr.New(&fakePlaces{}, nav), zigbee.New(nav))
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}

@@ -91,7 +91,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	// service point through the servicepoint module.
 	navigationGraph := navigation.NewService(navigationpostgres.New(database), servicePoints)
 	locations, err := location.NewService(locationpostgres.New(database), navigationGraph,
-		qr.New(hospitalMap), manual.New(), zigbee.New(navigationGraph))
+		qr.New(hospitalMap, navigationGraph), manual.New(), zigbee.New(navigationGraph))
 	if err != nil {
 		return err
 	}

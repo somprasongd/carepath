@@ -1,9 +1,11 @@
 // Package qr implements the ADR-0004 QR provider, the MVP baseline source.
-// A QR code at a hospital point carries a stable place reference — a URL
-// like https://carepath.example/location/REG-01 (docs/integration/
-// location-zigbee.md) — and nothing else: no patient data. Resolving means
-// finding that place on the hospital map and returning its entry node as
-// the canonical location.
+// A QR code at a hospital point carries a stable map reference — a URL like
+// https://carepath.example/location/REG-01 — and nothing else: no patient
+// data. Two reference forms resolve: a place reference (the path segment
+// after "/location/", the entry point of a service point's place) and a
+// bare navigation-node reference ("node/<floorId>/<localId>", e.g. a lift or
+// an entrance — points patients stand at that are not service places).
+// Either way, resolving ends at a canonical navigation node.
 package qr
 
 import (
@@ -12,22 +14,28 @@ import (
 
 	"carepath/apps/api/internal/hospitalmap"
 	"carepath/apps/api/internal/location"
+	"carepath/apps/api/internal/navigation"
 	"carepath/apps/api/internal/platform/apperr"
 )
 
 // Provider resolves scanned CarePath location QR payloads.
 type Provider struct {
 	places hospitalmap.Service
+	nodes  navigation.Service
 }
 
-// New takes the hospital map the place references resolve against.
-func New(places hospitalmap.Service) Provider {
-	return Provider{places: places}
+// New takes the hospital map place references resolve against and the
+// navigation graph node references resolve against.
+func New(places hospitalmap.Service, nodes navigation.Service) Provider {
+	return Provider{places: places, nodes: nodes}
 }
 
 func (p Provider) Source() location.Source { return location.SourceQR }
 
 func (p Provider) Resolve(ctx context.Context, raw string) (location.Observation, error) {
+	if nodeID, ok := parseNodeRef(raw); ok {
+		return p.resolveNode(ctx, nodeID)
+	}
 	placeID, err := parsePlaceRef(raw)
 	if err != nil {
 		return location.Observation{}, err
@@ -46,6 +54,38 @@ func (p Provider) Resolve(ctx context.Context, raw string) (location.Observation
 		return location.Observation{}, location.ErrInvalidFix
 	}
 	return location.Observation{NodeID: *place.EntryNodeID}, nil
+}
+
+// resolveNode: the same bargain as a place reference, against the graph —
+// an unknown node id is the sticker's (or the scan's) mistake.
+func (p Provider) resolveNode(ctx context.Context, nodeID string) (location.Observation, error) {
+	if _, err := p.nodes.GetNode(ctx, nodeID); err != nil {
+		if apperr.KindOf(err) == apperr.KindNotFound {
+			return location.Observation{}, location.ErrInvalidFix
+		}
+		return location.Observation{}, apperr.Wrapf(apperr.KindInternal, err, "qr: look up node %q", nodeID)
+	}
+	return location.Observation{NodeID: nodeID}, nil
+}
+
+// parseNodeRef extracts a bare navigation-node reference: everything after
+// the "node/" marker up to any query or fragment. Node ids are globally
+// unique as "<floorId>/<localId>", so the remainder may itself contain a
+// slash; an empty remainder is not a reference.
+func parseNodeRef(raw string) (string, bool) {
+	payload := strings.TrimSpace(raw)
+	if !strings.HasPrefix(payload, "node/") {
+		return "", false
+	}
+	ref := payload[len("node/"):]
+	if i := strings.IndexAny(ref, "?#"); i >= 0 {
+		ref = ref[:i]
+	}
+	ref = strings.Trim(ref, "/")
+	if ref == "" {
+		return "", false
+	}
+	return ref, true
 }
 
 // parsePlaceRef extracts the place identifier from a scanned payload: the
