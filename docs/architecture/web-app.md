@@ -19,8 +19,9 @@ apps/web/src/
     index.tsx        Redirects / → /patient/journey
     login.tsx        Staff/admin login (patients never see this — LINE only)
     patient/         journey, navigate (?visit=<id> search param)
-    staff/           overview*, service-points, patients, queue*, floor-plan*,
-                     pathway-templates* (`*` = screen still reads mocks/demo-data.ts)
+    staff/           overview, service-points, patients, floor-plan
+                     (placeholder), queue*, pathway-templates* (`*` = screen
+                     still reads mocks/demo-data.ts)
     shared.tsx       Relative's read-only view (#90) — token in the URL
                      fragment, no auth providers, no menu
     design.tsx       The living DESIGN.md catalogue (components + screens)
@@ -36,6 +37,9 @@ apps/web/src/
     visit/           queries.ts (useVisit), journey.ts (VisitView → JourneyRail),
                      staff.ts (staff visit list + transitions), components/
     servicepoint/    queries.ts — live GET /api/v1/service-points
+    analytics/       queries.ts — GET /api/v1/analytics/overview (15s polling),
+                     overview.ts (aggregate → cards/rows; null renders as "—",
+                     never 0 — NFR-10)
     navigation/      queries.ts (useNavigationRoute), route.ts (polylines +
                      turn-by-turn cues from the route response)
     floorplan/       destination.ts, plans.ts — SVG floor-plan lookups
@@ -46,7 +50,7 @@ apps/web/src/
   api/               client.ts (fetch wrapper, ApiError, token attach + refresh)
                      + schema.d.ts (generated)
   mocks/             demo-data.ts — static data for /design and the screens
-                     still marked `*` above (overview, queue, pathway-templates)
+                     still marked `*` above (queue, pathway-templates)
   styles/            index.css — the single token source (@theme)
 ```
 
@@ -70,7 +74,8 @@ Status per screen today:
 | `/patient/journey` | Live — `GET /api/v1/journeys/:visitId` (default `VISIT-001`, override with `?visit=`); polls every 15s |
 | `/patient/navigate` | Live end-to-end — floor plan from `packages/floorplans`, route + turn-by-turn cues from `GET /api/v1/navigation/route` (`features/navigation`). QR-based current-location is API-only; the screen still shows a static "scan the QR at the service point" instruction, no camera/scanner wired in |
 | `/staff/patients`, `/staff/service-points` | Live (`/api/v1/staff/visits` + transitions, `/api/v1/service-points`) |
-| `/staff/overview`, `/staff/queue`, `/staff/pathway-templates` | Still `mocks/demo-data.ts` — no backing endpoint exists yet (queue has no call-next API at all) |
+| `/staff/overview` | Live — `GET /api/v1/analytics/overview?window=today` (`features/analytics`); polls every 15s; EXECUTIVE role only (ADR-0010), a metric with no data yet renders as "—" |
+| `/staff/queue`, `/staff/pathway-templates` | Still `mocks/demo-data.ts` — no backing endpoint exists yet (queue has no call-next API at all) |
 | `/login` | Live — real `POST /api/v1/auth/login` (ADR-0010); no role picker, the landing screen is derived from the role in the returned token |
 | `/shared` | Live — `GET /api/v1/shared/journey` with the share token from the URL fragment (ADR-0011); polls every 15s, stops on DONE. No auth providers mount here — the share token is the only credential this surface ever holds |
 | `/design` | Demo data by design; it must never depend on the API |
