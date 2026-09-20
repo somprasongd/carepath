@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DesignRouteImport } from './routes/design'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PatientRouteImport } from './routes/patient'
+import { Route as SharedRouteImport } from './routes/shared'
 import { Route as StaffRouteImport } from './routes/staff'
 import { Route as PatientJourneyRouteImport } from './routes/patient/journey'
 import { Route as PatientNavigateRouteImport } from './routes/patient/navigate'
@@ -41,6 +42,11 @@ const LoginRoute = LoginRouteImport.update({
 const PatientRoute = PatientRouteImport.update({
   id: '/patient',
   path: '/patient',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SharedRoute = SharedRouteImport.update({
+  id: '/shared',
+  path: '/shared',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StaffRoute = StaffRouteImport.update({
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/design': typeof DesignRoute
   '/login': typeof LoginRoute
   '/patient': typeof PatientRouteWithChildren
+  '/shared': typeof SharedRoute
   '/staff': typeof StaffRouteWithChildren
   '/patient/journey': typeof PatientJourneyRoute
   '/patient/navigate': typeof PatientNavigateRoute
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/design': typeof DesignRoute
   '/login': typeof LoginRoute
   '/patient': typeof PatientRouteWithChildren
+  '/shared': typeof SharedRoute
   '/staff': typeof StaffRouteWithChildren
   '/patient/journey': typeof PatientJourneyRoute
   '/patient/navigate': typeof PatientNavigateRoute
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/design': typeof DesignRoute
   '/login': typeof LoginRoute
   '/patient': typeof PatientRouteWithChildren
+  '/shared': typeof SharedRoute
   '/staff': typeof StaffRouteWithChildren
   '/patient/journey': typeof PatientJourneyRoute
   '/patient/navigate': typeof PatientNavigateRoute
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
     | '/design'
     | '/login'
     | '/patient'
+    | '/shared'
     | '/staff'
     | '/patient/journey'
     | '/patient/navigate'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/design'
     | '/login'
     | '/patient'
+    | '/shared'
     | '/staff'
     | '/patient/journey'
     | '/patient/navigate'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/design'
     | '/login'
     | '/patient'
+    | '/shared'
     | '/staff'
     | '/patient/journey'
     | '/patient/navigate'
@@ -188,6 +200,7 @@ export interface RootRouteChildren {
   DesignRoute: typeof DesignRoute
   LoginRoute: typeof LoginRoute
   PatientRoute: typeof PatientRouteWithChildren
+  SharedRoute: typeof SharedRoute
   StaffRoute: typeof StaffRouteWithChildren
 }
 
@@ -219,6 +232,13 @@ declare module '@tanstack/react-router' {
       path: '/patient'
       fullPath: '/patient'
       preLoaderRoute: typeof PatientRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shared': {
+      id: '/shared'
+      path: '/shared'
+      fullPath: '/shared'
+      preLoaderRoute: typeof SharedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/staff': {
@@ -325,6 +345,7 @@ const rootRouteChildren: RootRouteChildren = {
   DesignRoute: DesignRoute,
   LoginRoute: LoginRoute,
   PatientRoute: PatientRouteWithChildren,
+  SharedRoute: SharedRoute,
   StaffRoute: StaffRouteWithChildren,
 }
 export const routeTree = rootRouteImport

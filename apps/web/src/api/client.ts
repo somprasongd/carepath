@@ -31,6 +31,47 @@ export async function apiPost<TReturn>(path: string, body: unknown): Promise<TRe
   })
 }
 
+/**
+ * DELETE expecting no body (204 today: stop-sharing, #89). Goes through the
+ * patient bearer like the other patient-surface commands.
+ */
+export async function apiDelete(path: string): Promise<void> {
+  const response = await doFetch(path, withAuthHeader({ method: 'DELETE' }))
+  if (!response.ok) {
+    throw await apiErrorFrom(response)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Share token (ADR-0011 §5) — the third credential, and the only one the
+// /shared surface may carry. It arrives in the URL fragment of /shared
+// (browsers never send fragments to a server) and is read once by the shared
+// screen. It must not ride the generic bearer below: the patient/staff
+// tokens are invalid on the shared endpoint, and the share token is invalid
+// everywhere else — the cross-token rule holds in every direction.
+
+let shareToken: string | undefined
+
+export function setApiShareToken(token: string | undefined) {
+  shareToken = token
+}
+
+/**
+ * GET with the share token alone. Throws before any request when no token is
+ * stored, so the shared screen can show its "no link" state instead of
+ * firing a request that could only 401.
+ */
+export async function apiGetShared<TReturn>(path: string): Promise<TReturn> {
+  if (!shareToken) {
+    throw new ApiError(401, 'ไม่มีโทเคนของลิงก์')
+  }
+  const response = await doFetch(path, { headers: { Authorization: `Bearer ${shareToken}` } })
+  if (!response.ok) {
+    throw await apiErrorFrom(response)
+  }
+  return (await response.json()) as TReturn
+}
+
 // ---------------------------------------------------------------------------
 // Token slots (ADR-0010 §12)
 //

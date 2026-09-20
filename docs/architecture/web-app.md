@@ -21,6 +21,8 @@ apps/web/src/
     patient/         journey, navigate (?visit=<id> search param)
     staff/           overview*, service-points, patients, queue*, floor-plan*,
                      pathway-templates* (`*` = screen still reads mocks/demo-data.ts)
+    shared.tsx       Relative's read-only view (#90) — token in the URL
+                     fragment, no auth providers, no menu
     design.tsx       The living DESIGN.md catalogue (components + screens)
     -design/         Components for the design page (`-` prefix = not a route)
   design-system/     Presentation primitives — must stay ignorant of the API
@@ -37,6 +39,9 @@ apps/web/src/
     navigation/      queries.ts (useNavigationRoute), route.ts (polylines +
                      turn-by-turn cues from the route response)
     floorplan/       destination.ts, plans.ts — SVG floor-plan lookups
+    share/           queries.ts (mint/revoke/read, constant query key),
+                     shared-view.ts (SharedJourney → Thai labels, screen
+                     model), components/ShareSheet.tsx (patient-side sheet)
     queue/           components only — no query layer yet (queue is still demo)
   api/               client.ts (fetch wrapper, ApiError, token attach + refresh)
                      + schema.d.ts (generated)
@@ -67,6 +72,7 @@ Status per screen today:
 | `/staff/patients`, `/staff/service-points` | Live (`/api/v1/staff/visits` + transitions, `/api/v1/service-points`) |
 | `/staff/overview`, `/staff/queue`, `/staff/pathway-templates` | Still `mocks/demo-data.ts` — no backing endpoint exists yet (queue has no call-next API at all) |
 | `/login` | Live — real `POST /api/v1/auth/login` (ADR-0010); no role picker, the landing screen is derived from the role in the returned token |
+| `/shared` | Live — `GET /api/v1/shared/journey` with the share token from the URL fragment (ADR-0011); polls every 15s, stops on DONE. No auth providers mount here — the share token is the only credential this surface ever holds |
 | `/design` | Demo data by design; it must never depend on the API |
 
 The whole `/staff/*` group mounts behind `RequireStaffAuth` and every request carries a staff access token, regardless of whether that individual screen's data is live or still demo.
@@ -102,8 +108,13 @@ Two auth surfaces coexist and must not be merged: `AuthProvider`/`LoginGate`/
 - `setApiAuthToken` currently holds **one** module-level token, set by the
   patient auth providers. The staff token must not reuse that slot: both route
   trees live in the same SPA, so one shared slot can send a patient session
-  token to a staff endpoint. One slot per audience.
-- Never render a token, never log one, never put one in a URL or a query key.
+  token to a staff endpoint. One slot per audience. The share token
+  (`setApiShareToken`, ADR-0011) is a third slot with a fourth rule: it is the
+  only bearer `/shared` sends, it is read once from the URL fragment on mount,
+  and it is never attached anywhere else.
+- Never render a token, never log one, never put one in a URL or a query key —
+  the URL-fragment exception is the share token's arrival on `/shared`, and it
+  is the only one (browsers do not send fragments to servers).
 - Role gating is UI affordance, not security: hiding an admin action in React
   is a courtesy; the API is what actually enforces it.
 
