@@ -1,6 +1,11 @@
 SHELL := /bin/bash
 
-.PHONY: up down logs api mock-his web fmt migrate-up swag start stop fetch docs-erd
+.PHONY: up down logs api mock-his web fmt migrate-up migrate-up-local swag start stop fetch docs-erd
+
+# `command -v migrate` covers a normal PATH
+# install; non-interactive shells don't source ~/.bashrc so also check the
+# common `go install` GOPATH location directly.
+MIGRATE := $(shell command -v migrate 2>/dev/null || echo "$$HOME/go/bin/migrate")
 
 up:
 	docker compose up --build
@@ -42,7 +47,10 @@ swag:
 # Run api/mock-his/web as background processes; PIDs and output land in logs/.
 start:
 	@mkdir -p logs
+	@-$(MAKE) stop
 	@set -a; [ -f .env ] && . ./.env; set +a; \
+	$(MIGRATE) -path infra/postgres/migrations \
+		-database "postgres://$${POSTGRES_USER:-carepath}:$${POSTGRES_PASSWORD:-carepath}@$${POSTGRES_HOST:-localhost}:$${POSTGRES_PORT:-5432}/$${POSTGRES_DB:-carepath}?sslmode=disable" up; \
 	$(MAKE) api > logs/api.log 2>&1 & echo $$! > logs/api.pid; \
 	$(MAKE) mock-his > logs/mock-his.log 2>&1 & echo $$! > logs/mock-his.pid; \
 	$(MAKE) web > logs/web.log 2>&1 & echo $$! > logs/web.pid 
@@ -50,20 +58,43 @@ start:
 	@echo "logs: logs/api.log logs/mock-his.log logs/web.log"
 	@echo "stop with: make stop"
 
-# Stop processes started by `make start`. Kills by port rather than the pid
-# files: on setups where SHELL resolves through a WSL/interop boundary, $!
-# captures the wrapper's pid, not the actual server process, so pid-based
-# kill silently misses it and ports stay held across restarts.
+# Stop processes started by `make start`. For each service: kill by its
+# recorded pid file first (report if that pid is stale/already gone); if
+# that didn't kill anything, fall back to killing whoever holds the port
+# (lsof — reliable for WSL-side api/mock-his, best-effort for web, which can
+# land as a Windows-side process lsof can't see across a WSL/interop
+# boundary). Plain POSIX only, no Windows-specific commands, so this behaves
+# the same on any contributor's machine.
 stop:
 	@set -a; [ -f .env ] && . ./.env; set +a; \
-	for port in "$${CAREPATH_API_PORT:-8080}" "$${MOCK_HIS_PORT:-8090}" 5173; do \
-		if fuser -k $$port/tcp 2>/dev/null; then \
-			echo "stopped port $$port"; \
+	for entry in "api:$${CAREPATH_API_PORT:-8080}" "mock-his:$${MOCK_HIS_PORT:-8090}" "web:5173"; do \
+		svc=$${entry%%:*}; port=$${entry#*:}; \
+		killed=""; \
+		if [ -f logs/$$svc.pid ]; then \
+			pid=$$(cat logs/$$svc.pid); \
+			if kill -9 $$pid 2>/dev/null; then \
+				echo "stopped $$svc: pidfile (pid $$pid)"; \
+				killed=1; \
+			else \
+				echo "$$svc: kill pidfile pid $$pid failed (stale or already gone)"; \
+			fi; \
+			rm -f logs/$$svc.pid; \
 		else \
-			echo "port $$port: nothing listening"; \
+			echo "$$svc: no pidfile"; \
+		fi; \
+		if [ -z "$$killed" ] && command -v lsof >/dev/null 2>&1; then \
+			pid=$$(lsof -ti tcp:$$port 2>/dev/null); \
+			if [ -n "$$pid" ]; then \
+				if kill -9 $$pid 2>/dev/null; then \
+					echo "stopped $$svc: port $$port (pid $$pid)"; \
+				else \
+					echo "$$svc: kill port $$port pid $$pid failed"; \
+				fi; \
+			else \
+				echo "$$svc: port $$port nothing listening"; \
+			fi; \
 		fi; \
 	done
-	@rm -f logs/*.pid
 
 fetch:
 	git fetch
