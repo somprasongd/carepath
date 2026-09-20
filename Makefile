@@ -15,7 +15,7 @@ api:
 	cd apps/api && go run ./cmd/server
 
 mock-his:
-	cd apps/mock-his && go run ./cmd/server
+	cd apps/mock-his && PATIENT_APP_BASE_URL="$${PATIENT_APP_BASE_URL:-http://localhost:5173}" go run ./cmd/server
 
 web:
 	cd apps/web && npm install && npm run dev
