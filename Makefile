@@ -60,21 +60,20 @@ start:
 
 # Stop processes started by `make start`. For each service: kill by its
 # recorded pid file first (report if that pid is stale/already gone); if
-# that didn't kill anything, fall back to killing whoever holds the port
-# (lsof — reliable for WSL-side api/mock-his, best-effort for web, which can
-# land as a Windows-side process lsof can't see across a WSL/interop
-# boundary). Plain POSIX only, no Windows-specific commands, so this behaves
-# the same on any contributor's machine.
+# then ALSO kill whoever holds the port (lsof) regardless of whether the
+# pidfile kill "succeeded" — the recorded pid can be a wrapper/ancestor
+# process (make/npm) that dies without taking its child (the actual
+# node/vite process bound to the port) down with it, so pidfile success is
+# not proof the port is free. Plain POSIX only, no Windows-specific
+# commands, so this behaves the same on any contributor's machine.
 stop:
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	for entry in "api:$${CAREPATH_API_PORT:-8080}" "mock-his:$${MOCK_HIS_PORT:-8090}" "web:5173"; do \
 		svc=$${entry%%:*}; port=$${entry#*:}; \
-		killed=""; \
 		if [ -f logs/$$svc.pid ]; then \
 			pid=$$(cat logs/$$svc.pid); \
 			if kill -9 $$pid 2>/dev/null; then \
 				echo "stopped $$svc: pidfile (pid $$pid)"; \
-				killed=1; \
 			else \
 				echo "$$svc: kill pidfile pid $$pid failed (stale or already gone)"; \
 			fi; \
@@ -82,7 +81,7 @@ stop:
 		else \
 			echo "$$svc: no pidfile"; \
 		fi; \
-		if [ -z "$$killed" ] && command -v lsof >/dev/null 2>&1; then \
+		if command -v lsof >/dev/null 2>&1; then \
 			pid=$$(lsof -ti tcp:$$port 2>/dev/null); \
 			if [ -n "$$pid" ]; then \
 				if kill -9 $$pid 2>/dev/null; then \
