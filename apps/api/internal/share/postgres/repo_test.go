@@ -20,6 +20,10 @@ func sha256Hex(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// micro truncates to microseconds — the precision a timestamptz column can
+// hold — so round-trip comparisons are exact rather than nanosecond-lottery.
+func micro(t time.Time) time.Time { return t.Truncate(time.Microsecond) }
+
 // Integration test against a real Postgres; requires the schema from
 // infra/postgres/migrations (run make migrate-up first). Everything lives
 // under TEST-SHARE-* visit ids and is deleted on the way in and out.
@@ -72,7 +76,7 @@ func TestRepoRoundTrip(t *testing.T) {
 	link := share.ShareLink{
 		TokenHash: sha256Hex("roundtrip-token"),
 		VisitID:   testVisit,
-		ExpiresAt: time.Now().Add(time.Hour),
+		ExpiresAt: micro(time.Now().Add(time.Hour)),
 	}
 	if err := repo.Create(ctx, link); err != nil {
 		t.Fatalf("create: %v", err)
@@ -112,7 +116,7 @@ func TestCountActiveAndRevoke(t *testing.T) {
 		{TokenHash: sha256Hex("active-1"), VisitID: testVisit, ExpiresAt: now.Add(time.Hour)},
 		{TokenHash: sha256Hex("active-2"), VisitID: testVisit, ExpiresAt: now.Add(time.Hour)},
 		{TokenHash: sha256Hex("expired"), VisitID: testVisit, ExpiresAt: now.Add(-time.Minute)},
-		{TokenHash: sha256Hex("revoked"), VisitID: testVisit, ExpiresAt: now.Add(time.Hour), RevokedAt: &now},
+		{TokenHash: sha256Hex("revoked"), VisitID: testVisit, ExpiresAt: micro(now.Add(time.Hour)), RevokedAt: &now},
 	}
 	for _, link := range links {
 		if err := repo.Create(ctx, link); err != nil {
@@ -160,7 +164,7 @@ func TestCascadeOnVisitDelete(t *testing.T) {
 
 	link := share.ShareLink{
 		TokenHash: sha256Hex("cascade-token"), VisitID: testVisit,
-		ExpiresAt: time.Now().Add(time.Hour),
+		ExpiresAt: micro(time.Now().Add(time.Hour)),
 	}
 	if err := repo.Create(ctx, link); err != nil {
 		t.Fatalf("create: %v", err)
