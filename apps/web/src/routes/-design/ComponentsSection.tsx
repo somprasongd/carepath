@@ -42,7 +42,7 @@ import {
   walkingSteps,
   type ServicePointLoad,
 } from '@/mocks/demo-data'
-import { staffNavItems, staffRailItems, staffRole } from '../staff/-nav'
+import { staffNavItems, staffRailItems, staffRoleLabel } from '../staff/-nav'
 import { Section, Specimen, SubHead } from './CatalogueParts'
 
 const allZones: Zone[] = ['public', 'opd', 'diagnostic', 'pharmacy', 'rehab', 'ipd', 'support']
@@ -282,7 +282,7 @@ export function ComponentsSection() {
               items={staffRailItems}
               activeId={railItem}
               onSelect={setRailItem}
-              role={staffRole}
+              role={staffRoleLabel(['STAFF'])}
             />
           </div>
         </Specimen>

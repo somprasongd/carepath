@@ -2,7 +2,7 @@ import { AppBar, BottomTabBar, Screen, ScreenBody, ScreenDock, SideRail, Wordmar
 import { useStaffAuth } from '@/auth/StaffAuthContext'
 import { useNavigate } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
-import { staffNavItems, staffRailItems, useStaffNav } from './-nav'
+import { navItemsForRole, staffNavItems, staffRailItems, staffRoleLabel, useStaffNav } from './-nav'
 
 /**
  * The staff console's one layout: a fixed rail from ~1280px (DESIGN.md's
@@ -21,6 +21,10 @@ export function StaffShell({
   const nav = useStaffNav()
   const { identity, logout } = useStaffAuth()
   const navigate = useNavigate()
+  // #87: EXECUTIVE gets the overview alone; the label comes from the token.
+  const railItems = navItemsForRole(staffRailItems, identity?.roles)
+  const tabItems = navItemsForRole(staffNavItems, identity?.roles)
+  const roleLabel = staffRoleLabel(identity?.roles)
 
   const signOut = () => {
     void logout().then(() => navigate({ to: '/login', replace: true }))
@@ -29,9 +33,9 @@ export function StaffShell({
   return (
     <Screen variant="staff">
       <SideRail
-        items={staffRailItems}
+        items={railItems}
         {...nav}
-        role={identity?.displayName ?? 'เจ้าหน้าที่'}
+        role={identity ? `${identity.displayName} · ${roleLabel}` : 'เจ้าหน้าที่'}
         onSignOut={signOut}
         className="hidden @7xl:flex"
       />
@@ -41,7 +45,7 @@ export function StaffShell({
           className="@7xl:hidden"
           wordmark={
             <>
-              CarePath <WordmarkSub>· เจ้าหน้าที่</WordmarkSub>
+              CarePath <WordmarkSub>· {roleLabel}</WordmarkSub>
             </>
           }
           trailing={
@@ -61,7 +65,7 @@ export function StaffShell({
         <ScreenBody>{children}</ScreenBody>
 
         <ScreenDock className="@7xl:hidden">
-          <BottomTabBar items={staffNavItems} {...nav} />
+          <BottomTabBar items={tabItems} {...nav} />
         </ScreenDock>
       </div>
     </Screen>

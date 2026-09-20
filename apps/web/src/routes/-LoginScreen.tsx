@@ -78,7 +78,7 @@ export function LoginScreen() {
           </form>
 
           <p className="mt-4 mb-0 text-center font-sans text-[11px] text-ink-muted">
-            บัญชีสาธิต — admin/demo (ผู้ดูแล) · staff/demo (เจ้าหน้าที่)
+            บัญชีสาธิต — admin/demo (ผู้ดูแล) · staff/demo (เจ้าหน้าที่) · exec/demo (ผู้บริหาร)
           </p>
         </Card>
       </div>
@@ -86,8 +86,9 @@ export function LoginScreen() {
   )
 }
 
-/** Landing per role: ADMIN lands on service-point management, STAFF on the queue console. */
+/** Landing per role: ADMIN → service-point management, EXECUTIVE → the overview dashboard, STAFF → the queue console. */
 function landingFor(identity: { roles: string[] }): string {
   if (identity.roles.includes('ADMIN')) return '/staff/service-points'
+  if (identity.roles.includes('EXECUTIVE')) return '/staff/overview'
   return '/staff/queue'
 }

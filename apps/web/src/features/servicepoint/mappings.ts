@@ -18,13 +18,22 @@ export type ServicePointView = {
   status: RouteStatus
 }
 
-/** Functional area per service code; unknown codes fall back to public. */
-function zoneForService(code: string): Zone {
-  switch (code) {
+/**
+ * Functional area per service code; unknown codes fall back to public.
+ * Binding codes reuse the bare vocabulary behind a kind prefix (ADR-0009):
+ * "ORDERTYPE:LAB" classifies like LAB, and any "CLINIC:*" is a doctor
+ * visit. Exported because the overview table (#87) colours its rows with
+ * the same call — the two screens can't disagree about a zone.
+ */
+export function zoneForService(code: string): Zone {
+  const base = code.replace(/^(ORDERTYPE|CLINIC):/, '')
+  switch (code.startsWith('CLINIC:') ? 'DOCTOR' : base) {
     case 'DOCTOR':
       return 'opd'
     case 'LAB':
     case 'XRAY':
+    case 'EKG':
+    case 'ULTRASOUND':
       return 'diagnostic'
     case 'PHARMACY':
       return 'pharmacy'
