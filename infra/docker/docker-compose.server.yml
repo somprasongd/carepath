@@ -1,0 +1,95 @@
+# Image-based stack for the dev host (61.19.253.24, ~/docker-apps/carepath).
+# The Release workflow (.github/workflows/release.yml) ships this file there
+# as docker-compose.yml, rsyncs infra/postgres/migrations/ to ./migrations,
+# and pins the version via IMAGE_TAG in ~/docker-apps/carepath/.env.
+#
+# Same topology as docker-compose.prod.yml — one origin behind the edge
+# proxy — but every CarePath tier comes from GHCR instead of a local build.
+# The host's port 80/443 belong to nginx-proxy-manager, so the edge proxy
+# publishes on a high port (CAREPATH_EDGE_PORT, default 8080) and also joins
+# the shared `webproxy` network so NPM can route a domain to it later.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-carepath}
+      POSTGRES_USER: ${POSTGRES_USER:-carepath}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-carepath} -d ${POSTGRES_DB:-carepath}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  mock-his:
+    image: ghcr.io/somprasongd/carepath-mock-his:${IMAGE_TAG:?set in .env}
+    environment:
+      PORT: 8090
+    restart: unless-stopped
+
+  migrate:
+    image: migrate/migrate:v4.18.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations:ro
+    command:
+      - -path=/migrations
+      - -database=postgres://${POSTGRES_USER:-carepath}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-carepath}?sslmode=disable
+      - up
+
+  api:
+    image: ghcr.io/somprasongd/carepath-api:${IMAGE_TAG:?set in .env}
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-carepath}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-carepath}?sslmode=disable
+      HIS_BASE_URL: ${HIS_BASE_URL:-http://mock-his:8090}
+      HIS_INGEST_INTERVAL: ${HIS_INGEST_INTERVAL:-5s}
+      LINE_CHANNEL_ID: ${LINE_CHANNEL_ID:-}
+      ALLOW_DEMO_AUTH: ${ALLOW_DEMO_AUTH:-false}
+      SESSION_TTL: ${SESSION_TTL:-24h}
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-168h}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      mock-his:
+        condition: service_started
+    restart: unless-stopped
+
+  web:
+    image: ghcr.io/somprasongd/carepath-web:${IMAGE_TAG:?set in .env}
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  proxy:
+    image: ghcr.io/somprasongd/carepath-proxy:${IMAGE_TAG:?set in .env}
+    ports:
+      - "${CAREPATH_EDGE_PORT:-8080}:80"
+    depends_on:
+      - web
+      - api
+      - mock-his
+    restart: unless-stopped
+    networks:
+      - default
+      - webproxy
+
+volumes:
+  pgdata:
+    name: carepath_pgdata
+
+networks:
+  # Shared bridge with nginx-proxy-manager; remove this (and the proxy's
+  # webproxy join) when deploying somewhere that doesn't have it.
+  webproxy:
+    name: webproxy
+    external: true

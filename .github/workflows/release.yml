@@ -1,0 +1,134 @@
+# Release pipeline: push a v* tag → build all images, push them to GHCR,
+# then deploy on the dev host over SSH (61.19.253.24, ~/docker-apps/carepath).
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Also runnable manually (workflow_dispatch) from any branch to deploy that
+# branch's HEAD — handy for testing the pipeline itself. See
+# docs/deployment.md for the server-side layout and the secrets this uses.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build-push:
+    name: Build & push ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            dockerfile: infra/docker/api.Dockerfile
+          - image: mock-his
+            dockerfile: infra/docker/mock-his.Dockerfile
+          - image: web
+            dockerfile: infra/docker/web-prod.Dockerfile
+          - image: proxy
+            dockerfile: infra/docker/proxy.Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tag images with the pushed tag (or branch name on dispatch); slashes
+      # are not valid in image tags, so they become dashes.
+      - name: Compute image tag
+        id: tag
+        run: echo "tag=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/carepath-${{ matrix.image }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/carepath-${{ matrix.image }}:latest
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+  deploy:
+    name: Deploy to dev host
+    needs: build-push
+    runs-on: ubuntu-latest
+    env:
+      # scp takes -P (capital) for the port, ssh/rsync take -p — hence the
+      # separate vars instead of one shared options string.
+      SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+      SSH_PORT: ${{ secrets.DEPLOY_PORT }}
+      SSH_USER: ${{ secrets.DEPLOY_USER }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_KEY" > "$HOME/deploy_id_ed25519"
+          chmod 600 "$HOME/deploy_id_ed25519"
+
+      - name: Ship compose file and migrations
+        run: |
+          KEY="$HOME/deploy_id_ed25519"
+          TARGET="$SSH_USER@$SSH_HOST"
+          ssh -i "$KEY" -p "$SSH_PORT" "$TARGET" "mkdir -p ~/docker-apps/carepath/migrations"
+          scp -i "$KEY" -P "$SSH_PORT" infra/docker/docker-compose.server.yml "$TARGET:docker-apps/carepath/docker-compose.yml"
+          rsync -e "ssh -i $KEY -p $SSH_PORT" --delete infra/postgres/migrations/ "$TARGET:docker-apps/carepath/migrations/"
+
+      - name: Roll out
+        run: |
+          KEY="$HOME/deploy_id_ed25519"
+          REMOTE="ssh -i $KEY -p $SSH_PORT $SSH_USER@$SSH_HOST"
+          TAG="${GITHUB_REF_NAME//\//-}"
+
+          # First deploy on a fresh host: create .env with generated secrets.
+          # Later deploys only ever touch IMAGE_TAG; the rest of .env is
+          # managed by hand on the host.
+          $REMOTE 'cd ~/docker-apps/carepath && if [ ! -f .env ]; then
+              { echo "CAREPATH_EDGE_PORT=8080"
+                echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
+                echo "JWT_SECRET=$(openssl rand -hex 32)"
+                echo "ALLOW_DEMO_AUTH=true"
+              } > .env
+              chmod 600 .env
+              echo ".env created"
+            fi'
+
+          $REMOTE "cd ~/docker-apps/carepath && sed -i '/^IMAGE_TAG=/d' .env && echo IMAGE_TAG=$TAG >> .env"
+          $REMOTE 'cd ~/docker-apps/carepath && docker compose pull api mock-his web proxy'
+          $REMOTE 'cd ~/docker-apps/carepath && docker compose up -d --remove-orphans'
+          $REMOTE 'cd ~/docker-apps/carepath && docker image prune -f'
+
+      - name: Deployment summary
+        run: |
+          TAG="${GITHUB_REF_NAME//\//-}"
+          {
+            echo "## Deployed \`$TAG\`"
+            echo
+            echo "- Images: \`ghcr.io/$OWNER/carepath-{api,mock-his,web,proxy}:$TAG\`"
+            echo "- Stack: \`$SSH_USER@$SSH_HOST:~/docker-apps/carepath\` (edge proxy on host port 8080)"
+          } >> "$GITHUB_STEP_SUMMARY"
