@@ -25,6 +25,11 @@ type Service interface {
 	// rotated, cancelled, past-grace, or minted under an older secret — is
 	// the same 404.
 	Redeem(ctx context.Context, id identity.Identity, token string) (visitID string, err error)
+	// ResolveToken validates a presented link token and returns the visit it
+	// addresses WITHOUT recording a claim — the session bootstrap path
+	// (source "visit-token") calls this, then claims for the visit-scoped
+	// identity it mints. Same all-404 failure surface as Redeem.
+	ResolveToken(ctx context.Context, token string) (visitID string, err error)
 }
 
 type service struct {
@@ -94,6 +99,20 @@ func (s *service) link(visitID, raw string) Link {
 }
 
 func (s *service) Redeem(ctx context.Context, id identity.Identity, raw string) (string, error) {
+	visitID, err := s.ResolveToken(ctx, raw)
+	if err != nil {
+		return "", err
+	}
+	if err := s.claims.Claim(ctx, id, visitID); err != nil {
+		return "", err
+	}
+	return visitID, nil
+}
+
+// ResolveToken is Redeem's validation half: shape, hash lookup, the
+// constant-time proof the token is the one this secret mints, and the
+// lifetime policy — everything except recording the claim.
+func (s *service) ResolveToken(ctx context.Context, raw string) (string, error) {
 	if raw == "" || len(raw) != base64.RawURLEncoding.EncodedLen(16) {
 		return "", ErrNotFound
 	}
@@ -114,9 +133,6 @@ func (s *service) Redeem(ctx context.Context, id identity.Identity, raw string) 
 	}
 	if !s.linkLive(status, completedAt, time.Now()) {
 		return "", ErrNotFound
-	}
-	if err := s.claims.Claim(ctx, id, visitID); err != nil {
-		return "", err
 	}
 	return visitID, nil
 }

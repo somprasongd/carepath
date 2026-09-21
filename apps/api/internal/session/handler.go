@@ -24,9 +24,10 @@ func NewHandler(service Service, claims ClaimRepo) *Handler {
 // Register mounts the session routes under the given /api/v1 router.
 // demoClaims also mounts the VN-typed claim — knowing the VN alone was the
 // patient front door in #96's MVP model, and #136 replaces it with the
-// slip-held link token everywhere except demo deployments (ALLOW_DEMO_AUTH
-// + the web's VN entry screen), so the guessable-credential door stays shut
-// in production.
+// slip-held link token everywhere except demo deployments without the mint
+// (ALLOW_DEMO_AUTH + no visit-link env + the web's VN entry screen), so the
+// guessable-credential door stays shut in production. main.go passes false
+// once the mint is live even on demo deployments.
 func (h *Handler) Register(router fiber.Router, demoClaims bool) {
 	router.Post("/auth/session", h.create)
 	router.Get("/auth/session", h.get)
@@ -47,22 +48,27 @@ type identityResponse struct {
 }
 
 type createResponse struct {
-	SessionToken string           `json:"sessionToken"`
-	Identity     identityResponse `json:"identity"`
-	ExpiresAt    time.Time        `json:"expiresAt"`
+	SessionToken string `json:"sessionToken"`
+	// VisitID is set only by the visit-token bootstrap: the visit the slip
+	// token addressed, already claimed for this session. Absent for line and
+	// demo sessions, which claim separately.
+	VisitID   *string          `json:"visitId,omitempty"`
+	Identity  identityResponse `json:"identity"`
+	ExpiresAt time.Time        `json:"expiresAt"`
 }
 
 // create godoc
 //
 //	@Summary		Create a patient session
-//	@Description	Exchanges a LINE ID token (or, when enabled, a demo identity) for an opaque CarePath session token.
+//	@Description	Exchanges a LINE ID token, a slip-held visit-link token (source "visit-token", which also claims the visit it addresses), or — when enabled — a demo identity for an opaque CarePath session token.
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			request	body		createRequest	true	"source: line|demo, idToken: the LINE ID token (ignored for demo)"
+//	@Param			request	body		createRequest	true	"source: line|demo|visit-token, idToken: the LINE ID token or visit-link token (ignored for demo)"
 //	@Success		200		{object}	createResponse
 //	@Failure		400		{object}	httpx.ErrorResponse	"invalid request body"
 //	@Failure		401		{object}	httpx.ErrorResponse	"invalid identity token, or demo auth disabled"
+//	@Failure		404		{object}	httpx.ErrorResponse	"visit-token unknown, rotated, cancelled, or past grace"
 //	@Router			/api/v1/auth/session [post]
 func (h *Handler) create(c fiber.Ctx) error {
 	var req createRequest
@@ -74,7 +80,7 @@ func (h *Handler) create(c fiber.Ctx) error {
 	if err != nil {
 		return httpx.Error(c, err)
 	}
-	return c.JSON(createResponse{
+	resp := createResponse{
 		SessionToken: sess.Token,
 		Identity: identityResponse{
 			Source:      sess.Identity.Source,
@@ -82,7 +88,11 @@ func (h *Handler) create(c fiber.Ctx) error {
 			DisplayName: sess.Identity.DisplayName,
 		},
 		ExpiresAt: sess.ExpiresAt,
-	})
+	}
+	if sess.VisitID != "" {
+		resp.VisitID = &sess.VisitID
+	}
+	return c.JSON(resp)
 }
 
 // get godoc

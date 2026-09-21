@@ -153,7 +153,7 @@ func TestStationQueueAssignmentAndCallNext(t *testing.T) {
 	seedStationVisit(t, database)
 	hisServer := stationHIS(t)
 	t.Cleanup(hisServer.Close)
-	app := newShareAppWithHIS(t, database, hisServer.URL)
+	app := newShareAppWithHIS(t, database, hisServer.URL, nil)
 
 	// The picker feed: staff sees the seeded assignment, not the unassigned
 	// points; admin sees the full list; and no token is rejected.

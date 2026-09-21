@@ -24,10 +24,19 @@ var ErrDemoAuthDisabled = apperr.New(apperr.KindUnauthorized, "demo auth is disa
 // not a bad request from the caller.
 var ErrLineAuthNotConfigured = apperr.New(apperr.KindInternal, "line auth is not configured")
 
+// ErrVisitTokenNotConfigured is returned for a "visit-token" source request
+// when the visit-link env (HIS_API_KEY + VISIT_LINK_SECRET) is unset: the
+// session bootstrap fails closed exactly like the mint routes it depends on.
+var ErrVisitTokenNotConfigured = apperr.New(apperr.KindUnauthorized, "visit-token sessions are not configured")
+
 // Session is a CarePath-issued credential standing in for a verified identity.
+// VisitID is ephemeral: only the visit-token bootstrap sets it (the visit the
+// slip token addressed, echoed once in the create response). It is not
+// persisted — the claim table is the durable identity→visit binding.
 type Session struct {
 	Token     string
 	Identity  identity.Identity
+	VisitID   string
 	ExpiresAt time.Time
 }
 
@@ -61,4 +70,15 @@ type ClaimRepo interface {
 	Claim(ctx context.Context, id identity.Identity, visitID string) error
 	// HasClaimed reports whether the identity may read the visit.
 	HasClaimed(ctx context.Context, id identity.Identity, visitID string) (bool, error)
+}
+
+// VisitTokenResolver validates a slip-held visit-link token (#136) and names
+// the visit it addresses, without recording a claim — the session bootstrap
+// (source "visit-token") resolves first, then claims for the visit-scoped
+// identity it mints. The port lives here because session cannot import
+// visitlink (visitlink's routes sit behind session.RequireSession); main.go
+// injects the visitlink service, keeping the dependency one-way. A nil
+// resolver disables the source — fail closed, like the mint itself.
+type VisitTokenResolver interface {
+	ResolveToken(ctx context.Context, raw string) (visitID string, err error)
 }

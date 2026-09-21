@@ -1,6 +1,6 @@
 # ADR-0014: HIS-Minted Visit Link — the Slip Is the Credential Handoff
 
-- Status: Accepted
+- Status: Accepted (amended 2026-09-20 — see Amendment)
 - Date: 2026-09-20
 - Related: [ADR-0010](0010-staff-auth-jwt-argon2.md) (identity kinds; patient sessions), [ADR-0011](0011-visit-share-link.md) (third credential; hash-only storage; token never in logs), [ADR-0005](0005-his-adapter-and-mock-his.md) (HIS behind a port), [ADR-0008](0008-his-canonical-event-contract.md) (event-driven HIS integration), #96 (journey session guard), #136
 
@@ -115,3 +115,48 @@ session claim. New module `internal/visitlink`, table
   rotated-out-404, in-grace redemption, and post-grace "claim outlives
   token" — under distinct LINE identities, since demo sessions all share one
   fixed identity.
+
+## Amendment (2026-09-20): the QR-only hospital, and retiring claim-by-name
+
+Layer 2 shipped with a gap the first production slip exposed: redeeming the
+token required a *pre-existing* session, and the only configured session
+source was demo (`ALLOW_DEMO_AUTH`) — so production ran with the demo door
+open, and `?visit=VISIT-002` was readable by editing the URL (claim-by-name
+was still mounted). Two product decisions follow (issue #136):
+
+1. **Entry is two first-class modes, not one plus a demo fallback.** A
+   hospital *with* a LINE Official Account sends patients through LINE LIFF
+   (`source "line"`); a hospital *without* one hands the patient nothing but
+   the printed slip — and the slip alone must carry them in. The token
+   therefore gained a second redemption path: `POST /auth/session` with
+   `source "visit-token"` **bootstraps the session itself** (contract
+   0.22.0). `session` defines a `VisitTokenResolver` port (it cannot import
+   `visitlink` — that would cycle through `RequireSession`); main.go injects
+   the visitlink service. The minted identity is visit-scoped and throwaway
+   (`{source: "visit", externalId: "visit:{vn}"}`, no DisplayName —
+   ADR-0012), the session is TTL-bound like any other, and the server
+   claims for that identity *before* persisting the session (a failure
+   costs a retry, never an orphaned session that can never claim). This
+   narrows §1 — the link is a claim grant first, and an identity *only* in
+   the sense of a visit-scoped session identity that dies with the session;
+   the durable grant is still the claim.
+2. **A live mint retires claim-by-name everywhere, demo deployments
+   included.** main.go registers `POST /journeys/{visitId}/claim` only when
+   `ALLOW_DEMO_AUTH` **and not** the visit-link env are set: with the mint
+   live, knowing a visit id must stop being a credential, or the §7 demo
+   exception re-opens the very hole layer 2 exists to close. The VN entry
+   screen consequently closes on any deployment with the mint configured;
+   demo deployments *without* the mint keep today's behavior unchanged.
+
+Web exchange rule: the slip screen waits for the auth provider to settle
+(the provider overwrites the API bearer when it finishes), then redeems
+into an existing LINE identity's claim but bootstraps a visit-token session
+in every other case (demo mode, LIFF failure, no bearer). The client also
+treats a non-journey 404 from the claim route as retired-route (remembered,
+not retried) — distinct from "journey not found", which stays retryable
+while the projection may still land.
+
+e2e: `TestVisitLinkQRBootstrap` walks the anonymous bootstrap end to end
+(no Authorization header at all), the visit-scoped read, the neighbor-404
+(`?visit=` guessing stays dead with the mint live), and rotation killing
+the bootstrap path.

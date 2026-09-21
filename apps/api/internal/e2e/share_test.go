@@ -43,19 +43,21 @@ import (
 const shareVisit = "VISIT-E2E-SHARE-1"
 
 func newShareApp(t *testing.T, database *db.DB) *fiber.App {
-	return newShareAppWithHIS(t, database, "http://127.0.0.1:1")
+	return newShareAppWithHIS(t, database, "http://127.0.0.1:1", nil)
 }
 
 // newShareAppWithHIS builds the same stack with the HIS client pointed at a
 // live base URL. The station queue suite (#102) drives the real transition
-// path, which replans from the HIS snapshot before writing.
-func newShareAppWithHIS(t *testing.T, database *db.DB, hisBaseURL string) *fiber.App {
+// path, which replans from the HIS snapshot before writing. visitTokens,
+// when set, resolves the "visit-token" session source (#136) exactly as
+// main.go wires it — only the visit-link suite passes one.
+func newShareAppWithHIS(t *testing.T, database *db.DB, hisBaseURL string, visitTokens session.VisitTokenResolver) *fiber.App {
 	t.Helper()
 	authService := auth.NewService(authpostgres.New(database), database,
 		auth.NewTokenIssuer([]byte("e2e-test-secret"), time.Minute), time.Hour)
-	sessions := session.NewService(sessionpostgres.New(database), nil,
-		true /* allowDemo */, time.Hour)
 	claims := sessionpostgres.NewClaimRepo(database)
+	sessions := session.NewService(sessionpostgres.New(database), nil,
+		visitTokens, claims, true /* allowDemo */, time.Hour)
 	// The journey service is fully wired (real service-point resolution), so
 	// GetJourney runs for real — the shared answer must come from the actual
 	// projection, not a stub. The HIS client is never reached: this test only

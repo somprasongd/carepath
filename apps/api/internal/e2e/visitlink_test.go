@@ -3,6 +3,8 @@
 // and the redeemed claim is what the #96 journey guard accepts. The
 // lifetime policy (completed grace, cancel) is driven through the
 // projection's completed_at, exactly as the real event path would set it.
+// The QR-only suite drives the other half of the front door: a patient with
+// no LINE and no prior session bootstraps straight from the token.
 package e2e_test
 
 import (
@@ -28,6 +30,7 @@ import (
 )
 
 const linkVisit = "VISIT-E2E-LINK-1"
+const linkVisit2 = "VISIT-E2E-LINK-2"
 
 const (
 	e2eHISKey     = "e2e-his-key"
@@ -46,16 +49,19 @@ func (fakeVerifier) Verify(_ context.Context, idToken string) (identity.Identity
 func newVisitLinkApp(t *testing.T, database *db.DB) (*fiber.App, session.Service) {
 	t.Helper()
 	// The full share-suite stack: a real journey service (service points,
-	// navigation, locations all wired) behind the real #96 patient guard, and
-	// the session handler with the demo claim route on — the redeem route
-	// (/journeys/claim, token in body) and the demo claim route
-	// (/journeys/:visitId/claim, VN in path) coexist by design.
-	app := newShareApp(t, database)
-	sessions := session.NewService(sessionpostgres.New(database), fakeVerifier{},
-		true /* allowDemo */, time.Hour)
+	// navigation, locations all wired) behind the real #96 patient guard.
+	// The session handler still mounts the demo claim route — this app
+	// models a demo deployment, where main.go retires that route only when
+	// the mint is live; the redeem route (/journeys/claim) is always on.
+	// The visitlink service rides in as the visit-token resolver exactly as
+	// main.go wires it, so the QR-only bootstrap runs through the same HTTP
+	// route the browser hits.
 	claims := sessionpostgres.NewClaimRepo(database)
 	links := visitlink.NewService(visitlinkpostgres.New(database), claims,
 		[]byte(e2eLinkSecret), "https://carepath.test", 30*time.Minute, slog.Default())
+	app := newShareAppWithHIS(t, database, "http://127.0.0.1:1", links)
+	sessions := session.NewService(sessionpostgres.New(database), fakeVerifier{},
+		links, claims, true /* allowDemo */, time.Hour)
 	visitlink.NewHandler(links).Register(app.Group("/api/v1"), e2eHISKey,
 		session.RequireSession(sessions))
 	return app, sessions
@@ -75,18 +81,22 @@ func lineSession(t *testing.T, sessions session.Service, userID string) string {
 }
 
 func seedLinkVisit(t *testing.T, database *db.DB) {
+	seedVisitFor(t, database, linkVisit)
+}
+
+func seedVisitFor(t *testing.T, database *db.DB, visitID string) {
 	t.Helper()
 	ctx := context.Background()
 	purge := func() {
 		_, _ = database.Querier(ctx).Exec(ctx,
-			`DELETE FROM carepath.journey_visit WHERE visit_id = $1`, linkVisit)
+			`DELETE FROM carepath.journey_visit WHERE visit_id = $1`, visitID)
 	}
 	purge()
 	t.Cleanup(purge)
 	q := database.Querier(ctx)
 	if _, err := q.Exec(ctx,
 		`INSERT INTO carepath.journey_visit (visit_id, patient_ref, patient_name, status)
-		 VALUES ($1, 'PATIENT-E2E-LINK', 'สมชาย ทดสอบลิงก์', 'ACTIVE')`, linkVisit,
+		 VALUES ($1, 'PATIENT-E2E-LINK', 'สมชาย ทดสอบลิงก์', 'ACTIVE')`, visitID,
 	); err != nil {
 		t.Fatalf("seed visit: %v", err)
 	}
@@ -95,7 +105,7 @@ func seedLinkVisit(t *testing.T, database *db.DB) {
 		     (visit_id, step_key, sequence, kind, clinic_code, round, order_refs,
 		      status, service_point_id)
 		 VALUES ($1, 'ORDERTYPE:LAB:1', 2, 'LAB', NULL, NULL, '{}', 'READY', 'SP-LAB')`,
-		linkVisit); err != nil {
+		visitID); err != nil {
 		t.Fatalf("seed step: %v", err)
 	}
 }
@@ -250,5 +260,83 @@ func TestVisitLinkLifecycle(t *testing.T) {
 	resp, _ = get(t, app, "/api/v1/journeys/"+linkVisit, patient)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("earlier claim after grace: status %d, want 200 — claims outlive the token", resp.StatusCode)
+	}
+}
+
+// The QR-only front door (#136 layer 2): a hospital without a LINE OA hands
+// the patient a printed slip and nothing else. The scanner arrives with no
+// bearer at all, and the slip token alone must bootstrap a claimed,
+// visit-scoped session over the ordinary POST /auth/session route.
+func TestVisitLinkQRBootstrap(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL not set; skipping integration test (needs migrations applied — see CI)")
+	}
+	database, err := db.New(context.Background(), databaseURL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(database.Close)
+	app, _ := newVisitLinkApp(t, database)
+	seedVisitFor(t, database, linkVisit)
+	seedVisitFor(t, database, linkVisit2)
+
+	// The HIS mints both slips at print time.
+	_, body := mint(t, app, linkVisit, e2eHISKey, "")
+	token := linkToken(t, body)
+	_, body2 := mint(t, app, linkVisit2, e2eHISKey, "")
+	token2 := linkToken(t, body2)
+
+	// The anonymous exchange: no Authorization header, no LINE, no demo.
+	resp, body := doJSON(t, app, http.MethodPost, "/api/v1/auth/session", "",
+		`{"source":"visit-token","idToken":"`+token+`"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("visit-token session: status %d: %s, want 200", resp.StatusCode, body)
+	}
+	var created struct {
+		SessionToken string `json:"sessionToken"`
+		VisitID      string `json:"visitId"`
+		Identity     struct {
+			Source     string `json:"source"`
+			ExternalID string `json:"externalId"`
+		} `json:"identity"`
+	}
+	if err := json.Unmarshal([]byte(body), &created); err != nil {
+		t.Fatalf("decode session response %s: %v", body, err)
+	}
+	if created.SessionToken == "" || created.VisitID != linkVisit {
+		t.Fatalf("session response %s: want a token for %s", body, linkVisit)
+	}
+	if created.Identity.Source != "visit" || created.Identity.ExternalID != "visit:"+linkVisit {
+		t.Errorf("identity = %+v, want the visit-scoped identity", created.Identity)
+	}
+
+	// The bootstrapped bearer reads its own journey…
+	resp, body = get(t, app, "/api/v1/journeys/"+linkVisit, created.SessionToken)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("journey read with bootstrapped session: status %d: %s, want 200", resp.StatusCode, body)
+	}
+	// …and nothing else: swapping ?visit= for a neighbor's id must stay the
+	// journey 404 even though the mint is live — the hole this door closes.
+	resp, _ = get(t, app, "/api/v1/journeys/"+linkVisit2, created.SessionToken)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("neighbor journey read: status %d, want the journey 404", resp.StatusCode)
+	}
+
+	// Garbage answers the same 404 as redeem — shape-checked, so exactly 22
+	// base64url characters that decode to nothing minted.
+	resp, _ = doJSON(t, app, http.MethodPost, "/api/v1/auth/session", "",
+		`{"source":"visit-token","idToken":"AAAAAAAAAAAAAAAAAAAAAA"}`)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("garbage token: status %d, want 404", resp.StatusCode)
+	}
+
+	// Rotation kills the bootstrap path too: a re-printed slip must stop the
+	// old token from minting fresh sessions.
+	_, _ = mint(t, app, linkVisit2, e2eHISKey, "?rotate=true")
+	resp, _ = doJSON(t, app, http.MethodPost, "/api/v1/auth/session", "",
+		`{"source":"visit-token","idToken":"`+token2+`"}`)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("rotated-out token bootstrap: status %d, want 404", resp.StatusCode)
 	}
 }
