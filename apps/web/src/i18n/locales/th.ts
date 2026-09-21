@@ -51,6 +51,7 @@ export const th = {
   // language in its own script — the Thai endonym stays 'ไทย' in every
   // locale, which is also why the thai-guard excludes only locales/th.ts.
   'common.language': 'ภาษา',
+  'common.language.switch': 'สลับภาษา',
   'common.locale.th': 'ไทย',
   'common.locale.en': 'EN',
 

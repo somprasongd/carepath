@@ -41,6 +41,7 @@ export const en: Catalog = {
   'common.clock': '{time}',
 
   'common.language': 'Language',
+  'common.language.switch': 'Switch language',
   'common.locale.th': 'ไทย',
   'common.locale.en': 'EN',
 
