@@ -19,6 +19,18 @@ func (f *fakeRepo) GetPlace(_ context.Context, placeID string) (Place, error) {
 	return place, nil
 }
 
+// ListFloors is unused by these cases; the service passes it straight
+// through to the repo.
+func (f *fakeRepo) ListFloors(context.Context) ([]Floor, error) { return nil, nil }
+
+// The floor write path (#105) belongs to the floorplan module; nothing
+// here exercises it.
+func (f *fakeRepo) GetFloor(context.Context, string) (Floor, error) {
+	return Floor{}, nil
+}
+
+func (f *fakeRepo) SetPlan(context.Context, string, string, string) error { return nil }
+
 func (f *fakeRepo) ListPlaces(context.Context) ([]Place, error) {
 	var places []Place
 	for _, place := range f.places {

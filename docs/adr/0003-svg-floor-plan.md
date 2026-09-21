@@ -1,6 +1,6 @@
 # ADR-0003: SVG Floor Plan for MVP
 
-- Status: Accepted
+- Status: Superseded by [ADR-0015](0015-uploaded-floor-plan-artifacts.md)
 - Date: 2026-09-19
 
 ## Decision
@@ -14,3 +14,7 @@ SVG is browser-native, scalable, easy to style, supports stable element IDs, wor
 ## Consequences
 
 3D may be added later using the same `Place` and navigation data, but 3D is not a dependency of the core architecture or MVP.
+
+## Superseded
+
+SVG remains the format ([ADR-0015](0015-uploaded-floor-plan-artifacts.md) keeps it). What no longer holds is that a plan is a file in the repository: FR-11 (#105) needs plans an admin can replace, so they are uploaded, normalized, and served as immutable artifacts instead.

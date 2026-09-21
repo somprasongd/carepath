@@ -161,6 +161,11 @@ export const th = {
   'map.routeAria': 'ผัง{floor} — เส้นทางจากตำแหน่งปัจจุบันไป{name}',
   'map.zoomIn': 'ซูมเข้า',
   'map.zoomOut': 'ซูมออก',
+  // The plan is fetched rather than bundled (ADR-0015), so the map card has
+  // states the rest of the screen does not. Both say plainly that only the
+  // picture is missing — the directions below it still work.
+  'map.loading': 'กำลังโหลดผังอาคาร… คำบอกทางด้านล่างใช้ได้ตามปกติ',
+  'map.unavailable': 'แสดงผังอาคารไม่ได้ตอนนี้ ใช้คำบอกทางด้านล่างแทนได้',
 
   // Location report overlay (routes/patient/-ScanOverlay.tsx).
   'scan.title.camera': 'สแกน QR ที่จุดบริการ',

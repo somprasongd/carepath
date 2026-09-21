@@ -23,6 +23,32 @@ export async function apiGet<TReturn>(path: string): Promise<TReturn> {
   return request(path, { method: 'GET' })
 }
 
+/**
+ * GET a non-JSON body — the floor plan SVG (ADR-0015), which is served as
+ * `image/svg+xml` rather than wrapped in JSON. Goes through `request` like
+ * every other authenticated call rather than its own doFetch, so it gets
+ * the same silent rotate-and-replay on a 401 as the rest of the client:
+ * this route is unguarded today, but the helper is general-purpose, and a
+ * future guarded text endpoint should not have to rediscover that gap.
+ */
+export async function apiGetText(path: string): Promise<string> {
+  return request(path, { method: 'GET' }, false, 'text')
+}
+
+/**
+ * POST a floor plan (ADR-0015). The upload endpoint takes the SVG as the
+ * raw body rather than a multipart field — the file *is* the request, and
+ * the server rejects anything that is not a plan long before content-type
+ * would have told it apart.
+ */
+export async function apiPostSvg<TReturn>(path: string, svg: string): Promise<TReturn> {
+  return request(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/svg+xml' },
+    body: svg,
+  })
+}
+
 export async function apiPost<TReturn>(path: string, body: unknown): Promise<TReturn> {
   return request(path, {
     method: 'POST',
@@ -60,6 +86,17 @@ export async function apiPostNoContent(path: string): Promise<void> {
   if (!response.ok) {
     throw await apiErrorFrom(response)
   }
+}
+
+/**
+ * Body-less POST that returns JSON (the floor-plan activate/rollback call,
+ * ADR-0015 — there is nothing to upload, only a plan id already in the
+ * path). apiPostNoContent's returning sibling: same body-less shape, but
+ * goes through `request` for the response parsing and the 401 retry rather
+ * than being handed a document body through apiPostSvg.
+ */
+export async function apiPostAction<TReturn>(path: string): Promise<TReturn> {
+  return request(path, { method: 'POST' })
 }
 
 // ---------------------------------------------------------------------------
@@ -241,7 +278,15 @@ async function rawRequest<TReturn>(path: string, init: RequestInit): Promise<TRe
   return (await response.json()) as TReturn
 }
 
-async function request<TReturn>(path: string, init: RequestInit, retried = false): Promise<TReturn> {
+async function request<TReturn>(
+  path: string,
+  init: RequestInit,
+  retried = false,
+  // 'text' for a non-JSON body such as the floor-plan SVG (apiGetText):
+  // still goes through the 401 rotate-and-replay below, which a fetch
+  // outside this function would not get.
+  parseAs: 'json' | 'text' = 'json',
+): Promise<TReturn> {
   const response = await doFetch(path, withAuthHeader(init))
 
   // A staff request whose access token expired: try one silent rotation and
@@ -256,13 +301,16 @@ async function request<TReturn>(path: string, init: RequestInit, retried = false
     !path.startsWith('/api/v1/auth/')
   ) {
     if (await refreshStaffSession()) {
-      return request(path, init, true)
+      return request(path, init, true, parseAs)
     }
     staffSessionExpired?.()
   }
 
   if (!response.ok) {
     throw await apiErrorFrom(response)
+  }
+  if (parseAs === 'text') {
+    return (await response.text()) as TReturn
   }
   return (await response.json()) as TReturn
 }

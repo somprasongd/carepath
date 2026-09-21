@@ -23,7 +23,7 @@ This directory is the working source of truth for architecture, requirements, de
 
 - [ADR-0001 Monorepo + Modular Monolith](adr/0001-monorepo-modular-monolith.md)
 - [ADR-0002 Separate Care Graph and Navigation Graph](adr/0002-separate-care-and-navigation-graphs.md)
-- [ADR-0003 SVG Floor Plan for MVP](adr/0003-svg-floor-plan.md)
+- [ADR-0003 SVG Floor Plan for MVP](adr/0003-svg-floor-plan.md) — superseded by ADR-0015
 - [ADR-0004 Location Provider Abstraction](adr/0004-location-provider-abstraction.md)
 - [ADR-0005 HIS Adapter and Mock HIS](adr/0005-his-adapter-and-mock-his.md)
 - [ADR-0006 REST + OpenAPI Contracts](adr/0006-rest-openapi.md)
@@ -35,6 +35,7 @@ This directory is the working source of truth for architecture, requirements, de
 - [ADR-0012 Client-Owned Display Text (i18n)](adr/0012-client-owned-display-text.md)
 - [ADR-0013 Queue-Proximity Notification (outbound channel port)](adr/0013-queue-proximity-notification.md)
 - [ADR-0014 HIS-Minted Visit Link (slip QR grants the session claim)](adr/0014-his-visit-link.md)
+- [ADR-0015 Uploaded Floor-Plan Artifacts](adr/0015-uploaded-floor-plan-artifacts.md) — supersedes ADR-0003
 
 ## Integration
 

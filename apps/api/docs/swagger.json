@@ -8,6 +8,325 @@
     },
     "basePath": "/",
     "paths": {
+        "/api/v1/admin/floors/{floorId}/health": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "ADR-0015: recomputes the active plan's warnings against the map model as it stands right now, unlike the warnings on the plan itself (from /plans), which are a snapshot frozen at upload time. Empty when the floor has no active plan.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Re-check the floor's active plan against the map model",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Floor id",
+                        "name": "floorId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/floorplan.Warning"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "missing, malformed, or expired staff access token",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "authenticated, but not an ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "unknown floor",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/floors/{floorId}/plan": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "FR-11/ADR-0015: replaces the floor's plan. Send the SVG as the raw request body. The upload is parsed, held to a closed allowlist and re-serialized before storage, so a rejection means the file has to change — nothing is silently stripped. A place or navigation node the plan does not draw is a warning rather than a rejection: the app already shows such a place as not routable yet. Plans are append-only, so this adds a row and moves the floor's pointer; re-uploading an unchanged file is idempotent.",
+                "consumes": [
+                    "image/svg+xml"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Upload a floor plan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Floor id (e.g. I-1301)",
+                        "name": "floorId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/floorplan.Stored"
+                        }
+                    },
+                    "400": {
+                        "description": "the plan broke a rule — the message names which",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "missing, malformed, or expired staff access token",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "authenticated, but not an ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "unknown floor",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/floors/{floorId}/plans": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "ADR-0015: every plan stored for this floor, newest first, with the warnings each was accepted with. Plans are never deleted, so this is both the history and the list a rollback picks from.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List a floor's plans",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Floor id",
+                        "name": "floorId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/floorplan.Stored"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "missing, malformed, or expired staff access token",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "authenticated, but not an ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "unknown floor",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/floors/{floorId}/plans/{planId}/activate": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "ADR-0015: the rollback. Plans are append-only, so returning to an earlier drawing moves the floor's pointer rather than restoring anything.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Make a stored plan the floor's active one",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Floor id",
+                        "name": "floorId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Plan id from the plans listing",
+                        "name": "planId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/floorplan.Stored"
+                        }
+                    },
+                    "401": {
+                        "description": "missing, malformed, or expired staff access token",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "authenticated, but not an ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "no such plan on that floor",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/floors/{floorId}/plans/{planId}/raw": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "ADR-0015: the original bytes, before normalization, so an admin can get back the file they sent. This is never what a patient is served — that is always the normalized artifact.",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Download a plan as it was uploaded",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Floor id",
+                        "name": "floorId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Plan id from the plans listing",
+                        "name": "planId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "the uploaded file",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "missing, malformed, or expired staff access token",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "authenticated, but not an ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "no such plan on that floor",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/analytics/overview": {
             "get": {
                 "description": "Operational metrics for the executive dashboard (#86): per-service-point wait/service numbers and visit-wide summary, aggregated in SQL from the append-only step timeline (#85). window=today means midnight-to-now in the analytics timezone (Asia/Bangkok by default). Executives get EXECUTIVE logins that reach this surface and nothing else (ADR-0010); no patient-level data (NFR-03).",
@@ -248,7 +567,7 @@
                 }
             },
             "post": {
-                "description": "Exchanges a LINE ID token (or, when enabled, a demo identity) for an opaque CarePath session token.",
+                "description": "Exchanges a LINE ID token, a slip-held visit-link token (source \"visit-token\", which also claims the visit it addresses), or — when enabled — a demo identity for an opaque CarePath session token.",
                 "consumes": [
                     "application/json"
                 ],
@@ -261,7 +580,7 @@
                 "summary": "Create a patient session",
                 "parameters": [
                     {
-                        "description": "source: line|demo, idToken: the LINE ID token (ignored for demo)",
+                        "description": "source: line|demo|visit-token, idToken: the LINE ID token or visit-link token (ignored for demo)",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -285,6 +604,12 @@
                     },
                     "401": {
                         "description": "invalid identity token, or demo auth disabled",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "visit-token unknown, rotated, cancelled, or past grace",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }
@@ -342,6 +667,83 @@
                     },
                     "403": {
                         "description": "authenticated, but not STAFF or ADMIN",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/floors": {
+            "get": {
+                "description": "#105/ADR-0015: every floor in display order with the URL of its current plan. This is the pointer document the web app revalidates; the plan URL it hands back is immutable and cached for a year. Replaces the floor list apps/web used to hardcode beside its bundled plan assets.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "floors"
+                ],
+                "summary": "List floors and their plan URLs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/floorplan.FloorView"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/floors/{floorId}/plan/{asset}": {
+            "get": {
+                "description": "#105/ADR-0015: the normalized SVG for a floor, addressed by its own sha256. The response is immutable — a different drawing is a different digest and therefore a different URL — so it is cached for a year and never revalidated. Take this URL from the floors listing rather than assembling it.",
+                "produces": [
+                    "image/svg+xml"
+                ],
+                "tags": [
+                    "floors"
+                ],
+                "summary": "Get a floor plan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Floor id (e.g. I-1301)",
+                        "name": "floorId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "The plan's sha256 with an .svg suffix, as the floors listing spells it",
+                        "name": "asset",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "the floor plan SVG",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "no plan with that digest on that floor",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }
@@ -1055,6 +1457,64 @@
                 }
             }
         },
+        "/api/v1/navigation/edges": {
+            "get": {
+                "description": "#105/ADR-0015: the graph's directed, costed edges. Two-way connections are two rows (A→B and B→A) and a cross-floor transition is an edge whose endpoints sit on different floors, so this is the whole walkable graph, not a per-floor slice.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "navigation"
+                ],
+                "summary": "List navigation edges",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/navigation.NavEdge"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/navigation/nodes": {
+            "get": {
+                "description": "#105/ADR-0015: the graph's nodes, which apps/web used to read from a build-time copy of packages/floorplans/graphs. The QR stickers staff print for lifts, stairs and entrances are derived from this list, so a stale copy sends patients to nodes that no longer exist — which is why the copy had to go.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "navigation"
+                ],
+                "summary": "List navigation nodes",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/navigation.NavNode"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/navigation/route": {
             "get": {
                 "description": "Shortest walkable route for the SVG overlay. from is the current location's navigation node id — the nodeId of a location observation (e.g. I-1301/node-reception); to is the destination service point's code, which the server resolves to the place's entry node before routing.",
@@ -1104,6 +1564,35 @@
                         "description": "unknown node or service point, destination without a mapped place, or no walkable path",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/places": {
+            "get": {
+                "description": "#105: every place in the hospital map with its floor resolved — the destinations a service point can be mapped to. Already reachable one at a time through a service point's resolved place; this is the whole set, for choosing among them. A place whose plan has not drawn it yet is still listed: it is selectable, just not routable.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "places"
+                ],
+                "summary": "List places",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/hospitalmap.Place"
+                            }
                         }
                     },
                     "500": {
@@ -1530,6 +2019,79 @@
                 }
             }
         },
+        "floorplan.FloorView": {
+            "type": "object",
+            "properties": {
+                "activePlanId": {
+                    "description": "ActivePlanID names the plan PlanURL was built from, so a client that\nalready has that plan's id (e.g. from the admin history listing) can\ntell it is the active one directly, rather than reconstructing the\nfact by checking whether its digest appears inside the URL.",
+                    "type": "string"
+                },
+                "buildingId": {
+                    "type": "string"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "floorId": {
+                    "type": "string"
+                },
+                "levelOrder": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "planUrl": {
+                    "type": "string"
+                },
+                "viewBox": {
+                    "type": "string"
+                }
+            }
+        },
+        "floorplan.Stored": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "createdBy": {
+                    "description": "CreatedBy is nil for the plans seeded from packages/floorplans, which\nno admin uploaded.",
+                    "type": "string"
+                },
+                "floorId": {
+                    "type": "string"
+                },
+                "planId": {
+                    "type": "string"
+                },
+                "sha256": {
+                    "type": "string"
+                },
+                "viewBox": {
+                    "type": "string"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/floorplan.Warning"
+                    }
+                }
+            }
+        },
+        "floorplan.Warning": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the stable machine-readable reason; display text is the\nclient's (ADR-0012).",
+                    "type": "string"
+                },
+                "ref": {
+                    "description": "Ref is the place id, node id, or element the warning is about.",
+                    "type": "string"
+                }
+            }
+        },
         "hospitalmap.Floor": {
             "type": "object",
             "properties": {
@@ -1546,6 +2108,10 @@
                     "type": "integer"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "viewBox": {
+                    "description": "ViewBox is the floor's coordinate space (\"0 0 1600 900\"), the space\nevery Place X/Y and every nav node coordinate is expressed in. It is\nset by the floor's first plan and holds every later one to it\n(ADR-0015); nil on a floor that has no plan yet.",
                     "type": "string"
                 }
             }
@@ -2125,6 +2691,10 @@
                     "$ref": "#/definitions/session.identityResponse"
                 },
                 "sessionToken": {
+                    "type": "string"
+                },
+                "visitId": {
+                    "description": "VisitID is set only by the visit-token bootstrap: the visit the slip\ntoken addressed, already claimed for this session. Absent for line and\ndemo sessions, which claim separately.",
                     "type": "string"
                 }
             }

@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: up down logs api mock-his web fmt migrate-up swag start stop fetch docs-erd
+.PHONY: up down logs api mock-his web fmt migrate-up seed-floorplans swag start stop fetch docs-erd
 
 # `command -v migrate` covers a normal PATH
 # install; non-interactive shells don't source ~/.bashrc so also check the
@@ -31,6 +31,13 @@ fmt:
 
 migrate-up:
 	docker compose run --rm migrate
+
+# Regenerate the floor-plan seed migration from packages/floorplans. The SVG
+# goes through internal/floorplan on the way in, so a seeded plan is
+# byte-identical to the same file uploaded through the admin API (ADR-0015).
+# Run this after changing a floor-plan asset, and commit the output.
+seed-floorplans:
+	cd apps/api && go run ./cmd/floorplanseed > ../../infra/postgres/migrations/000024_seed_floor_plans.up.sql
 
 # Regenerate docs/architecture/erd/ from the live schema (needs `make up` or
 # `make migrate-up` first, and `tbls`: brew install k1LoW/tap/tbls). Docs use

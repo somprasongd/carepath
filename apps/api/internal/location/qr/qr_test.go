@@ -33,6 +33,17 @@ func (f *fakePlaces) GetPlace(_ context.Context, placeID string) (hospitalmap.Pl
 
 func (f *fakePlaces) ListPlaces(context.Context) ([]hospitalmap.Place, error) { return nil, nil }
 
+// The QR provider resolves places, never floors.
+func (f *fakePlaces) ListFloors(context.Context) ([]hospitalmap.Floor, error) { return nil, nil }
+
+// The floor write path (#105) belongs to the floorplan module; nothing
+// here exercises it.
+func (f *fakePlaces) GetFloor(context.Context, string) (hospitalmap.Floor, error) {
+	return hospitalmap.Floor{}, nil
+}
+
+func (f *fakePlaces) SetPlan(context.Context, string, string, string) error { return nil }
+
 // fakeNodes implements the navigation.Service surface the QR provider uses:
 // GetNode over the graph's lift nodes; anything else is not found.
 type fakeNodes struct {

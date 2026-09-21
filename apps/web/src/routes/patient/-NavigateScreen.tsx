@@ -13,7 +13,7 @@ import {
   Screen,
   ScreenDock,
 } from '@/design-system'
-import { floorLabelFor, floorPlanFor, type DestinationPlan, type NavigatePlan } from '@/features/floorplan'
+import type { DestinationPlan, NavigatePlan } from '@/features/floorplan'
 
 /**
  * Patient · navigate to a service point — the real floor-plan asset with the
@@ -28,6 +28,9 @@ import { floorLabelFor, floorPlanFor, type DestinationPlan, type NavigatePlan } 
  */
 export function NavigateScreen({
   plan,
+  planSvg,
+  planUnavailable,
+  floorLabel,
   route,
   currentLocation,
   assumedLocation,
@@ -39,6 +42,17 @@ export function NavigateScreen({
   onBack,
 }: {
   plan: NavigatePlan
+  /** The displayed floor's drawing. Undefined while it is still being
+   *  fetched (ADR-0015 — plans are served, not bundled); the screen keeps
+   *  the destination and the turn-by-turn cues, which come from the journey
+   *  and the route API, and shows the map card as a placeholder. */
+  planSvg?: string
+  /** True when the drawing could not be fetched at all, so the placeholder
+   *  says so instead of implying it is still coming. */
+  planUnavailable?: boolean
+  /** Patient-facing floor label, e.g. "Floor 1". The floor list is server
+   *  data now, so the screen is handed the lookup rather than doing it. */
+  floorLabel: (floorId: string) => string
   route?: { floorId: string; floors: string[]; mapRoute: FloorPlanRoute; cues: string[] }
   /** Plain line stating where the patient is (#35); absent when unknown. */
   currentLocation?: string
@@ -81,40 +95,53 @@ export function NavigateScreen({
         }
       />
 
-      {plan.state === 'plan' && floorId && floorPlanFor(floorId) ? (
+      {plan.state === 'plan' && floorId ? (
         <>
           {/* The inner relative box is the map card's own frame — chips
               anchored here stay inside the card, not the screen gutter. */}
           <div className="flex-1 overflow-hidden px-gutter pt-1 pb-2">
             <div className="relative h-full w-full">
-              <FloorPlanMap
-                svg={floorPlanFor(floorId) ?? ''}
-                floorLabel={floorLabelFor(floorId, locale)}
-                destination={
-                  plan.floorId === floorId
-                    ? {
-                        placeId: plan.placeId,
-                        name: plan.name,
-                        x: plan.x,
-                        y: plan.y,
-                      }
-                    : undefined
-                }
-                route={route?.mapRoute}
-                ariaLabel={
-                  route
-                    ? t('map.routeAria', { floor: plan.floorLabel, name: plan.name })
-                    : t('map.planAria', { floor: plan.floorLabel, name: plan.name })
-                }
-                labels={{
-                  viewFullFloor: t('map.viewFullFloor'),
-                  viewRoute: t('map.viewRoute'),
-                  viewDestination: t('map.viewDestination'),
-                  youAreHere: t('map.youAreHere'),
-                  zoomIn: t('map.zoomIn'),
-                  zoomOut: t('map.zoomOut'),
-                }}
-              />
+              {planSvg ? (
+                <FloorPlanMap
+                  svg={planSvg}
+                  floorLabel={floorLabel(floorId)}
+                  destination={
+                    plan.floorId === floorId
+                      ? {
+                          placeId: plan.placeId,
+                          name: plan.name,
+                          x: plan.x,
+                          y: plan.y,
+                        }
+                      : undefined
+                  }
+                  route={route?.mapRoute}
+                  ariaLabel={
+                    route
+                      ? t('map.routeAria', { floor: plan.floorLabel, name: plan.name })
+                      : t('map.planAria', { floor: plan.floorLabel, name: plan.name })
+                  }
+                  labels={{
+                    viewFullFloor: t('map.viewFullFloor'),
+                    viewRoute: t('map.viewRoute'),
+                    viewDestination: t('map.viewDestination'),
+                    youAreHere: t('map.youAreHere'),
+                    zoomIn: t('map.zoomIn'),
+                    zoomOut: t('map.zoomOut'),
+                  }}
+                />
+              ) : (
+                /* The drawing is fetched now, so it can be slow or missing
+                   while everything else on this screen is ready. The cues
+                   below come from the route API, not from the plan, so the
+                   patient can still be walked there by text — never a dead
+                   screen waiting on an image. */
+                <div className="flex h-full w-full items-center justify-center rounded-lg border border-line bg-surface px-gutter">
+                  <p className="text-center font-sans text-caption text-ink-muted">
+                    {planUnavailable ? t('map.unavailable') : t('map.loading')}
+                  </p>
+                </div>
+              )}
               {showFloorSwitch && (
                 <div className="absolute top-2.5 left-2.5 z-10 flex gap-1.5">
                   {route.floors.map((floor) => (
@@ -128,7 +155,7 @@ export function NavigateScreen({
                           : 'border-line bg-surface text-ink-muted'
                       }`}
                     >
-                      {floorLabelFor(floor, locale)}
+                      {floorLabel(floor)}
                     </button>
                   ))}
                 </div>

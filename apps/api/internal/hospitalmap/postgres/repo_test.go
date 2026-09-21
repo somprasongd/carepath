@@ -36,6 +36,11 @@ func TestGetPlace(t *testing.T) {
 	if place.FloorID != "I-1301" || place.Floor == nil || place.Floor.Name != "Ground Floor" {
 		t.Fatalf("GetPlace(REG-01) = %+v, want I-1301 Ground Floor", place)
 	}
+	// The contract has declared Floor.viewBox since #105; this asserts the
+	// query actually selects it rather than always scanning nil.
+	if place.Floor.ViewBox == nil || *place.Floor.ViewBox != "0 0 1600 900" {
+		t.Fatalf("GetPlace(REG-01).Floor.ViewBox = %v, want \"0 0 1600 900\"", place.Floor.ViewBox)
+	}
 	if place.X == nil || *place.X != 150 || place.Y == nil || *place.Y != 190 {
 		t.Fatalf("GetPlace(REG-01) coordinates = (%v, %v), want (150, 190)", place.X, place.Y)
 	}

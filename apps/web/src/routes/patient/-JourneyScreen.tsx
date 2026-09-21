@@ -19,6 +19,7 @@ import {
   type JourneyStep,
 } from '@/design-system'
 import { ShareSheet } from '@/features/share'
+import { usePrefetchFloorPlan } from '@/features/floorplan'
 import {
   journeyProgressLabel,
   NotificationToggle,
@@ -60,6 +61,12 @@ export function JourneyScreen({
       journey && !journey.completed && journey.status !== 'CANCELLED' && journey.recommended,
     ),
   })
+  // Warm the drawing of the floor this visit is heading to, so tapping
+  // through to the map does not start by waiting for it. The plan is fetched
+  // rather than bundled since ADR-0015; its URL is immutable, so this is one
+  // request that the navigate screen then reads straight from cache.
+  usePrefetchFloorPlan(journey?.recommended?.servicePoint?.place?.floorId)
+
   const [shareOpen, setShareOpen] = useState(false)
   // Sharing needs a real patient session (ADR-0011). In demo fallback — API
   // unreachable, no token — the page stays fully usable and the button says

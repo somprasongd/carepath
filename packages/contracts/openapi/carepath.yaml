@@ -1176,6 +1176,373 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/places:
+    get:
+      description: >
+        Every place in the hospital map with its floor resolved (#105) —
+        the destinations a service point can be mapped to. A place its
+        floor's plan has not drawn yet is still listed: selectable, just
+        not routable.
+      responses:
+        '200':
+          description: Every place, ordered by place id
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Place'
+  /api/v1/admin/floors/{floorId}/plan:
+    post:
+      description: >
+        Replace a floor's plan (FR-11 / ADR-0015). ADMIN only — this
+        changes what every patient in the building sees.
+
+        Send the SVG as the raw request body. It is parsed, held to a
+        closed allowlist and re-serialized before storage: a rejection
+        means the file has to change, because nothing is silently
+        stripped. The `viewBox` must match the floor's established
+        coordinate space — every place and navigation node is positioned
+        in it.
+
+        A place or navigation node the plan does not draw comes back as a
+        warning rather than a rejection; the app already shows such a
+        place as not routable yet.
+
+        Plans are append-only, so this adds a row and moves the floor's
+        pointer. The plan id is derived from the content, so re-uploading
+        an unchanged file is idempotent.
+      security:
+        - staffAuth: []
+      parameters:
+        - in: path
+          name: floorId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          image/svg+xml:
+            schema: { type: string }
+      responses:
+        '201':
+          description: Stored and made active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoredFloorPlan'
+        '400':
+          description: >
+            The plan broke a rule — a disallowed element or attribute, an
+            external reference, a mismatched viewBox, a missing or wrong
+            data-floor group, no route layer, or a size limit. The message
+            names which.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing, malformed, or expired staff access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Authenticated, but not an ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown floor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/admin/floors/{floorId}/plans:
+    get:
+      description: >
+        Every plan stored for this floor, newest first, with the warnings
+        each was accepted with. Plans are never deleted, so this is both
+        the history and the list a rollback picks from.
+      security:
+        - staffAuth: []
+      parameters:
+        - in: path
+          name: floorId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The floor's plans, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StoredFloorPlan'
+        '401':
+          description: Missing, malformed, or expired staff access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Authenticated, but not an ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown floor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/admin/floors/{floorId}/plans/{planId}/activate:
+    post:
+      description: >
+        Make a stored plan the floor's active one — the rollback. Plans are
+        append-only, so returning to an earlier drawing moves the floor's
+        pointer rather than restoring anything, and the plan being moved
+        away from stays available to move back to.
+      security:
+        - staffAuth: []
+      parameters:
+        - in: path
+          name: floorId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: planId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The now-active plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoredFloorPlan'
+        '401':
+          description: Missing, malformed, or expired staff access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Authenticated, but not an ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No such plan on that floor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/admin/floors/{floorId}/plans/{planId}/raw:
+    get:
+      description: >
+        The plan as it was uploaded, before normalization, so an admin can
+        get back the file they sent. This is never what a patient is served
+        — that is always the normalized artifact. It is the one copy in the
+        system that has not been through the allowlist, so it is returned
+        as a download (`application/octet-stream`, `no-store`) rather than
+        as something a browser should render.
+      security:
+        - staffAuth: []
+      parameters:
+        - in: path
+          name: floorId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: planId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The uploaded file
+          content:
+            application/octet-stream:
+              schema: { type: string }
+        '401':
+          description: Missing, malformed, or expired staff access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Authenticated, but not an ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No such plan on that floor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/admin/floors/{floorId}/health:
+    get:
+      description: >
+        Re-checks the floor's active plan against the map model as it
+        stands right now (ADR-0015). Unlike the `warnings` on a plan
+        returned from `/plans`, which are a snapshot frozen at upload time,
+        this recomputes them — so a place or navigation node added or
+        removed since the plan was uploaded shows up here even though the
+        plan itself has not changed. Empty when the floor has no active
+        plan yet.
+      security:
+        - staffAuth: []
+      parameters:
+        - in: path
+          name: floorId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The active plan's current warnings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FloorPlanWarning'
+        '401':
+          description: Missing, malformed, or expired staff access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Authenticated, but not an ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown floor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/navigation/nodes:
+    get:
+      description: >
+        The navigation graph's nodes (#105 / ADR-0015). Ids are globally
+        unique as `<floorId>/<localId>` because the authored ids are
+        floor-local — `node-lift` exists on both floors.
+
+        The web app used to read this from a build-time copy of
+        packages/floorplans/graphs. It no longer can: the QR stickers staff
+        print for lifts, stairs and entrances are derived from this list, so
+        a stale copy would send patients to nodes that no longer exist.
+      responses:
+        '200':
+          description: Every node of the graph, across floors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NavNode'
+  /api/v1/navigation/edges:
+    get:
+      description: >
+        The navigation graph's directed, costed edges (#105 / ADR-0015). A
+        two-way connection is two rows (A→B and B→A) and a cross-floor
+        transition is an edge whose endpoints sit on different floors, so
+        this is the whole walkable graph rather than a per-floor slice.
+        `distance` is authored schematic SVG units, not metres.
+      responses:
+        '200':
+          description: Every edge of the graph
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NavEdge'
+  /api/v1/floors:
+    get:
+      description: >
+        Every floor in display order with the URL of its current plan
+        (#105 / ADR-0015). This is the pointer document: it is small, it
+        changes whenever a plan is replaced, and so it revalidates, while
+        the `planUrl` it hands back names its own digest and is immutable.
+        Fetch a plan through the `planUrl` given here rather than
+        assembling that URL — the digest is not a client-side concern.
+
+        Before ADR-0015 this list was hardcoded in the web app beside its
+        bundled plan assets; plans are now uploaded, so the floor list has
+        to be served too.
+      responses:
+        '200':
+          description: Floors in vertical display order
+          headers:
+            Cache-Control:
+              description: Always `no-cache` — the plan pointer must be revalidated.
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FloorPlanRef'
+  /api/v1/floors/{floorId}/plan/{asset}:
+    get:
+      description: >
+        The normalized floor-plan SVG, addressed by its own sha256
+        (#105 / ADR-0015). A different drawing is a different digest and
+        therefore a different URL, so this response never changes and is
+        cached for a year without revalidation.
+
+        The body is server-generated: an uploaded plan is parsed, held to a
+        closed allowlist and re-serialized before it is ever stored, so what
+        is served here is never the bytes an uploader supplied.
+      parameters:
+        - in: path
+          name: floorId
+          required: true
+          description: Floor id, e.g. I-1301.
+          schema: { type: string }
+        - in: path
+          name: asset
+          required: true
+          description: >
+            The plan's sha256 with an `.svg` suffix, exactly as the floors
+            listing spells it. The floor is part of the key, so one floor's
+            URL cannot reach another floor's drawing.
+          schema: { type: string }
+      responses:
+        '200':
+          description: The floor plan
+          headers:
+            Cache-Control:
+              description: '`public, max-age=31536000, immutable`'
+              schema: { type: string }
+            Content-Security-Policy:
+              description: >
+                `default-src 'none'; style-src 'unsafe-inline'` — this URL is
+                directly navigable, and a directly-navigated SVG would
+                otherwise run in the API's own origin.
+              schema: { type: string }
+            X-Content-Type-Options:
+              description: '`nosniff`'
+              schema: { type: string }
+          content:
+            image/svg+xml:
+              schema: { type: string }
+        '404':
+          description: No plan with that digest on that floor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   securitySchemes:
     bearerAuth:
@@ -1393,6 +1760,90 @@ components:
         code: { type: string }
         name: { type: string }
         levelOrder: { type: integer }
+        viewBox:
+          type: string
+          description: >
+            The floor's coordinate space, e.g. "0 0 1600 900" — the space
+            every Place x/y and every navigation node coordinate is
+            expressed in. Set by the floor's first plan and unchanged by
+            later ones (ADR-0015). Absent on a floor with no plan yet.
+    FloorPlanWarning:
+      type: object
+      description: >
+        Something the plan and the map model disagree about that does not
+        make the plan unusable (ADR-0015). Stable codes, no display text —
+        the client owns the words (ADR-0012).
+      required: [code, ref]
+      properties:
+        code:
+          type: string
+          description: >
+            `PLACE_MISSING` — the model has this place on this floor but
+            the plan does not draw it. `PLACE_UNKNOWN` — the plan draws a
+            place the model does not have. `NODE_MISSING` — the graph has
+            this node but the plan does not draw it.
+          enum: [PLACE_MISSING, PLACE_UNKNOWN, NODE_MISSING]
+        ref:
+          type: string
+          description: The place id or floor-local navigation node id concerned.
+    StoredFloorPlan:
+      type: object
+      description: >
+        A plan as stored (ADR-0015). Rows are append-only, so this is never
+        edited — a new upload is a new row and the floor's pointer moves.
+        The SVG itself is not in this shape; fetch it through the floors
+        listing's planUrl.
+      required: [planId, floorId, sha256, viewBox, warnings, createdAt]
+      properties:
+        planId: { type: string }
+        floorId: { type: string }
+        sha256:
+          type: string
+          description: Digest of the normalized plan; also its cache key in the serving URL.
+        viewBox:
+          type: string
+          description: The coordinate space, always equal to the floor's.
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/FloorPlanWarning'
+        createdAt: { type: string, format: date-time }
+        createdBy:
+          type: string
+          description: >
+            The admin who uploaded it. Absent on the plans seeded from
+            packages/floorplans, which no admin uploaded.
+    FloorPlanRef:
+      type: object
+      description: >
+        A floor and where to fetch its drawing (#105 / ADR-0015). Note that
+        `floorId` is what `Floor.id` calls `id`: this shape is the plan
+        pointer document, not a Floor.
+      required: [floorId, buildingId, code, name, levelOrder]
+      properties:
+        floorId: { type: string }
+        buildingId: { type: string }
+        code: { type: string }
+        name: { type: string }
+        levelOrder: { type: integer }
+        viewBox:
+          type: string
+          description: The floor's coordinate space, as on Floor.
+        planUrl:
+          type: string
+          description: >
+            Immutable URL of the floor's current plan, digest included.
+            Absent on a floor with no plan yet — the same explicit
+            "not available" state the rest of the map model uses, rather
+            than a URL that would 404.
+        activePlanId:
+          type: string
+          description: >
+            The plan id planUrl was built from — present exactly when
+            planUrl is. Lets a caller who already holds a plan id (e.g.
+            from GET .../admin/floors/{floorId}/plans) tell it is the
+            active one directly, rather than checking whether its digest
+            appears inside planUrl.
     StepKind:
       type: string
       description: >
