@@ -169,8 +169,8 @@ describe('turnByTurnSteps', () => {
 })
 
 describe('voiceSteps', () => {
-  const thFloor = (floorId: string) => floorLabelFor(floorId, 'th')
-  const enFloor = (floorId: string) => floorLabelFor(floorId, 'en')
+  const thFloor = (floorId: string) => floorLabelFor(floorId, 'th', FLOORS)
+  const enFloor = (floorId: string) => floorLabelFor(floorId, 'en', FLOORS)
   const th = messagesFor('th')
 
   it('speaks the same walk as the screen but arrives without naming the destination', () => {
