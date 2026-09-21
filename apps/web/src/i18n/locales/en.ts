@@ -117,6 +117,7 @@ export const en: Catalog = {
   'navigate.pickInstead': 'Or pick where you are',
   'navigate.updateLocation': 'Scan QR / pick a point to update your location',
   'navigate.avoidStairs': 'Avoid stairs (use the lift)',
+  'navigate.voice.toggle': 'Voice guidance',
 
   'navigate.routeTitle': 'Directions to {name}',
   'navigate.subtitle': '{floor} · {name} · {place}',
@@ -130,6 +131,8 @@ export const en: Catalog = {
   'navigate.cue.elevator': 'Take the elevator to {floor}',
   'navigate.cue.stairs': 'Take the stairs to {floor}',
   'navigate.cue.arrive': 'Arrive at {name} — your destination',
+  'navigate.voice.intro': 'Route to your destination',
+  'navigate.cue.arriveUnnamed': 'You have arrived at your destination',
 
   'navigate.assumedLocation': 'Approximate · after {step}',
 

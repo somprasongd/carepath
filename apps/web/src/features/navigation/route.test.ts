@@ -7,6 +7,7 @@ import {
   routeOriginOnFloor,
   routePolylinesByFloor,
   turnByTurnSteps,
+  voiceSteps,
   type NavEdge,
   type NavNode,
 } from './route'
@@ -164,6 +165,48 @@ describe('turnByTurnSteps', () => {
 
   it('returns no cues for an empty route', () => {
     expect(turnByTurnSteps([], [], 'Pharmacy', thFloor, 'th')).toEqual([])
+  })
+})
+
+describe('voiceSteps', () => {
+  const thFloor = (floorId: string) => floorLabelFor(floorId, 'th')
+  const enFloor = (floorId: string) => floorLabelFor(floorId, 'en')
+  const th = messagesFor('th')
+
+  it('speaks the same walk as the screen but arrives without naming the destination', () => {
+    const nodes = [node('I-1301', 150, 190), node('I-1301', 318, 190), node('I-1301', 885, 190)]
+    const segments = [edge(0, 1, 'CORRIDOR'), edge(1, 2, 'CORRIDOR')]
+    expect(voiceSteps(nodes, segments, thFloor, 'th')).toEqual([
+      th['navigate.voice.intro'],
+      th['navigate.cue.followLine'],
+      th['navigate.cue.arriveUnnamed'],
+    ])
+  })
+
+  it('never speaks the service point name — #108 privacy rule', () => {
+    const nodes = [
+      node('I-1301', 150, 190),
+      node('I-1301', 700, 300),
+      node('I-1302', 700, 300),
+      node('I-1302', 165, 405),
+    ]
+    const segments = [edge(0, 1, 'CORRIDOR'), edge(1, 2, 'ELEVATOR'), edge(2, 3, 'CORRIDOR')]
+    // The screen cues carry the name; the spoken set must not — a specialty
+    // clinic's name is medical data, and speech is loud.
+    expect(turnByTurnSteps(nodes, segments, 'Eye Clinic', enFloor, 'en').join(' ')).toContain(
+      'Eye Clinic',
+    )
+    expect(voiceSteps(nodes, segments, enFloor, 'en')).toEqual([
+      'Route to your destination',
+      'Follow the orange line on the map',
+      'Take the elevator to Floor 2',
+      'Follow the orange line on the map',
+      'You have arrived at your destination',
+    ])
+  })
+
+  it('returns no cues for an empty route', () => {
+    expect(voiceSteps([], [], thFloor, 'th')).toEqual([])
   })
 })
 

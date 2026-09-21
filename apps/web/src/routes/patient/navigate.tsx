@@ -19,6 +19,8 @@ import {
   turnByTurnSteps,
   useCurrentLocation,
   useNavigationRoute,
+  useVoiceGuidance,
+  voiceSteps,
 } from '@/features/navigation'
 import { useJourney } from '@/features/visit'
 import {
@@ -126,6 +128,16 @@ function PatientNavigateRoute() {
         }
       : undefined
 
+  // The spoken variant of the same route (#108, FR-25): catalog text and
+  // floor labels only — never the destination's name (a specialty clinic's
+  // name is medical data, and speech is loud). Empty until a route exists;
+  // the hook re-speaks by itself when a fresh fix redraws the route.
+  const voiceCues =
+    plan.state === 'plan' && route
+      ? voiceSteps(route.nodes, route.segments, floorLabel, locale)
+      : []
+  const voice = useVoiceGuidance(voiceCues, locale)
+
   return (
     <div className="h-dvh">
       <NavigateScreen
@@ -141,6 +153,7 @@ function PatientNavigateRoute() {
         assumedLocation={assumed ? assumedOriginLabel(assumed, locale) : undefined}
         accessibleOnly={accessibleOnly}
         onToggleAccessibleOnly={toggleAccessibleOnly}
+        voice={voice}
         onScan={() => setScan(qrScannerSupported() ? 'camera' : 'pick')}
         onPickLocation={() => setScan('pick')}
         onBack={() => navigate({ to: '/patient/journey', search: { visit: visitId } })}

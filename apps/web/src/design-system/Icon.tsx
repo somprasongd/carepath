@@ -197,3 +197,14 @@ export function QueueIcon(props: IconProps) {
     </Glyph>
   )
 }
+
+/** Spoken guidance: a speaker announcing the route (#108, FR-25). */
+export function VoiceIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M11 5 6.5 9H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h2.5L11 19z" />
+      <path d="M15 9a4.2 4.2 0 0 1 0 6" />
+      <path d="M17.7 6.5a8 8 0 0 1 0 11" />
+    </Glyph>
+  )
+}
