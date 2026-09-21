@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { authMode } from '@/auth/auth-mode'
-import { ApiError, apiGet, apiPost, apiPostNoContent } from '@/api/client'
+import { ApiError, apiGet, apiPost, apiPostNoContent, setApiAuthToken } from '@/api/client'
 import type { components } from '@/api/schema'
 
 // Every queryFn here throws ApiError, so hooks can read `error.status`.
@@ -93,15 +93,22 @@ function journeyIsFinal(journey: Journey): boolean {
 // command works without passing the journey screen first.
 const claimedVisits = new Set<string>()
 const claimsInFlight = new Map<string, Promise<void>>()
+// Visits whose claim-by-name route answered a 404 that is NOT the
+// journey-not-found envelope: the route itself is retired (the mint is
+// live, #136 layer 2), so retrying can never mint a claim. Remembered for
+// the page session so the 15s polls stop firing a dead POST.
+const unclaimableVisits = new Set<string>()
 
 /**
  * Bind this session's identity to the visit (#96) before reading or
- * commanding it. In demo mode claiming by VN is the patient's front door —
- * knowing the visit id (typed VN, scanned QR) is the credential. In line mode
- * that route doesn't exist on the server (ALLOW_DEMO_AUTH off in production):
- * the slip-link redeem (#136) is the only front door, and it has already
- * claimed by the time a visit id reaches the URL — so this is a no-op and an
- * un-redeemed ?visit= simply reads as the journey's not-found state.
+ * commanding it. Claim-by-VN is the front door only on demo deployments
+ * WITHOUT the visit-link mint: there knowing the visit id (typed VN,
+ * scanned QR) is the credential. Wherever the mint is live, the server
+ * retires the route (a live mint makes knowing a VN worthless on purpose —
+ * #136), the slip token claims instead (redeem, or the visit-token session
+ * bootstrap below), and this becomes a no-op whose 404 is remembered. Line
+ * mode never had it: an un-redeemed ?visit= simply reads as the journey's
+ * not-found state.
  * Idempotent server-side, and once per page session is enough — the Set keeps
  * the 15s polls and parallel queries from re-firing the POST. Only a claim
  * that SUCCEEDED is remembered: a failed one is retried by the next call
@@ -112,7 +119,7 @@ const claimsInFlight = new Map<string, Promise<void>>()
  */
 export async function ensureVisitClaimed(visitId: string): Promise<void> {
   if (authMode === 'line') return
-  if (claimedVisits.has(visitId)) return
+  if (claimedVisits.has(visitId) || unclaimableVisits.has(visitId)) return
   // Concurrent callers (poll + parallel queries) share one in-flight POST.
   const existing = claimsInFlight.get(visitId)
   if (existing) {
@@ -122,6 +129,18 @@ export async function ensureVisitClaimed(visitId: string): Promise<void> {
   const claim = apiPostNoContent(`/api/v1/journeys/${encodeURIComponent(visitId)}/claim`)
     .then(() => {
       claimedVisits.add(visitId)
+    })
+    .catch((err) => {
+      // "journey not found" is the visit-not-projected answer — retryable,
+      // the projection may still land. Any other 404 means the route itself
+      // is gone (the deployment retired claim-by-name with a live mint), and
+      // no retry can succeed: remember it and let the read surface its own
+      // not-found instead of a dead POST on every poll.
+      if (err instanceof ApiError && err.status === 404 && err.message !== 'journey not found') {
+        unclaimableVisits.add(visitId)
+        return
+      }
+      throw err
     })
     .finally(() => {
       claimsInFlight.delete(visitId)
@@ -141,6 +160,32 @@ export async function redeemVisitLinkToken(token: string): Promise<string> {
   const response = await apiPost<{ visitId: string }>('/api/v1/journeys/claim', { token })
   claimedVisits.add(response.visitId)
   return response.visitId
+}
+
+/**
+ * Bootstrap a patient session straight from the slip token (#136 layer 2)
+ * over POST /auth/session (source "visit-token") — the QR-only front door
+ * for hospitals without a LINE OA: no login exists for the token to top
+ * up, so the token itself mints the session, and the server claims the
+ * visit for the visit-scoped identity before answering. The fresh bearer
+ * replaces whatever was in flight (a shared demo identity claiming the
+ * visit would re-open exactly the door this mode exists to close).
+ * Unknown, rotated, cancelled, and past-grace tokens answer the same 404
+ * redeem does.
+ */
+export async function createVisitTokenSession(token: string): Promise<string> {
+  const session = await apiPost<components['schemas']['CreateSessionResponse']>(
+    '/api/v1/auth/session',
+    { source: 'visit-token', idToken: token },
+  )
+  if (!session.visitId) {
+    // The server only omits visitId for a contract violation — treat it as
+    // a dead token rather than navigating to a visitless journey screen.
+    throw new ApiError(404, 'visit-token session returned no visitId')
+  }
+  setApiAuthToken(session.sessionToken)
+  claimedVisits.add(session.visitId)
+  return session.visitId
 }
 
 /**

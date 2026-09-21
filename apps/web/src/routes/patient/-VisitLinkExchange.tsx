@@ -4,22 +4,32 @@ import { LanguageToggle, useT } from '@/i18n'
 import { LargeTextToggle } from '@/preferences'
 import { Button, Card, PageTitle } from '@/design-system'
 import { ApiError } from '@/api/client'
-import { redeemVisitLinkToken } from '@/features/visit/queries'
+import { useAuth } from '@/auth/AuthContext'
+import { createVisitTokenSession, redeemVisitLinkToken } from '@/features/visit/queries'
 import { clearVisitLinkToken, readVisitLinkToken } from '@/features/visit/visit-link'
 
 /**
- * The slip-link exchange (#136), and the line-mode front door it becomes.
- * Arriving on /patient/journey without ?visit= but with a stashed #vt= token
- * (see visit-link.ts) redeems the token for the visit id — the URL then
- * carries only the id, and the token never does again. A 404 (unknown,
- * rotated, cancelled, past-grace link) clears the stash: the dead link must
- * not wedge every future navigation into its error screen.
+ * The slip-link exchange (#136): the front door both entry modes share.
+ * Arriving on /patient/journey without ?visit= but with a stashed #vt=
+ * token (see visit-link.ts) exchanges the token for the visit id — the
+ * URL then carries only the id, and the token never does again. The two
+ * modes differ in what the token tops up: a hospital with a LINE OA sends
+ * an already-logged-in LINE patient, and the token redeems into their
+ * identity's claim; a hospital without one hands the patient nothing but
+ * the printed slip, and the token bootstraps the patient session outright
+ * (source "visit-token") — no login prerequisite at all. The choice waits
+ * for the auth provider to settle, because the provider overwrites the
+ * API bearer when it finishes and would strand a session minted too
+ * early. A 404 (unknown, rotated, cancelled, past-grace link) clears the
+ * stash: the dead link must not wedge every future navigation into its
+ * error screen.
  */
 type ExchangeState = 'exchanging' | 'invalid' | 'error'
 
 export function VisitLinkExchange() {
   const navigate = useNavigate()
   const t = useT()
+  const { status, identity } = useAuth()
   // No token at mount (the parent only renders this screen when one existed
   // — but a stash cleared since that read) starts at the dead-link answer.
   const [state, setState] = useState<ExchangeState>(() =>
@@ -31,11 +41,21 @@ export function VisitLinkExchange() {
 
   useEffect(() => {
     let cancelled = false
+    // Wait out the auth provider's own session mint: it ends by replacing
+    // the API bearer, which would orphan a visit-token session bootstrapped
+    // underneath it.
+    if (status === 'loading') return
     void (async () => {
       const token = readVisitLinkToken()
       if (!token) return
       try {
-        const visitId = await redeemVisitLinkToken(token)
+        // A settled LINE session redeems into its per-user claim; anything
+        // else (demo mode, a LIFF failure, no bearer at all) bootstraps the
+        // visit-scoped session straight from the slip token.
+        const visitId =
+          identity?.source === 'line' && identity.sessionToken
+            ? await redeemVisitLinkToken(token)
+            : await createVisitTokenSession(token)
         if (!cancelled) {
           // The token has done its job — the claim outlives it. Clearing on
           // success too means a later bare visit never replays a link that
@@ -59,7 +79,7 @@ export function VisitLinkExchange() {
     return () => {
       cancelled = true
     }
-  }, [navigate, attempt])
+  }, [navigate, attempt, status, identity])
 
   return (
     <div className="@container h-full w-full">

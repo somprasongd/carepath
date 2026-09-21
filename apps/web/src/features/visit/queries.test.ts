@@ -1,9 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { setApiAuthToken } from '@/api/client'
 import type { Journey } from './queries'
-import { ensureVisitClaimed, journeyQueryOptions, transitionStepUrl } from './queries'
+import {
+  createVisitTokenSession,
+  ensureVisitClaimed,
+  journeyQueryOptions,
+  transitionStepUrl,
+} from './queries'
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  // The QR bootstrap test adopts a visit-scoped bearer; leave the client
+  // tokenless so later suites' exact-args assertions see bare requests.
+  setApiAuthToken(undefined)
 })
 
 const jsonResponse = (body: unknown, status = 200) =>
@@ -147,5 +156,69 @@ describe('ensureVisitClaimed (#96 visit claim)', () => {
       '/api/v1/journeys/VISIT-CLAIM-D/claim',
       '/api/v1/journeys/VISIT-CLAIM-D',
     ])
+  })
+
+  it('treats a non-journey 404 from the claim as a retired route — remembered, not retried', async () => {
+    // Mint live ⇒ claim-by-name is unregistered: fiber's own 404, no error
+    // envelope. Swallowing it keeps the read as the surface of record, and
+    // remembering it stops every 15s poll from re-firing the dead POST.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response('Cannot POST /api/v1/journeys/VISIT-GONE/claim', { status: 404 }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(ensureVisitClaimed('VISIT-GONE')).resolves.toBeUndefined()
+    await ensureVisitClaimed('VISIT-GONE')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('createVisitTokenSession (#136 QR-only front door)', () => {
+  it('bootstraps a claimed, visit-scoped session and rides it as the patient bearer', async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === '/api/v1/auth/session') {
+        return Promise.resolve(
+          jsonResponse({
+            sessionToken: 'sess-visit-1',
+            visitId: 'VISIT-QR-1',
+            identity: { source: 'visit', externalId: 'visit:VISIT-QR-1' },
+            expiresAt: '2026-09-20T03:00:00Z',
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse(journey({ visitId: 'VISIT-QR-1' })))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(createVisitTokenSession('slip-token')).resolves.toBe('VISIT-QR-1')
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'visit-token', idToken: 'slip-token' }),
+    })
+
+    // The server claimed before answering: the journey read goes straight
+    // through under the new bearer — no claim POST, no wedging.
+    const queryFn = journeyQueryOptions('VISIT-QR-1').queryFn as () => Promise<Journey>
+    await expect(queryFn()).resolves.toMatchObject({ visitId: 'VISIT-QR-1' })
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/api/v1/auth/session',
+      '/api/v1/journeys/VISIT-QR-1',
+    ])
+    const read = fetchMock.mock.calls.find(([path]) => path === '/api/v1/journeys/VISIT-QR-1')
+    expect(read?.[1]).toMatchObject({ headers: { Authorization: 'Bearer sess-visit-1' } })
+  })
+
+  it('surfaces the token 404 — the exchange screen shows its invalid state', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ error: 'journey not found' }, 404)),
+    )
+
+    const failure = await createVisitTokenSession('garbage').catch((e: unknown) => e)
+    expect(failure).toBeInstanceOf(Error)
+    expect((failure as { status?: number }).status).toBe(404)
   })
 })

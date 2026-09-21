@@ -149,11 +149,47 @@ func run(ctx context.Context, log *slog.Logger) error {
 	}
 	allowDemoAuth := envOrDefault("ALLOW_DEMO_AUTH", "false") == "true"
 	sessionTTL := envDuration("SESSION_TTL", 24*time.Hour)
-	sessions := session.NewService(sessionpostgres.New(database), lineVerifier, allowDemoAuth, sessionTTL)
 	// Visit ownership (#96): the claim is the bridge from a verified identity
 	// to the visits it may read. Patient journey surfaces take this guard, so
-	// a session can only reach visits it claimed by naming the VN.
+	// a session can only reach visits it claimed.
 	claims := sessionpostgres.NewClaimRepo(database)
+
+	// Visit links (#136, FR-18 layer 2): the slip-held credential. The HIS
+	// mints it at slip-print time over the system's first inbound
+	// HIS→CarePath call, and the patient web redeems it into the #96 claim.
+	// Both routes fail closed: without a HIS key (mint) or a link secret
+	// (both), neither is registered — a credential-minting surface must not
+	// exist half-configured.
+	hisAPIKey := os.Getenv("HIS_API_KEY")
+	visitLinkSecret := os.Getenv("VISIT_LINK_SECRET")
+	visitLinksEnabled := hisAPIKey != "" && visitLinkSecret != ""
+	var links visitlink.Service
+	var visitTokens session.VisitTokenResolver
+	if !visitLinksEnabled {
+		log.Warn("HIS_API_KEY or VISIT_LINK_SECRET unset; visit-link mint/redeem routes and the visit-token session source are not registered",
+			"his_api_key_set", hisAPIKey != "", "visit_link_secret_set", visitLinkSecret != "")
+	} else {
+		visitLinkGrace := envDuration("VISIT_LINK_COMPLETED_GRACE", 30*time.Minute)
+		visitLinkBase := envOrDefault("PATIENT_APP_BASE_URL", "http://localhost:5173")
+		if os.Getenv("PATIENT_APP_BASE_URL") == "" {
+			// The mint call is server-to-server, so there is no request to
+			// derive an origin from — prod must set PATIENT_APP_BASE_URL to
+			// the public origin or every slip QR points at localhost.
+			log.Warn("PATIENT_APP_BASE_URL unset; minted visit links will point at " + visitLinkBase)
+		}
+		links = visitlink.NewService(visitlinkpostgres.New(database), claims,
+			[]byte(visitLinkSecret), visitLinkBase,
+			visitLinkGrace, log)
+		// The slip QR must be a complete front door for hospitals without a
+		// LINE OA: the token also bootstraps a patient session outright
+		// (source "visit-token"). The resolver port is session's only handle
+		// on the token — session cannot import visitlink (its routes sit
+		// behind session.RequireSession), so main wires it and the module
+		// dependency stays one-way.
+		visitTokens = links
+		log.Info("visit links enabled", "completed_grace", visitLinkGrace.String())
+	}
+	sessions := session.NewService(sessionpostgres.New(database), lineVerifier, visitTokens, claims, allowDemoAuth, sessionTTL)
 
 	// Staff/admin auth (ADR-0010): argon2id passwords, a stateless 15-minute
 	// JWT access token, and a rotating single-use refresh token. JWT_SECRET
@@ -200,34 +236,16 @@ func run(ctx context.Context, log *slog.Logger) error {
 		return c.Type("html").SendString(swaggerUIPage)
 	})
 
-	session.NewHandler(sessions, claims).Register(app.Group("/api/v1"), allowDemoAuth)
+	// A live mint retires claim-by-name: with the slip link as the front
+	// door, knowing a visit id must stop being the credential, or anyone
+	// could read any journey by editing ?visit= (ADR-0014). Demo sessions
+	// still mint below — they are harmless without a claim, and the
+	// visit-token bootstrap has replaced them as the QR's companion.
+	session.NewHandler(sessions, claims).Register(app.Group("/api/v1"), allowDemoAuth && !visitLinksEnabled)
 
-	// Visit links (#136, FR-18 layer 2): the slip-held credential. The HIS
-	// mints it at slip-print time over the system's first inbound
-	// HIS→CarePath call, and the patient web redeems it into the #96 claim.
-	// Both routes fail closed: without a HIS key (mint) or a link secret
-	// (both), neither is registered — a credential-minting surface must not
-	// exist half-configured.
-	hisAPIKey := os.Getenv("HIS_API_KEY")
-	visitLinkSecret := os.Getenv("VISIT_LINK_SECRET")
-	if hisAPIKey == "" || visitLinkSecret == "" {
-		log.Warn("HIS_API_KEY or VISIT_LINK_SECRET unset; visit-link mint/redeem routes not registered",
-			"his_api_key_set", hisAPIKey != "", "visit_link_secret_set", visitLinkSecret != "")
-	} else {
-		visitLinkGrace := envDuration("VISIT_LINK_COMPLETED_GRACE", 30*time.Minute)
-		visitLinkBase := envOrDefault("PATIENT_APP_BASE_URL", "http://localhost:5173")
-		if os.Getenv("PATIENT_APP_BASE_URL") == "" {
-			// The mint call is server-to-server, so there is no request to
-			// derive an origin from — prod must set PATIENT_APP_BASE_URL to
-			// the public origin or every slip QR points at localhost.
-			log.Warn("PATIENT_APP_BASE_URL unset; minted visit links will point at " + visitLinkBase)
-		}
-		links := visitlink.NewService(visitlinkpostgres.New(database), claims,
-			[]byte(visitLinkSecret), visitLinkBase,
-			visitLinkGrace, log)
+	if visitLinksEnabled {
 		visitlink.NewHandler(links).Register(app.Group("/api/v1"), hisAPIKey,
 			session.RequireSession(sessions))
-		log.Info("visit links enabled", "completed_grace", visitLinkGrace.String())
 	}
 
 	authHandler := auth.NewHandler(authService)

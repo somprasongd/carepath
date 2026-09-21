@@ -75,7 +75,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** @description Exchanges a LINE ID token (source "line"), or a demo identity (source "demo", only when the server has ALLOW_DEMO_AUTH enabled), for an opaque CarePath session token. */
+        /** @description Exchanges a patient credential for an opaque CarePath session token: a LINE ID token (source "line"), a demo identity (source "demo", only when the server has ALLOW_DEMO_AUTH enabled), or a slip-held visit-link token (source "visit-token", only when the visit-link env is configured) — the QR-only front door for hospitals without a LINE OA, which also claims the visit it addresses and returns its id. */
         post: {
             parameters: {
                 query?: never;
@@ -109,6 +109,15 @@ export interface paths {
                 };
                 /** @description Invalid identity token, or demo auth disabled */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Visit-token unknown, rotated, cancelled, or past grace */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2128,18 +2137,20 @@ export interface components {
         /** @description A verified external identity behind a CarePath session. */
         Identity: {
             /** @enum {string} */
-            source: "line" | "demo";
+            source: "line" | "demo" | "visit";
             externalId: string;
             displayName?: string;
         };
         CreateSessionRequest: {
             /** @enum {string} */
-            source: "line" | "demo";
-            /** @description The LINE ID token. Ignored (may be empty) for source "demo". */
+            source: "line" | "demo" | "visit-token";
+            /** @description The LINE ID token (source "line") or the visit-link token (source "visit-token"). Ignored (may be empty) for source "demo". */
             idToken: string;
         };
         CreateSessionResponse: {
             sessionToken: string;
+            /** @description Set only by source "visit-token" — the visit the slip token addressed, already claimed for this session. */
+            visitId?: string;
             identity: components["schemas"]["Identity"];
             /** Format: date-time */
             expiresAt: string;

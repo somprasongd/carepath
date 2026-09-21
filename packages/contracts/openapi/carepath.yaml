@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.21.0
+  version: 0.22.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -13,9 +13,12 @@ paths:
   /api/v1/auth/session:
     post:
       description: >
-        Exchanges a LINE ID token (source "line"), or a demo identity (source
-        "demo", only when the server has ALLOW_DEMO_AUTH enabled), for an
-        opaque CarePath session token.
+        Exchanges a patient credential for an opaque CarePath session token:
+        a LINE ID token (source "line"), a demo identity (source "demo", only
+        when the server has ALLOW_DEMO_AUTH enabled), or a slip-held
+        visit-link token (source "visit-token", only when the visit-link env
+        is configured) — the QR-only front door for hospitals without a LINE
+        OA, which also claims the visit it addresses and returns its id.
       requestBody:
         required: true
         content:
@@ -37,6 +40,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '401':
           description: Invalid identity token, or demo auth disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Visit-token unknown, rotated, cancelled, or past grace
           content:
             application/json:
               schema:
@@ -1777,7 +1786,7 @@ components:
       properties:
         source:
           type: string
-          enum: [line, demo]
+          enum: [line, demo, visit]
         externalId: { type: string }
         displayName: { type: string }
     CreateSessionRequest:
@@ -1786,15 +1795,18 @@ components:
       properties:
         source:
           type: string
-          enum: [line, demo]
+          enum: [line, demo, visit-token]
         idToken:
           type: string
-          description: The LINE ID token. Ignored (may be empty) for source "demo".
+          description: The LINE ID token (source "line") or the visit-link token (source "visit-token"). Ignored (may be empty) for source "demo".
     CreateSessionResponse:
       type: object
       required: [sessionToken, identity, expiresAt]
       properties:
         sessionToken: { type: string }
+        visitId:
+          type: string
+          description: Set only by source "visit-token" — the visit the slip token addressed, already claimed for this session.
         identity: { $ref: '#/components/schemas/Identity' }
         expiresAt: { type: string, format: date-time }
     VisitNotificationPref:
