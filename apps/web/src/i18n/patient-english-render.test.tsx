@@ -140,11 +140,11 @@ describe('patient screens rendered in English (#93 AC)', () => {
     expect(html).toMatch(THAI)
   })
 
-  it('language toggle: both options in their own scripts, exactly one pressed (#94)', () => {
+  it('language toggle: one button naming the target locale, never a pressed switch (#94, #108 header pass)', () => {
     const html = english(<LanguageToggle />)
     expect(html).toContain('ไทย')
-    expect(html).toContain('EN')
-    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1)
+    expect(html).toContain(en['common.language.switch'])
+    expect(html).not.toContain('>EN<')
 
     // Switching is the provider's job (instant, persisted — browser-verified
     // for #94); here only the markup contract is asserted.
@@ -153,6 +153,12 @@ describe('patient screens rendered in English (#93 AC)', () => {
         <LanguageToggle />
       </LocaleProvider>,
     )
-    expect(thai.match(/aria-pressed="true"/g)).toHaveLength(1)
+    expect(thai).toContain('>EN<')
+    expect(thai).not.toContain('ไทย')
+
+    // A flip button carries no on/off state — that grammar belongs to the
+    // A+ and voice switches beside it.
+    expect(html).not.toContain('aria-pressed')
+    expect(thai).not.toContain('aria-pressed')
   })
 })

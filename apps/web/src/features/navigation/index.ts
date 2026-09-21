@@ -4,11 +4,19 @@ export {
   routeOriginOnFloor,
   routePolylinesByFloor,
   turnByTurnSteps,
+  voiceSteps,
   type NavigationRoute,
   type NavEdge,
   type NavNode,
   type Point,
 } from './route'
+export {
+  cancelSpeech,
+  speechSupported,
+  speakCues,
+  useVoiceGuidance,
+  type VoiceGuidance,
+} from './speech'
 export {
   assumedOrigin,
   assumedOriginLabel,

@@ -51,6 +51,7 @@ export const th = {
   // language in its own script — the Thai endonym stays 'ไทย' in every
   // locale, which is also why the thai-guard excludes only locales/th.ts.
   'common.language': 'ภาษา',
+  'common.language.switch': 'สลับภาษา',
   'common.locale.th': 'ไทย',
   'common.locale.en': 'EN',
 
@@ -133,6 +134,7 @@ export const th = {
   'navigate.pickInstead': 'หรือเลือกจุดที่คุณอยู่เอง',
   'navigate.updateLocation': 'สแกน QR / เลือกจุด เพื่ออัปเดทตำแหน่ง',
   'navigate.avoidStairs': 'เลี่ยงบันได (ใช้ลิฟต์)',
+  'navigate.voice.toggle': 'เสียงนำทาง',
 
   // Destination plan text (features/floorplan/destination.ts).
   'navigate.routeTitle': 'เส้นทางไป{name}',
@@ -148,6 +150,12 @@ export const th = {
   'navigate.cue.elevator': 'ใช้ลิฟต์ไป{floor}',
   'navigate.cue.stairs': 'ใช้บันไดไป{floor}',
   'navigate.cue.arrive': 'ถึง{name} — จุดหมายของคุณ',
+
+  // Spoken guidance (#108, FR-25): เสียงอ่าน cue ชุดเดียวกับหน้าจอ ยกเว้น
+  // ประโยคถึงจุดหมายที่ตัดชื่อจุดบริการออก — ข้อความที่พูดได้ต้องมาจาก
+  // กลุ่มนี้ + ชื่อชั้นเท่านั้น (กฎความเป็นส่วนตัวใน features/navigation/speech.ts).
+  'navigate.voice.intro': 'เส้นทางไปจุดหมายของคุณ',
+  'navigate.cue.arriveUnnamed': 'ถึงจุดหมายของคุณแล้ว',
 
   // The assumed-origin fallback line (features/navigation/origin.ts).
   'navigate.assumedLocation': 'ตำแหน่งโดยประมาณ · หลังขั้นตอน{step}',

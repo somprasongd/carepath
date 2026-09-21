@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LanguageToggle, useLocale, useT } from '@/i18n'
+import { LanguageToggle, useT } from '@/i18n'
 import { LargeTextToggle } from '@/preferences'
 import {
   AppBar,
@@ -12,7 +12,9 @@ import {
   LinkButton,
   Screen,
   ScreenDock,
+  VoiceIcon,
 } from '@/design-system'
+import type { VoiceGuidance } from '@/features/navigation'
 import type { DestinationPlan, NavigatePlan } from '@/features/floorplan'
 
 /**
@@ -37,6 +39,7 @@ export function NavigateScreen({
   onFloorChange,
   accessibleOnly,
   onToggleAccessibleOnly,
+  voice,
   onScan,
   onPickLocation,
   onBack,
@@ -65,6 +68,9 @@ export function NavigateScreen({
   accessibleOnly?: boolean
   /** Flips accessibleOnly; the route refetches via the lift on its own. */
   onToggleAccessibleOnly?: () => void
+  /** Spoken guidance (#108, FR-25) — the AppBar switch beside the other
+   *  accessibility toggles; only rendered when the browser can speak. */
+  voice?: VoiceGuidance
   /** Opens the QR scanner overlay — the screen's single primary action. */
   onScan?: () => void
   /** Opens the same overlay straight at the manual place list. */
@@ -72,7 +78,6 @@ export function NavigateScreen({
   onBack?: () => void
 }) {
   const t = useT()
-  const { locale } = useLocale()
 
   // The displayed floor: the route's choice (origin floor by default, the
   // patient's pick when they flip) or the destination's when routeless.
@@ -90,6 +95,22 @@ export function NavigateScreen({
         trailing={
           <div className="flex items-center gap-2">
             <LargeTextToggle />
+            {voice?.supported && (
+              <button
+                type="button"
+                aria-pressed={voice.enabled}
+                aria-label={t('navigate.voice.toggle')}
+                title={t('navigate.voice.toggle')}
+                onClick={voice.toggle}
+                className={`flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-[10px] border px-3 font-sans text-body-sm font-semibold transition-colors ${
+                  voice.enabled
+                    ? 'border-primary bg-primary text-surface'
+                    : 'border-line bg-surface text-ink-muted'
+                }`}
+              >
+                <VoiceIcon size={18} />
+              </button>
+            )}
             <LanguageToggle />
           </div>
         }

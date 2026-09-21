@@ -4,7 +4,7 @@
 // metres — nothing here converts or displays them, so no made-up walking
 // times (DESIGN.md).
 import type { components } from '@/api/schema'
-import { format, lookup, messagesFor, type Locale } from '@/i18n'
+import { format, lookup, messagesFor, type Catalog, type Locale } from '@/i18n'
 import type { LocationObservation } from './queries'
 
 export type NavigationRoute = components['schemas']['NavigationRoute']
@@ -69,21 +69,17 @@ export function routePolylinesByFloor(nodes: NavNode[]): Record<string, Point[][
 }
 
 /**
- * Turn-by-turn cues in the patient's language. Runs of corridor walking
- * collapse into one cue; every floor change through a lift or stairs becomes
- * its own cue naming the floor it lands on. Domain vocabulary (CORRIDOR,
- * ELEVATOR, node ids) never reaches the patient (DESIGN.md).
+ * The walk shared by turnByTurnSteps and voiceSteps: corridor runs collapse
+ * into one cue, every floor change through a lift or stairs becomes its own
+ * cue naming the floor it lands on. Arrival is the caller's to append — the
+ * screen and the voice differ there on purpose (#108).
  */
-export function turnByTurnSteps(
+function walkCues(
   nodes: NavNode[],
   segments: NavEdge[],
-  destinationName: string,
   floorLabel: (floorId: string) => string,
-  locale: Locale,
+  catalog: Catalog,
 ): string[] {
-  if (nodes.length === 0) return []
-  const catalog = messagesFor(locale)
-
   const cues: string[] = []
   let walked = false
   for (let i = 0; i < segments.length; i++) {
@@ -102,10 +98,53 @@ export function turnByTurnSteps(
     cues.push(format(catalog, key, { floor: floorLabel(target.floorId) }))
   }
   // Same-floor routes (and origin == destination) still get one walking cue
-  // plus the arrival, so the panel is never empty when a route exists.
+  // so the cue list is never empty when a route exists.
   if (walked || cues.length === 0) cues.push(catalog['navigate.cue.followLine'])
+  return cues
+}
+
+/**
+ * Turn-by-turn cues in the patient's language. Runs of corridor walking
+ * collapse into one cue; every floor change through a lift or stairs becomes
+ * its own cue naming the floor it lands on. Domain vocabulary (CORRIDOR,
+ * ELEVATOR, node ids) never reaches the patient (DESIGN.md).
+ */
+export function turnByTurnSteps(
+  nodes: NavNode[],
+  segments: NavEdge[],
+  destinationName: string,
+  floorLabel: (floorId: string) => string,
+  locale: Locale,
+): string[] {
+  if (nodes.length === 0) return []
+  const catalog = messagesFor(locale)
+  const cues = walkCues(nodes, segments, floorLabel, catalog)
   cues.push(format(catalog, 'navigate.cue.arrive', { name: destinationName }))
   return cues
+}
+
+/**
+ * The spoken variant of the turn cues (#108, FR-25) — the strings
+ * useVoiceGuidance reads aloud. Structural privacy rule: there is no
+ * destination-name parameter, so nothing identifying (service point, clinic,
+ * patient, visit) can enter the spoken text; an utterance is only catalog
+ * strings and floor labels. Arrival says "your destination" instead of
+ * naming the place — a specialty clinic's name is medical information, and
+ * speech is loud.
+ */
+export function voiceSteps(
+  nodes: NavNode[],
+  segments: NavEdge[],
+  floorLabel: (floorId: string) => string,
+  locale: Locale,
+): string[] {
+  if (nodes.length === 0) return []
+  const catalog = messagesFor(locale)
+  return [
+    catalog['navigate.voice.intro'],
+    ...walkCues(nodes, segments, floorLabel, catalog),
+    catalog['navigate.cue.arriveUnnamed'],
+  ]
 }
 
 /**
