@@ -14,7 +14,13 @@ import {
   staffTitle,
   type Column,
 } from '@/design-system'
-import { anchorQrPayload, floorLabelFor, wayfindingAnchors } from '@/features/floorplan'
+import {
+  anchorQrPayload,
+  floorLabelFor,
+  useFloors,
+  useNavNodes,
+  wayfindingAnchors,
+} from '@/features/floorplan'
 import { lookup, messagesFor } from '@/i18n'
 import {
   ServicePointMappingCard,
@@ -143,7 +149,13 @@ function QrSheet({ points, onClose }: { points: ServicePoint[]; onClose: () => v
     if (!place?.entryNodeId || places.has(place.id)) continue
     places.set(place.id, { placeId: place.id, name: place.name, floorCode: place.floor.code })
   }
-  const anchors = wayfindingAnchors()
+  // The graph comes from the API now (ADR-0015 §7). It matters here more
+  // than anywhere: these cards get printed and stuck to walls, so a
+  // build-time copy that drifted would put a sticker on a wall pointing at a
+  // node the server no longer has.
+  const { data: navNodes } = useNavNodes()
+  const { data: floors } = useFloors()
+  const anchors = wayfindingAnchors(navNodes ?? [])
   // Staff console pins Thai (ADR-0012 §2): anchor kind names read straight
   // from the Thai catalog, falling back to the raw kind for unmapped nodes.
   const anchorLabel = (kind: string) => lookup(messagesFor('th'), `anchor.kind.${kind}`) ?? kind
@@ -217,12 +229,12 @@ function QrSheet({ points, onClose }: { points: ServicePoint[]; onClose: () => v
                   key={anchor.nodeId}
                   payload={anchorQrPayload(anchor)}
                   title={anchorLabel(anchor.kind)}
-                  subtitle={`${floorLabelFor(anchor.floorId, 'th')} · ${anchor.nodeId}`}
+                  subtitle={`${floorLabelFor(anchor.floorId, 'th', floors ?? [])} · ${anchor.nodeId}`}
                   onOpen={() =>
                     setFocused({
                       payload: anchorQrPayload(anchor),
                       title: anchorLabel(anchor.kind),
-                      subtitle: `${floorLabelFor(anchor.floorId, 'th')} · ${anchor.nodeId}`,
+                      subtitle: `${floorLabelFor(anchor.floorId, 'th', floors ?? [])} · ${anchor.nodeId}`,
                     })
                   }
                 />

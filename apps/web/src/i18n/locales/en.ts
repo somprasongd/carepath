@@ -141,6 +141,8 @@ export const en: Catalog = {
   'map.routeAria': 'Floor plan, {floor} — route from your location to {name}',
   'map.zoomIn': 'Zoom in',
   'map.zoomOut': 'Zoom out',
+  'map.loading': 'Loading the floor plan… the directions below still work.',
+  'map.unavailable': 'The floor plan cannot be shown right now — use the directions below.',
 
   'scan.title.camera': 'Scan the service-point QR',
   'scan.title.pick': 'Pick where you are',

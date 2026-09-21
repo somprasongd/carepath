@@ -24,6 +24,8 @@ import (
 	analyticspostgres "carepath/apps/api/internal/analytics/postgres"
 	"carepath/apps/api/internal/auth"
 	authpostgres "carepath/apps/api/internal/auth/postgres"
+	"carepath/apps/api/internal/floorplan"
+	floorplanpostgres "carepath/apps/api/internal/floorplan/postgres"
 	"carepath/apps/api/internal/his/httpclient"
 	"carepath/apps/api/internal/his/ingest"
 	ingestpostgres "carepath/apps/api/internal/his/ingest/postgres"
@@ -95,6 +97,12 @@ func run(ctx context.Context, log *slog.Logger) error {
 	// graph serves the route API (#28), which resolves the destination
 	// service point through the servicepoint module.
 	navigationGraph := navigation.NewService(navigationpostgres.New(database), servicePoints)
+
+	// Floor plans are served rather than bundled with the web app since
+	// ADR-0015. An upload is checked against the places and graph nodes the
+	// floor already has, which is why this is wired after both, and stored
+	// with the floor's new pointer in one transaction.
+	floorPlans := floorplan.NewService(floorplanpostgres.New(database), hospitalMap, navigationGraph, database)
 	locations, err := location.NewService(locationpostgres.New(database), navigationGraph,
 		qr.New(hospitalMap, navigationGraph), manual.New(), zigbee.New(navigationGraph))
 	if err != nil {
@@ -292,6 +300,12 @@ func run(ctx context.Context, log *slog.Logger) error {
 	locationHandler.RegisterDemo(app.Group("/api/v1"), staffGuard)
 	notification.NewHandler(notifications).Register(app.Group("/api/v1"), patientVisitGuard)
 	navigation.NewHandler(navigationGraph).Register(app.Group("/api/v1"))
+	hospitalmap.NewHandler(hospitalMap).Register(app.Group("/api/v1"))
+	// Reading a plan is public; replacing one changes what every patient in
+	// the building sees, so the write routes take ADMIN alone — not the
+	// staff guard the queue console uses.
+	floorplan.NewHandler(floorPlans, hospitalMap).Register(app.Group("/api/v1"),
+		auth.RequireRole(authService, auth.RoleAdmin))
 
 	return app.Listen(":" + envOrDefault("PORT", "8080"))
 }

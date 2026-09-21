@@ -22,3 +22,5 @@ dist/
 *.pid
 
 .zcode/
+# Built by `go build ./cmd/floorplanseed`; the generator is run with `go run`.
+apps/api/floorplanseed

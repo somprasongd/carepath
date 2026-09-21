@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { format, messagesFor } from '@/i18n'
-import { floorLabelFor } from '@/features/floorplan'
+import { floorLabelFor, type FloorPlanRef } from '@/features/floorplan'
 import {
   currentLocationLabel,
   routeBounds,
@@ -10,6 +10,14 @@ import {
   type NavEdge,
   type NavNode,
 } from './route'
+
+// The floor list as GET /api/v1/floors serves it (ADR-0015): the label is
+// built from the floor's own code, so these cases no longer lean on a
+// hardcoded floorId -> code table inside the app.
+const FLOORS: FloorPlanRef[] = [
+  { floorId: 'I-1301', buildingId: 'BLD-I13', code: '1', name: 'Ground Floor', levelOrder: 1 },
+  { floorId: 'I-1302', buildingId: 'BLD-I13', code: '2', name: 'Upper Floor', levelOrder: 2 },
+]
 
 function node(floorId: string, x: number, y: number): NavNode {
   return { id: `${floorId}/n-${x}-${y}`, floorId, x, y, nodeType: 'CORRIDOR' }
@@ -92,8 +100,8 @@ describe('routePolylinesByFloor', () => {
 })
 
 describe('turnByTurnSteps', () => {
-  const thFloor = (floorId: string) => floorLabelFor(floorId, 'th')
-  const enFloor = (floorId: string) => floorLabelFor(floorId, 'en')
+  const thFloor = (floorId: string) => floorLabelFor(floorId, 'th', FLOORS)
+  const enFloor = (floorId: string) => floorLabelFor(floorId, 'en', FLOORS)
   const th = messagesFor('th')
 
   it('collapses a same-floor walk into one cue plus arrival', () => {
@@ -200,8 +208,8 @@ describe('routeOriginOnFloor', () => {
 })
 
 describe('currentLocationLabel', () => {
-  const floorLabel = (floorId: string) => floorLabelFor(floorId, 'en')
-  const thFloorLabel = (floorId: string) => floorLabelFor(floorId, 'th')
+  const floorLabel = (floorId: string) => floorLabelFor(floorId, 'en', FLOORS)
+  const thFloorLabel = (floorId: string) => floorLabelFor(floorId, 'th', FLOORS)
 
   it('states the floor and an exact source without a zone', () => {
     expect(

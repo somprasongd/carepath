@@ -32,6 +32,18 @@ func (f *fakePlaces) GetPlace(_ context.Context, placeID string) (hospitalmap.Pl
 
 func (f *fakePlaces) ListPlaces(context.Context) ([]hospitalmap.Place, error) { return nil, nil }
 
+// Location resolution goes place-by-place; the floor listing is the
+// plan-serving path (#105) and is not exercised here.
+func (f *fakePlaces) ListFloors(context.Context) ([]hospitalmap.Floor, error) { return nil, nil }
+
+// The floor write path (#105) belongs to the floorplan module; nothing
+// here exercises it.
+func (f *fakePlaces) GetFloor(context.Context, string) (hospitalmap.Floor, error) {
+	return hospitalmap.Floor{}, nil
+}
+
+func (f *fakePlaces) SetPlan(context.Context, string, string, string) error { return nil }
+
 // The handler is exercised with the real QR provider over a fake hospital
 // map — the HTTP boundary is what matters here: status codes, error
 // mapping, and payload shape.

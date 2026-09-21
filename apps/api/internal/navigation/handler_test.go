@@ -315,3 +315,63 @@ func TestRouteAccessibleOnlyRejectsNonBoolean(t *testing.T) {
 		t.Fatalf("code = %q, want invalid", envelope.Code)
 	}
 }
+
+// #105/ADR-0015: the graph apps/web used to import from packages/floorplans
+// at build time is read from here now. The shape matters as much as the
+// content — the web app derives QR sticker payloads from the node list, and
+// those stickers go on walls.
+func TestGraphEndpointsExposeNodesAndEdges(t *testing.T) {
+	app := newTestApp(t, routableGraph(), "I-1301/node-pharmacy")
+
+	t.Run("nodes", func(t *testing.T) {
+		resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/api/v1/navigation/nodes", nil))
+		if err != nil {
+			t.Fatalf("GET: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		body, _ := io.ReadAll(resp.Body)
+
+		var nodes []map[string]any
+		if err := json.Unmarshal(body, &nodes); err != nil {
+			t.Fatalf("decode: %v (%s)", err, body)
+		}
+		if len(nodes) != 3 {
+			t.Fatalf("got %d nodes, want 3", len(nodes))
+		}
+		// Ids stay floor-prefixed and globally unique: node-lift exists on
+		// both floors, so a floor-local id would collide in a QR payload.
+		for _, node := range nodes {
+			for _, key := range []string{"id", "floorId", "x", "y", "nodeType"} {
+				if _, ok := node[key]; !ok {
+					t.Errorf("node %v is missing %q", node["id"], key)
+				}
+			}
+		}
+	})
+
+	t.Run("edges", func(t *testing.T) {
+		resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/api/v1/navigation/edges", nil))
+		if err != nil {
+			t.Fatalf("GET: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		body, _ := io.ReadAll(resp.Body)
+
+		var edges []map[string]any
+		if err := json.Unmarshal(body, &edges); err != nil {
+			t.Fatalf("decode: %v (%s)", err, body)
+		}
+		// Both directions of both connections: a two-way corridor is two
+		// rows, and a client assuming otherwise would draw one-way halls.
+		if len(edges) != 4 {
+			t.Fatalf("got %d edges, want 4 (two connections, both directions)", len(edges))
+		}
+		if _, ok := edges[0]["accessible"]; !ok {
+			t.Error("edges omit accessible — the wheelchair route (FR-20) depends on it")
+		}
+	})
+}

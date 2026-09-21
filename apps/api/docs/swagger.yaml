@@ -83,6 +83,63 @@ definitions:
       refreshToken:
         type: string
     type: object
+  floorplan.FloorView:
+    properties:
+      activePlanId:
+        description: |-
+          ActivePlanID names the plan PlanURL was built from, so a client that
+          already has that plan's id (e.g. from the admin history listing) can
+          tell it is the active one directly, rather than reconstructing the
+          fact by checking whether its digest appears inside the URL.
+        type: string
+      buildingId:
+        type: string
+      code:
+        type: string
+      floorId:
+        type: string
+      levelOrder:
+        type: integer
+      name:
+        type: string
+      planUrl:
+        type: string
+      viewBox:
+        type: string
+    type: object
+  floorplan.Stored:
+    properties:
+      createdAt:
+        type: string
+      createdBy:
+        description: |-
+          CreatedBy is nil for the plans seeded from packages/floorplans, which
+          no admin uploaded.
+        type: string
+      floorId:
+        type: string
+      planId:
+        type: string
+      sha256:
+        type: string
+      viewBox:
+        type: string
+      warnings:
+        items:
+          $ref: '#/definitions/floorplan.Warning'
+        type: array
+    type: object
+  floorplan.Warning:
+    properties:
+      code:
+        description: |-
+          Code is the stable machine-readable reason; display text is the
+          client's (ADR-0012).
+        type: string
+      ref:
+        description: Ref is the place id, node id, or element the warning is about.
+        type: string
+    type: object
   hospitalmap.Floor:
     properties:
       buildingId:
@@ -94,6 +151,13 @@ definitions:
       levelOrder:
         type: integer
       name:
+        type: string
+      viewBox:
+        description: |-
+          ViewBox is the floor's coordinate space ("0 0 1600 900"), the space
+          every Place X/Y and every nav node coordinate is expressed in. It is
+          set by the floor's first plan and holds every later one to it
+          (ADR-0015); nil on a floor that has no plan yet.
         type: string
     type: object
   hospitalmap.Place:
@@ -483,6 +547,12 @@ definitions:
         $ref: '#/definitions/session.identityResponse'
       sessionToken:
         type: string
+      visitId:
+        description: |-
+          VisitID is set only by the visit-token bootstrap: the visit the slip
+          token addressed, already claimed for this session. Absent for line and
+          demo sessions, which claim separately.
+        type: string
     type: object
   session.identityResponse:
     properties:
@@ -548,6 +618,225 @@ info:
   title: CarePath API
   version: 1.0.0
 paths:
+  /api/v1/admin/floors/{floorId}/health:
+    get:
+      description: 'ADR-0015: recomputes the active plan''s warnings against the map
+        model as it stands right now, unlike the warnings on the plan itself (from
+        /plans), which are a snapshot frozen at upload time. Empty when the floor
+        has no active plan.'
+      parameters:
+      - description: Floor id
+        in: path
+        name: floorId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/floorplan.Warning'
+            type: array
+        "401":
+          description: missing, malformed, or expired staff access token
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "403":
+          description: authenticated, but not an ADMIN
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: unknown floor
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Re-check the floor's active plan against the map model
+      tags:
+      - admin
+  /api/v1/admin/floors/{floorId}/plan:
+    post:
+      consumes:
+      - image/svg+xml
+      description: 'FR-11/ADR-0015: replaces the floor''s plan. Send the SVG as the
+        raw request body. The upload is parsed, held to a closed allowlist and re-serialized
+        before storage, so a rejection means the file has to change — nothing is silently
+        stripped. A place or navigation node the plan does not draw is a warning rather
+        than a rejection: the app already shows such a place as not routable yet.
+        Plans are append-only, so this adds a row and moves the floor''s pointer;
+        re-uploading an unchanged file is idempotent.'
+      parameters:
+      - description: Floor id (e.g. I-1301)
+        in: path
+        name: floorId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/floorplan.Stored'
+        "400":
+          description: the plan broke a rule — the message names which
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "401":
+          description: missing, malformed, or expired staff access token
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "403":
+          description: authenticated, but not an ADMIN
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: unknown floor
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Upload a floor plan
+      tags:
+      - admin
+  /api/v1/admin/floors/{floorId}/plans:
+    get:
+      description: 'ADR-0015: every plan stored for this floor, newest first, with
+        the warnings each was accepted with. Plans are never deleted, so this is both
+        the history and the list a rollback picks from.'
+      parameters:
+      - description: Floor id
+        in: path
+        name: floorId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/floorplan.Stored'
+            type: array
+        "401":
+          description: missing, malformed, or expired staff access token
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "403":
+          description: authenticated, but not an ADMIN
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: unknown floor
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: List a floor's plans
+      tags:
+      - admin
+  /api/v1/admin/floors/{floorId}/plans/{planId}/activate:
+    post:
+      description: 'ADR-0015: the rollback. Plans are append-only, so returning to
+        an earlier drawing moves the floor''s pointer rather than restoring anything.'
+      parameters:
+      - description: Floor id
+        in: path
+        name: floorId
+        required: true
+        type: string
+      - description: Plan id from the plans listing
+        in: path
+        name: planId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/floorplan.Stored'
+        "401":
+          description: missing, malformed, or expired staff access token
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "403":
+          description: authenticated, but not an ADMIN
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: no such plan on that floor
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Make a stored plan the floor's active one
+      tags:
+      - admin
+  /api/v1/admin/floors/{floorId}/plans/{planId}/raw:
+    get:
+      description: 'ADR-0015: the original bytes, before normalization, so an admin
+        can get back the file they sent. This is never what a patient is served —
+        that is always the normalized artifact.'
+      parameters:
+      - description: Floor id
+        in: path
+        name: floorId
+        required: true
+        type: string
+      - description: Plan id from the plans listing
+        in: path
+        name: planId
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: the uploaded file
+          schema:
+            type: string
+        "401":
+          description: missing, malformed, or expired staff access token
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "403":
+          description: authenticated, but not an ADMIN
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: no such plan on that floor
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Download a plan as it was uploaded
+      tags:
+      - admin
   /api/v1/analytics/overview:
     get:
       description: 'Operational metrics for the executive dashboard (#86): per-service-point
@@ -722,10 +1011,12 @@ paths:
     post:
       consumes:
       - application/json
-      description: Exchanges a LINE ID token (or, when enabled, a demo identity) for
-        an opaque CarePath session token.
+      description: Exchanges a LINE ID token, a slip-held visit-link token (source
+        "visit-token", which also claims the visit it addresses), or — when enabled
+        — a demo identity for an opaque CarePath session token.
       parameters:
-      - description: 'source: line|demo, idToken: the LINE ID token (ignored for demo)'
+      - description: 'source: line|demo|visit-token, idToken: the LINE ID token or
+          visit-link token (ignored for demo)'
         in: body
         name: request
         required: true
@@ -744,6 +1035,10 @@ paths:
             $ref: '#/definitions/httpx.ErrorResponse'
         "401":
           description: invalid identity token, or demo auth disabled
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: visit-token unknown, rotated, cancelled, or past grace
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
       summary: Create a patient session
@@ -795,6 +1090,65 @@ paths:
       summary: Simulate a Zigbee zone fix
       tags:
       - location
+  /api/v1/floors:
+    get:
+      description: '#105/ADR-0015: every floor in display order with the URL of its
+        current plan. This is the pointer document the web app revalidates; the plan
+        URL it hands back is immutable and cached for a year. Replaces the floor list
+        apps/web used to hardcode beside its bundled plan assets.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/floorplan.FloorView'
+            type: array
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: List floors and their plan URLs
+      tags:
+      - floors
+  /api/v1/floors/{floorId}/plan/{asset}:
+    get:
+      description: '#105/ADR-0015: the normalized SVG for a floor, addressed by its
+        own sha256. The response is immutable — a different drawing is a different
+        digest and therefore a different URL — so it is cached for a year and never
+        revalidated. Take this URL from the floors listing rather than assembling
+        it.'
+      parameters:
+      - description: Floor id (e.g. I-1301)
+        in: path
+        name: floorId
+        required: true
+        type: string
+      - description: The plan's sha256 with an .svg suffix, as the floors listing
+          spells it
+        in: path
+        name: asset
+        required: true
+        type: string
+      produces:
+      - image/svg+xml
+      responses:
+        "200":
+          description: the floor plan SVG
+          schema:
+            type: string
+        "404":
+          description: no plan with that digest on that floor
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Get a floor plan
+      tags:
+      - floors
   /api/v1/his/visits/{visitId}/patient-link:
     post:
       description: 'Returns the visit''s navigation-slip link (#136): a high-entropy
@@ -1294,6 +1648,51 @@ paths:
       summary: Redeem a visit link token for this session
       tags:
       - auth
+  /api/v1/navigation/edges:
+    get:
+      description: '#105/ADR-0015: the graph''s directed, costed edges. Two-way connections
+        are two rows (A→B and B→A) and a cross-floor transition is an edge whose endpoints
+        sit on different floors, so this is the whole walkable graph, not a per-floor
+        slice.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/navigation.NavEdge'
+            type: array
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: List navigation edges
+      tags:
+      - navigation
+  /api/v1/navigation/nodes:
+    get:
+      description: '#105/ADR-0015: the graph''s nodes, which apps/web used to read
+        from a build-time copy of packages/floorplans/graphs. The QR stickers staff
+        print for lifts, stairs and entrances are derived from this list, so a stale
+        copy sends patients to nodes that no longer exist — which is why the copy
+        had to go.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/navigation.NavNode'
+            type: array
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: List navigation nodes
+      tags:
+      - navigation
   /api/v1/navigation/route:
     get:
       description: Shortest walkable route for the SVG overlay. from is the current
@@ -1339,6 +1738,29 @@ paths:
       summary: Get the walking route to a service point
       tags:
       - navigation
+  /api/v1/places:
+    get:
+      description: '#105: every place in the hospital map with its floor resolved
+        — the destinations a service point can be mapped to. Already reachable one
+        at a time through a service point''s resolved place; this is the whole set,
+        for choosing among them. A place whose plan has not drawn it yet is still
+        listed: it is selectable, just not routable.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/hospitalmap.Place'
+            type: array
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: List places
+      tags:
+      - places
   /api/v1/service-points:
     get:
       description: Active service points with their resolved place and floor — the

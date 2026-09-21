@@ -1,6 +1,5 @@
 import { servicePointLabel, stepTitle, type Journey } from '@/features/visit'
 import { format, messagesFor, type Locale } from '@/i18n'
-import { floorPlanFor, floorPlanHasPlace } from './plans'
 
 export type DestinationPlan = {
   /** AppBar title, e.g. "Directions to Medication pickup" in English. */
@@ -52,9 +51,20 @@ export function navigatePlanForJourney(
   })
   const servicePoint = recommended.servicePoint
   const place = servicePoint?.place ?? null
-  const svg = place ? floorPlanFor(place.floorId) : null
 
-  if (!place || !svg || !floorPlanHasPlace(svg, place.id)) {
+  // "Routable" is a fact about the map model, not about whichever drawing is
+  // currently loaded: a place is routable when it resolves to an entry node
+  // in the navigation graph (the packages/floorplans README's "rooms without
+  // a node-* are selectable but not yet routable").
+  //
+  // This used to ask the bundled SVG whether it drew the place, which is no
+  // longer a question with a synchronous answer — plans are fetched
+  // (ADR-0015). Asking the journey data instead also decides earlier and
+  // more honestly: the screen settles on supported-or-not before the drawing
+  // arrives, so it never shows a route it then has to take away, and the
+  // turn-by-turn text (which comes from the route API, not the plan) renders
+  // without waiting for the map.
+  if (!place || !place.entryNodeId) {
     return {
       state: 'unsupported',
       title,

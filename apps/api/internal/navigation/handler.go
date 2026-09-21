@@ -10,7 +10,9 @@ import (
 )
 
 // Handler exposes the navigation module over HTTP: the route lookup the
-// patient navigate screen draws its SVG overlay from (#28).
+// patient navigate screen draws its SVG overlay from (#28), and the graph
+// itself, which apps/web used to import from packages/floorplans at build
+// time (#105).
 type Handler struct {
 	service Service
 }
@@ -22,6 +24,42 @@ func NewHandler(service Service) *Handler {
 // Register mounts the navigation routes under the given /api/v1 router.
 func (h *Handler) Register(router fiber.Router) {
 	router.Get("/navigation/route", h.route)
+	router.Get("/navigation/nodes", h.nodes)
+	router.Get("/navigation/edges", h.edges)
+}
+
+// nodes godoc
+//
+//	@Summary		List navigation nodes
+//	@Description	#105/ADR-0015: the graph's nodes, which apps/web used to read from a build-time copy of packages/floorplans/graphs. The QR stickers staff print for lifts, stairs and entrances are derived from this list, so a stale copy sends patients to nodes that no longer exist — which is why the copy had to go.
+//	@Tags			navigation
+//	@Produce		json
+//	@Success		200	{array}		navigation.NavNode
+//	@Failure		500	{object}	httpx.ErrorResponse	"internal server error"
+//	@Router			/api/v1/navigation/nodes [get]
+func (h *Handler) nodes(c fiber.Ctx) error {
+	nodes, err := h.service.ListNodes(c.Context())
+	if err != nil {
+		return httpx.Error(c, err)
+	}
+	return c.JSON(nodes)
+}
+
+// edges godoc
+//
+//	@Summary		List navigation edges
+//	@Description	#105/ADR-0015: the graph's directed, costed edges. Two-way connections are two rows (A→B and B→A) and a cross-floor transition is an edge whose endpoints sit on different floors, so this is the whole walkable graph, not a per-floor slice.
+//	@Tags			navigation
+//	@Produce		json
+//	@Success		200	{array}		navigation.NavEdge
+//	@Failure		500	{object}	httpx.ErrorResponse	"internal server error"
+//	@Router			/api/v1/navigation/edges [get]
+func (h *Handler) edges(c fiber.Ctx) error {
+	edges, err := h.service.ListEdges(c.Context())
+	if err != nil {
+		return httpx.Error(c, err)
+	}
+	return c.JSON(edges)
 }
 
 // route godoc

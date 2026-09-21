@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { ApiError } from '@/api/client'
-import { format, messagesFor, useLocale, useT } from '@/i18n'
-import { floorLabelFor } from '@/features/floorplan'
+import { useLocale, useT } from '@/i18n'
+import { useFloors } from '@/features/floorplan'
 import { useReportLocation, useQrScanner } from '@/features/navigation'
 import { useServicePoints } from '@/features/servicepoint'
 import { activeFloorFor, pickablePlaces } from './-scan-pick'
@@ -140,19 +140,18 @@ function PlaceList({
   const { locale } = useLocale()
   const report = useReportLocation(visitId)
   const { data: servicePoints, isPending } = useServicePoints()
+  const { data: floors } = useFloors()
 
   const places = pickablePlaces(servicePoints)
 
   // Floor-first: chips for the floors that have pickable places, ordered by
-  // floor code, opening on the floor the map is already showing. The match
-  // goes through the localized floor label — no floorId→code table here.
-  const catalog = messagesFor(locale)
+  // floor code, opening on the floor the map is already showing. The floor
+  // list carries the code directly (ADR-0015), so this is a lookup — it used
+  // to go via the localized label, matching rendered strings to find a code
+  // the server had all along.
   const floorCodes = Array.from(new Set(places.map((p) => p.floorCode))).sort()
   const defaultFloorCode = defaultFloorId
-    ? floorCodes.find(
-        (code) =>
-          floorLabelFor(defaultFloorId, locale) === format(catalog, 'common.floor', { code }),
-      )
+    ? floors?.find((floor) => floor.floorId === defaultFloorId)?.code
     : undefined
   // Only the chip tap is state. The default floor must stay derived: the
   // service-points query can resolve after this list mounts, and a useState

@@ -60,6 +60,17 @@ func (f *fakePlaces) GetPlace(_ context.Context, placeID string) (hospitalmap.Pl
 	return place, nil
 }
 
+// A service point resolves to a place, never to a floor directly.
+func (f *fakePlaces) ListFloors(context.Context) ([]hospitalmap.Floor, error) { return nil, nil }
+
+// The floor write path (#105) belongs to the floorplan module; nothing
+// here exercises it.
+func (f *fakePlaces) GetFloor(context.Context, string) (hospitalmap.Floor, error) {
+	return hospitalmap.Floor{}, nil
+}
+
+func (f *fakePlaces) SetPlan(context.Context, string, string, string) error { return nil }
+
 func (f *fakePlaces) ListPlaces(context.Context) ([]hospitalmap.Place, error) {
 	if f.err != nil {
 		return nil, f.err

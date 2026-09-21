@@ -1,7 +1,13 @@
 import { useState } from 'react'
 import { Navigate, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useLocale } from '@/i18n'
-import { navigatePlanForJourney, floorLabelFor } from '@/features/floorplan'
+import {
+  floorLabelFor,
+  navigatePlanForJourney,
+  planUrlFor,
+  useFloorPlan,
+  useFloors,
+} from '@/features/floorplan'
 import type { FloorPlanRoute } from '@/design-system'
 import {
   assumedOrigin,
@@ -35,7 +41,10 @@ function PatientNavigateRoute() {
   const navigate = useNavigate()
   const { visit } = Route.useSearch()
   const { locale } = useLocale()
-  const floorLabel = (floorId: string) => floorLabelFor(floorId, locale)
+  // The floor list is server data since ADR-0015 — it carries each floor's
+  // code (which the label is built from) and the URL of its current plan.
+  const { data: floors } = useFloors()
+  const floorLabel = (floorId: string) => floorLabelFor(floorId, locale, floors ?? [])
 
   // Reached without a visit (bookmark, stale link): send them to the
   // journey route's front door (slip-link exchange / demo VN entry) rather
@@ -89,8 +98,20 @@ function PatientNavigateRoute() {
   const floorId =
     floorOverride && routeFloorIds.includes(floorOverride) ? floorOverride : defaultFloorId
 
+  // The drawing for whichever floor is on screen. Its URL carries the plan's
+  // own digest, so this is a one-time fetch per drawing and a redrawn floor
+  // arrives as a new URL rather than a stale cache hit (ADR-0015).
+  const planUrl = floorId ? planUrlFor(floorId, floors ?? []) : undefined
+  const planQuery = useFloorPlan(planUrl)
+
+  // floorLabel falls back to the raw floor id (e.g. "I-1302") until floors
+  // has loaded — fine for the map card's chip, which the patient reads as a
+  // place-holder, but not for the spoken-language turn-by-turn cue below, so
+  // the whole overlay (cues included) waits for floors rather than let a
+  // domain id slip into patient-facing text (DESIGN.md: patients never see
+  // domain vocabulary).
   const mapOverlay =
-    plan.state === 'plan' && route && floorId
+    plan.state === 'plan' && route && floorId && floors !== undefined
       ? {
           floorId,
           floors: routeFloorIds,
@@ -109,6 +130,11 @@ function PatientNavigateRoute() {
     <div className="h-dvh">
       <NavigateScreen
         plan={plan}
+        planSvg={planQuery.data}
+        // Distinguish "still coming" from "not coming": the floors list
+        // having no plan for this floor is as final as a failed fetch.
+        planUnavailable={planQuery.isError || (floors !== undefined && planUrl === undefined)}
+        floorLabel={floorLabel}
         route={mapOverlay}
         onFloorChange={setFloorOverride}
         currentLocation={location ? currentLocationLabel(location, floorLabel, locale) : undefined}

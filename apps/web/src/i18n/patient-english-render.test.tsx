@@ -2,7 +2,6 @@ import { renderToString } from 'react-dom/server'
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
-import i1301Ground from '../../../../packages/floorplans/floors/i-1301-ground.svg?raw'
 import { AuthContext } from '@/auth/AuthContext'
 import type { AuthContextValue } from '@/auth/types'
 import { JourneyScreen, JourneyShell } from '@/routes/patient/-JourneyScreen'
@@ -25,14 +24,12 @@ import { en } from './locales/en'
 
 const THAI = /[\u0E00-\u0E7F]/
 
-// The floor-plan SVG is a physical-signage asset from packages/floorplans —
-// its room labels are Thai on purpose (that is what the walls say), and it
-// is the same file for both locales. #93 scopes the app's own strings, so
-// the asset is masked out before scanning; translating the plans themselves
-// belongs to the epic's later map-asset work, not this PR.
-function withoutFloorPlanAsset(html: string): string {
-  return html.split(i1301Ground).join('')
-}
+// The floor-plan SVG used to have to be masked out of the scan: it was
+// bundled into the app, and its room labels are Thai on purpose (that is
+// what the walls say). Since ADR-0015 the drawing is fetched, so it is
+// simply not in the rendered output here — the screen renders its
+// map-placeholder instead, whose text is the app's own and must translate
+// like everything else.
 
 const anonymous: AuthContextValue = {
   status: 'unauthenticated',
@@ -94,11 +91,11 @@ describe('patient screens rendered in English (#93 AC)', () => {
   })
 
   it('navigate screen is English-only in the pending, no-destination and plan states', () => {
-    const pending = english(<NavigateScreen plan={{ state: 'pending' }} />)
+    const pending = english(<NavigateScreen plan={{ state: 'pending' }} floorLabel={() => 'Floor 1'} />)
     expect(pending).toContain(en['navigate.pendingNotice'])
     expectNoThai(pending)
 
-    const empty = english(<NavigateScreen plan={{ state: 'no-destination' }} />)
+    const empty = english(<NavigateScreen plan={{ state: 'no-destination' }} floorLabel={() => 'Floor 1'} />)
     expect(empty).toContain(en['navigate.noDestinationNotice'])
     expectNoThai(empty)
 
@@ -116,10 +113,15 @@ describe('patient screens rendered in English (#93 AC)', () => {
           x: 885,
           y: 190,
         }}
+        floorLabel={() => 'Floor 1'}
       />,
     )
     expect(planned).toContain('Directions to Medication pickup')
-    expectNoThai(withoutFloorPlanAsset(planned))
+    // No planSvg was passed, so this is also the map-placeholder state the
+    // screen shows while the drawing is on its way (ADR-0015): the
+    // destination and the directions are there, only the picture is not.
+    expect(planned).toContain(en['map.loading'])
+    expectNoThai(planned)
   })
 
   it('visit outcome cards are English-only for both outcomes', () => {

@@ -255,17 +255,33 @@ export function FloorPlanMap({ svg, floorLabel, destination, route, ariaLabel, l
     const host = hostRef.current
     if (!host) return
 
-    // Re-inject on every dependent change: the asset is static markup, so
+    // The plan goes in a shadow root, not in the page (ADR-0015 §2). It is
+    // uploaded content now: the server's normalizer is what makes it safe to
+    // inject at all, and this is the second half of that — the plan's own
+    // <style> carries generic class names (.room, .label) that would
+    // otherwise meet the app's, and a shadow root ends that question rather
+    // than relying on nobody ever picking a colliding name.
+    //
+    // The normalizer rewrites the plan's :root block to svg for exactly this
+    // reason: :root matches nothing inside a shadow tree, so a plan styled
+    // through it would render colourless here.
+    const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' })
+
+    // Re-inject on every dependent change: the plan is static markup, so
     // clearing this component's own DOM edits by resetting innerHTML is
     // simpler than tracking and undoing each one.
-    host.innerHTML = svg
+    root.innerHTML = svg
 
-    const el = host.querySelector('svg')
+    const el = root.querySelector('svg')
     if (!el) return
     svgElRef.current = el
     el.style.width = '100%'
     el.style.height = 'auto'
     el.style.display = 'block'
+    // Replaces the [&>svg]:m-auto the host used to carry: a class on the host
+    // cannot reach across the shadow boundary, so the centring goes on the
+    // element itself.
+    el.style.margin = 'auto'
 
     const base = parseViewBox(el.getAttribute('viewBox')) ?? {
       x: 0,
@@ -435,12 +451,16 @@ export function FloorPlanMap({ svg, floorLabel, destination, route, ariaLabel, l
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-lg border border-line bg-surface">
-      {/* The plan is a repo-controlled static asset, not user input — inlining
-          it is what keeps the destination highlight and pin reachable. */}
+      {/* The plan is injected into this element's shadow root by the effect
+          above, not rendered as children: inlining it is what keeps the
+          destination highlight, the pin and the route layer reachable as real
+          elements, and the shadow root is what keeps the plan's own styles
+          from reaching the app now that the plan is uploaded rather than
+          committed (ADR-0015 §2). The svg sizes itself there — the effect
+          sets its width/height — so no child selector reaches in from here. */}
       <div
         ref={hostRef}
-        className="flex h-full w-full touch-none cursor-grab select-none items-center justify-center active:cursor-grabbing [&>svg]:m-auto"
-        dangerouslySetInnerHTML={{ __html: svg }}
+        className="flex h-full w-full touch-none cursor-grab select-none items-center justify-center active:cursor-grabbing"
       />
       {/* Right-edge stack: the view toggle above the step zoom controls —
           pinch/wheel zoom is undiscoverable on a desktop, and panning needs

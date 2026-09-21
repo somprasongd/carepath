@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { floorLabelFor, planUrlFor, useFloorPlan, useFloors } from '@/features/floorplan'
 import { NavigateScreen } from '../patient/-NavigateScreen'
 import { StaffAuthProvider } from '@/auth/StaffAuthProvider'
 import { LoginScreen } from '../-LoginScreen'
@@ -30,6 +31,26 @@ const REFERENCE_PLAN = {
   y: 190,
 }
 
+/**
+ * The gallery specimen of the navigate screen. It fetches the plan the same
+ * way the real route does (ADR-0015) rather than holding a copy: with the
+ * API up this is the live drawing, and with it down the frame shows the
+ * screen's honest map-unavailable state — both worth seeing in a gallery.
+ */
+function ReferenceNavigate() {
+  const { data: floors } = useFloors()
+  const planUrl = planUrlFor(REFERENCE_PLAN.floorId, floors ?? [])
+  const planQuery = useFloorPlan(planUrl)
+  return (
+    <NavigateScreen
+      plan={{ state: 'plan', ...REFERENCE_PLAN }}
+      planSvg={planQuery.data}
+      planUnavailable={planQuery.isError || (floors !== undefined && planUrl === undefined)}
+      floorLabel={(floorId) => floorLabelFor(floorId, 'th', floors ?? [])}
+    />
+  )
+}
+
 export function ScreensSection() {
   return (
     <Section
@@ -59,7 +80,7 @@ export function ScreensSection() {
           <ReferenceJourneyDone />
         </ScreenFrame>
         <ScreenFrame title="นำทางไปจุดบริการ" {...MOBILE}>
-          <NavigateScreen plan={{ state: 'plan', ...REFERENCE_PLAN }} />
+          <ReferenceNavigate />
         </ScreenFrame>
       </div>
 
