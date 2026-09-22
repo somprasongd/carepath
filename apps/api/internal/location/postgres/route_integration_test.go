@@ -25,7 +25,7 @@ func TestCurrentLocationFeedsRouting(t *testing.T) {
 	// The location module only uses the graph to validate fixes against
 	// nodes, so the servicepoint side of the routing service (#28) is not
 	// wired here.
-	graph := navigation.NewService(navigationpostgres.New(database), nil)
+	graph := navigation.NewService(navigationpostgres.New(database), nil, nil)
 	svc, err := location.NewService(New(database), graph, qr.New(places, graph))
 	if err != nil {
 		t.Fatalf("NewService: %v", err)

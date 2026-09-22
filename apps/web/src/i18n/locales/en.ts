@@ -98,6 +98,15 @@ export const en: Catalog = {
   'queue.estimate': 'Estimated wait about {minutes} minutes',
   'queue.noData': 'No wait-time data for this point yet',
 
+  // While-you-wait amenity suggestions (features/amenity, FR-26 / #109).
+  'amenity.title': 'Nearby, while you wait',
+  'amenity.whileWaiting': 'About {minutes} minutes to wait — places worth a walk are nearby',
+  'amenity.kind.RESTROOM': 'Restroom',
+  'amenity.kind.WAITING_AREA': 'Waiting area',
+  'amenity.kind.FOOD_STALL': 'Food & drinks',
+  'amenity.kind.AMENITY': 'Amenity',
+  'amenity.go': 'Go',
+
   'outcome.cancelled.label': 'This visit',
   'outcome.cancelled.title': 'was cancelled',
   'outcome.cancelled.body': 'If you have any questions, please ask the staff at a service point.',

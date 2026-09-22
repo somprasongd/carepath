@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CarePath API
-  version: 0.22.0
+  version: 0.23.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -1134,10 +1134,12 @@ paths:
       description: >
         Shortest walkable route for the SVG overlay (#29). `from` is the
         current location's navigation node id — the nodeId of a location
-        observation (e.g. I-1301/node-reception) — and `to` is the
-        destination service point's code (same key as
-        /api/v1/service-points/{code}); the server resolves it to the
-        place's entry node before routing.
+        observation (e.g. I-1301/node-reception). The destination is
+        exactly one of `to` — a service point's code (same key as
+        /api/v1/service-points/{code}) — or `toPlace`, a place id resolved
+        to its entry node the same way (#109: how an amenity from
+        /api/v1/navigation/amenities is routed; amenity places have no
+        service point code).
       parameters:
         - in: query
           name: from
@@ -1146,8 +1148,15 @@ paths:
           schema: { type: string }
         - in: query
           name: to
-          required: true
-          description: Destination service point code, e.g. PHARMACY.
+          required: false
+          description: Destination service point code, e.g. PHARMACY —
+            exactly one of `to` or `toPlace` must be present.
+          schema: { type: string }
+        - in: query
+          name: toPlace
+          required: false
+          description: Destination place id, e.g. RESTROOM-01 — exactly
+            one of `to` or `toPlace` must be present (#109).
           schema: { type: string }
         - in: query
           name: accessibleOnly
@@ -1165,13 +1174,61 @@ paths:
               schema:
                 $ref: '#/components/schemas/NavigationRoute'
         '400':
-          description: Missing or empty from/to, or accessibleOnly is not a boolean
+          description: Missing from, missing or duplicated destination (to/toPlace), or accessibleOnly is not a boolean
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Unknown node or service point, destination without a mapped place, or no walkable path
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/navigation/amenities:
+    get:
+      description: >
+        Nearby amenities while the patient waits (#109 / FR-26): every
+        amenity-typed place (restrooms, waiting areas, food stalls — the
+        Place.type values hospitalmap counts as amenities) ranked by
+        walking distance from one origin, nearest first. The origin is the
+        same `from` the route endpoint takes — the current location's node
+        id. Distances are authored SVG units, the unit
+        NavigationRoute.totalDistance sums. Unreachable amenities are
+        absent; none at all is an empty list, never an error.
+      parameters:
+        - in: query
+          name: from
+          required: true
+          description: Globally unique navigation node id ("<floorId>/<localId>").
+          schema: { type: string }
+        - in: query
+          name: limit
+          required: false
+          description: Maximum amenities to return.
+          schema: { type: integer, minimum: 1, maximum: 50, default: 12 }
+        - in: query
+          name: accessibleOnly
+          required: false
+          description: >
+            Rank by accessible routes only (stairs skipped) so a wheelchair
+            user's nearest amenity is one they can actually walk to (FR-20).
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Amenities ranked nearest-first; empty when none is reachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AmenitySearch'
+        '400':
+          description: Missing from, limit out of range, or accessibleOnly is not a boolean
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown origin node
           content:
             application/json:
               schema:
@@ -1682,6 +1739,32 @@ components:
           items:
             $ref: '#/components/schemas/NavEdge'
         totalDistance: { type: number }
+    AmenitySearch:
+      type: object
+      description: >
+        The answer of GET /api/v1/navigation/amenities (#109) — amenity
+        places ranked by walking distance from `from`, nearest first.
+        Client display policy (which kinds to surface, the
+        wait-long-enough gate) is the client's, per ADR-0012.
+      required: [from, amenities]
+      properties:
+        from: { type: string }
+        amenities:
+          type: array
+          items:
+            $ref: '#/components/schemas/AmenityNearby'
+    AmenityNearby:
+      type: object
+      description: >
+        One ranked amenity: the place in the same shape /api/v1/places
+        serves (floor included, so floor labels need no second request)
+        and its walking distance in authored SVG units — the unit
+        NavigationRoute.totalDistance sums.
+      required: [place, distance]
+      properties:
+        place:
+          $ref: '#/components/schemas/Place'
+        distance: { type: number }
     NavNode:
       type: object
       description: One walkable point of the hospital. x/y are floor-local
@@ -1744,7 +1827,7 @@ components:
         type:
           type: string
           description: Place category from the hospital map.
-          enum: [ROOM, COUNTER, WAITING_AREA, RESTROOM, ELEVATOR, STAIRWAY, RAMP, ENTRANCE, AMENITY]
+          enum: [ROOM, COUNTER, WAITING_AREA, RESTROOM, ELEVATOR, STAIRWAY, RAMP, ENTRANCE, AMENITY, FOOD_STALL]
         x: { type: number }
         y: { type: number }
         entryNodeId: { type: string }

@@ -17,6 +17,13 @@ var ErrPlaceNotFound = apperr.New(apperr.KindNotFound, "place not found")
 // ErrFloorNotFound is returned when no floor matches the lookup.
 var ErrFloorNotFound = apperr.New(apperr.KindNotFound, "floor not found")
 
+// AmenityPlaceTypes are the place kinds counted as patient amenities
+// (FR-26): what the "nearby while you wait" suggestions are drawn from.
+// The place type is the stable code the client catalogs its labels by
+// (ADR-0012), so the membership of this list is patient-facing vocabulary,
+// not just storage detail.
+var AmenityPlaceTypes = []string{"RESTROOM", "WAITING_AREA", "FOOD_STALL", "AMENITY"}
+
 // Floor is one floor of a building, identified by the floor-plan id
 // (e.g. I-1301). LevelOrder is the vertical display/sort order.
 type Floor struct {

@@ -87,6 +87,14 @@ func (f *fakeNavigation) DistancesToServicePoints(context.Context, string, []str
 	return nil, nil
 }
 
+func (f *fakeNavigation) RouteToPlace(context.Context, string, string, navigation.RouteOptions) (navigation.Route, error) {
+	return navigation.Route{}, nil
+}
+
+func (f *fakeNavigation) NearestAmenities(context.Context, string, navigation.RouteOptions, int) (navigation.AmenitySearch, error) {
+	return navigation.AmenitySearch{}, nil
+}
+
 func newService(t *testing.T, providers ...location.Provider) (location.Service, *fakeRepo, *fakeNavigation) {
 	t.Helper()
 	repo := &fakeRepo{}

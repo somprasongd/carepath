@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { format, messagesFor } from '@/i18n'
 import type { Journey, JourneyStep } from '@/features/visit'
-import { navigatePlanForJourney } from './destination'
+import type { Place } from './queries'
+import { amenityDestinationPlan, navigatePlanForJourney } from './destination'
 
 const FLOOR_1 = {
   id: 'I-1301',
@@ -254,5 +255,89 @@ describe('navigatePlanForJourney', () => {
       title: 'Directions to Medication pickup',
       name: 'Somewhere',
     })
+  })
+})
+
+describe('amenityDestinationPlan', () => {
+  const restroom: Place = {
+    id: 'RESTROOM-01',
+    floorId: 'I-1301',
+    name: 'Restroom (Ground)',
+    type: 'RESTROOM',
+    x: 318,
+    y: 190,
+    entryNodeId: 'I-1301/node-ramp',
+    floor: FLOOR_1,
+  }
+
+  it('plans a routable amenity with the cataloged kind label, not the staff name', () => {
+    // The seeded place's name is staff-facing ("Restroom (Ground)"); the
+    // patient gets the catalog's kind label (ADR-0012) — pinned in real
+    // English here, from the catalog in the Thai test below.
+    const plan = amenityDestinationPlan(restroom, 'en')
+
+    expect(plan).toEqual({
+      state: 'plan',
+      title: 'Directions to Restroom',
+      name: 'Restroom',
+      subtitle: 'Floor 1 · Restroom · RESTROOM-01',
+      floorId: 'I-1301',
+      floorLabel: 'Floor 1',
+      placeId: 'RESTROOM-01',
+      // No servicePointCode: amenity routes ride toPlace on the place id.
+      x: 318,
+      y: 190,
+    })
+  })
+
+  it('composes the same plan in Thai from the catalog', () => {
+    const th = messagesFor('th')
+    const plan = amenityDestinationPlan({ ...restroom, floor: FLOOR_2, floorId: 'I-1302' }, 'th')
+
+    expect(plan).toEqual({
+      state: 'plan',
+      title: format(th, 'navigate.routeTitle', { name: th['amenity.kind.RESTROOM'] }),
+      name: th['amenity.kind.RESTROOM'],
+      subtitle: format(th, 'navigate.subtitle', {
+        floor: format(th, 'common.floor', { code: '2' }),
+        name: th['amenity.kind.RESTROOM'],
+        place: 'RESTROOM-01',
+      }),
+      floorId: 'I-1302',
+      floorLabel: format(th, 'common.floor', { code: '2' }),
+      placeId: 'RESTROOM-01',
+      x: 318,
+      y: 190,
+    })
+  })
+
+  it('falls back to the staff name for an uncataloged kind', () => {
+    const plan = amenityDestinationPlan({ ...restroom, type: 'AMENITY', name: 'ร้านดอกไม้' }, 'en')
+    // The cast is the case being pinned: a server contract newer than the
+    // generated schema (a new Place.type the catalog has not mapped yet) —
+    // the server name must show rather than a fabricated label.
+    const unmapped = amenityDestinationPlan(
+      { ...restroom, type: 'VENDING' as Place['type'] },
+      'en',
+    )
+
+    expect(plan).toMatchObject({ state: 'plan', name: 'Amenity' })
+    expect(unmapped).toMatchObject({ state: 'plan', name: 'Restroom (Ground)' })
+  })
+
+  it('is honestly unsupported for a place with no entry node', () => {
+    const { entryNodeId, ...orphan } = restroom
+    void entryNodeId
+    const plan = amenityDestinationPlan(orphan, 'en')
+
+    expect(plan).toEqual({
+      state: 'unsupported',
+      title: 'Directions to Restroom',
+      name: 'Restroom',
+    })
+  })
+
+  it('has no destination while the place row is still loading', () => {
+    expect(amenityDestinationPlan(undefined, 'th')).toEqual({ state: 'no-destination' })
   })
 })

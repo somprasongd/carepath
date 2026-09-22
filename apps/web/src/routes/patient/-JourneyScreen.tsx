@@ -20,6 +20,7 @@ import {
 } from '@/design-system'
 import { ShareSheet } from '@/features/share'
 import { usePrefetchFloorPlan } from '@/features/floorplan'
+import { amenitySuggestionEligible, AmenitySuggestions } from '@/features/amenity'
 import {
   journeyProgressLabel,
   NotificationToggle,
@@ -155,6 +156,17 @@ export function JourneyScreen({
           language — the recommendation must be explainable, not a black box. */}
       {recommended && reasonLabel && <Meta className="-mt-5 mb-4">{reasonLabel}</Meta>}
       {queueStep && <QueueCard step={queueStep} />}
+      {/* Amenities while waiting (FR-26 / #109): only once the estimate
+          says the patient has time to walk away and back — rendering the
+          component is the gate, so its location poll and search start
+          only then. No location yet means the card stays hidden: "nearby"
+          without an origin would be a guess, not a suggestion. */}
+      {amenitySuggestionEligible(queueStep?.estimatedWaitMinutes ?? null) && (
+        <AmenitySuggestions
+          visitId={journey?.visitId ?? visitId}
+          waitMinutes={queueStep?.estimatedWaitMinutes ?? 0}
+        />
+      )}
       <JourneyRail
         steps={rail}
         labels={{ currentStep: t('rail.currentStep'), nextStep: t('rail.nextStep') }}

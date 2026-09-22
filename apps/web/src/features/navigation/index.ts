@@ -25,9 +25,15 @@ export {
 export {
   currentLocationQueryOptions,
   navigationRouteQueryOptions,
+  nearbyAmenitiesQueryOptions,
+  placeRouteQueryOptions,
   useCurrentLocation,
+  useNearbyAmenities,
   useNavigationRoute,
+  usePlaceRoute,
   useReportLocation,
+  type AmenityNearby,
+  type AmenitySearch,
   type LocationObservation,
   type LocationReportSource,
 } from './queries'

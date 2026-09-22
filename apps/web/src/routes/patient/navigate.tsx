@@ -2,11 +2,15 @@ import { useState } from 'react'
 import { Navigate, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useLocale } from '@/i18n'
 import {
+  amenityDestinationPlan,
   floorLabelFor,
   navigatePlanForJourney,
   planUrlFor,
   useFloorPlan,
   useFloors,
+  usePlaces,
+  type NavigatePlan,
+  type Place,
 } from '@/features/floorplan'
 import type { FloorPlanRoute } from '@/design-system'
 import {
@@ -19,6 +23,7 @@ import {
   turnByTurnSteps,
   useCurrentLocation,
   useNavigationRoute,
+  usePlaceRoute,
   useVoiceGuidance,
   voiceSteps,
 } from '@/features/navigation'
@@ -31,17 +36,34 @@ import {
 import { NavigateScreen } from './-NavigateScreen'
 import { ScanOverlay } from './-ScanOverlay'
 
-/** `?visit=<VN>` — same parameter as the journey screen, forwarded by its CTA. */
+/** `?visit=<VN>` — same parameter as the journey screen, forwarded by its CTA.
+ * `?toPlace=<placeId>` overrides the destination (#109): the amenity card
+ * hands the screen an amenity place to walk to instead of the next step. */
 export const Route = createFileRoute('/patient/navigate')({
-  validateSearch: (search: Record<string, unknown>): { visit?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { visit?: string; toPlace?: string } => ({
     visit: typeof search.visit === 'string' && search.visit !== '' ? search.visit : undefined,
+    toPlace:
+      typeof search.toPlace === 'string' && search.toPlace !== '' ? search.toPlace : undefined,
   }),
   component: PatientNavigateRoute,
 })
 
+/** The toPlace entry point's plan: pending while the place list loads, then
+ * the amenity plan for that row — a place id no row answers is honestly
+ * no-destination (a stale link, not a crash). */
+function placeLookupPlan(
+  places: Place[] | undefined,
+  placeId: string,
+  pending: boolean,
+  locale: ReturnType<typeof useLocale>['locale'],
+): NavigatePlan {
+  if (!places && pending) return { state: 'pending' }
+  return amenityDestinationPlan(places?.find((place) => place.id === placeId), locale)
+}
+
 function PatientNavigateRoute() {
   const navigate = useNavigate()
-  const { visit } = Route.useSearch()
+  const { visit, toPlace } = Route.useSearch()
   const { locale } = useLocale()
   // The floor list is server data since ADR-0015 — it carries each floor's
   // code (which the label is built from) and the URL of its current plan.
@@ -78,19 +100,30 @@ function PatientNavigateRoute() {
 
   // Same query key as the journey screen, so this is a cache read, not a
   // second round trip. The plan resolves the destination's place and floor
-  // from the recommended step (ADR-0009) onto the floor-plan asset (#25).
+  // from the recommended step (ADR-0009) onto the floor-plan asset (#25) —
+  // unless a toPlace override (#109) names an amenity destination, in which
+  // case the journey read stays for the location fallback and the plan
+  // comes from the place row instead.
   const { data, isPending } = useJourney(visitId)
-  const plan = navigatePlanForJourney(data, isPending, locale)
+  const { data: places, isPending: placesPending } = usePlaces()
+  const plan = toPlace
+    ? placeLookupPlan(places, toPlace, placesPending, locale)
+    : navigatePlanForJourney(data, isPending, locale)
 
   // The live route (#29): a location observation is the preferred start; the
   // latest finished step's service point is the assumed fallback (nothing is
   // recorded — a real fix always wins once one lands). Either way a changed
   // origin changes the route query's key, so the line redraws by itself.
+  // An amenity destination rides toPlace — the two queries below never both
+  // run: each is disabled unless its own destination form is the one in use.
   const { data: location } = useCurrentLocation(visitId)
   const assumed = location ? null : assumedOrigin(data, locale)
   const originNodeId = location?.nodeId ?? assumed?.nodeId ?? null
-  const servicePointCode = plan.state === 'plan' ? plan.servicePointCode : ''
-  const { data: route } = useNavigationRoute(originNodeId, servicePointCode, accessibleOnly)
+  const servicePointCode =
+    !toPlace && plan.state === 'plan' ? plan.servicePointCode ?? null : null
+  const { data: codeRoute } = useNavigationRoute(originNodeId, servicePointCode, accessibleOnly)
+  const { data: placeRoute } = usePlaceRoute(originNodeId, toPlace ?? null, accessibleOnly)
+  const route = toPlace ? placeRoute : codeRoute
 
   // Cross-floor view (#35 follow-up): show the floor the patient stands on
   // first — the "you are here" mark and the first walking leg — with a

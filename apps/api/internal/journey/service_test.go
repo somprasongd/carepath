@@ -252,6 +252,12 @@ func (f *fakeNavigation) Route(context.Context, string, string, navigation.Route
 func (f *fakeNavigation) RouteToServicePoint(context.Context, string, string, navigation.RouteOptions) (navigation.Route, error) {
 	panic("not implemented in fake")
 }
+func (f *fakeNavigation) RouteToPlace(context.Context, string, string, navigation.RouteOptions) (navigation.Route, error) {
+	panic("not implemented in fake")
+}
+func (f *fakeNavigation) NearestAmenities(context.Context, string, navigation.RouteOptions, int) (navigation.AmenitySearch, error) {
+	panic("not implemented in fake")
+}
 func (f *fakeNavigation) DistancesToServicePoints(_ context.Context, fromNodeID string, codes []string, _ navigation.RouteOptions) (map[string]float64, error) {
 	f.distanceAsk++
 	f.gotOrigin, f.gotCodes = fromNodeID, append([]string{}, codes...)

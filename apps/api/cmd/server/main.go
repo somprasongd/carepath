@@ -96,7 +96,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	// navigation node and become the visit's routing start point. The same
 	// graph serves the route API (#28), which resolves the destination
 	// service point through the servicepoint module.
-	navigationGraph := navigation.NewService(navigationpostgres.New(database), servicePoints)
+	navigationGraph := navigation.NewService(navigationpostgres.New(database), servicePoints, hospitalMap)
 
 	// Floor plans are served rather than bundled with the web app since
 	// ADR-0015. An upload is checked against the places and graph nodes the
