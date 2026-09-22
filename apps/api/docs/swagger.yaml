@@ -462,6 +462,22 @@ definitions:
         example: ok
         type: string
     type: object
+  navigation.AmenityNearby:
+    properties:
+      distance:
+        type: number
+      place:
+        $ref: '#/definitions/hospitalmap.Place'
+    type: object
+  navigation.AmenitySearch:
+    properties:
+      amenities:
+        items:
+          $ref: '#/definitions/navigation.AmenityNearby'
+        type: array
+      from:
+        type: string
+    type: object
   navigation.NavEdge:
     properties:
       accessible:
@@ -1648,6 +1664,51 @@ paths:
       summary: Redeem a visit link token for this session
       tags:
       - auth
+  /api/v1/navigation/amenities:
+    get:
+      description: '#109/FR-26: amenity-typed places (restrooms, waiting areas, food
+        stalls) ranked by walking distance from the origin node — one Dijkstra settle
+        ranks them all. The origin is the current location''s node id, the same `from`
+        the route endpoint takes; unreachable amenities are absent, and no amenity
+        at all is an empty list, never an error. Distances are authored SVG units,
+        the unit NavigationRoute.totalDistance sums.'
+      parameters:
+      - description: Current location node id (e.g. I-1301/node-reception)
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: Max amenities to return (default 12, max 50)
+        in: query
+        name: limit
+        type: integer
+      - description: Rank by accessible routes only (stairs skipped, FR-20)
+        in: query
+        name: accessibleOnly
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/navigation.AmenitySearch'
+        "400":
+          description: missing from, limit out of range, or accessibleOnly is not
+            a boolean
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: unknown origin node
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Search amenities near a location
+      tags:
+      - navigation
   /api/v1/navigation/edges:
     get:
       description: '#105/ADR-0015: the graph''s directed, costed edges. Two-way connections
@@ -1695,20 +1756,27 @@ paths:
       - navigation
   /api/v1/navigation/route:
     get:
-      description: Shortest walkable route for the SVG overlay. from is the current
-        location's navigation node id — the nodeId of a location observation (e.g.
-        I-1301/node-reception); to is the destination service point's code, which
-        the server resolves to the place's entry node before routing.
+      description: 'Shortest walkable route for the SVG overlay. from is the current
+        location''s navigation node id — the nodeId of a location observation (e.g.
+        I-1301/node-reception). The destination is exactly one of to (a service point''s
+        code, resolved to the place''s entry node before routing) or toPlace (a place
+        id, resolved the same way — how amenity destinations from /navigation/amenities
+        are routed, #109).'
       parameters:
       - description: Current location node id (e.g. I-1301/node-reception)
         in: query
         name: from
         required: true
         type: string
-      - description: Destination service point code (e.g. PHARMACY)
+      - description: Destination service point code (e.g. PHARMACY) — exactly one
+          of to or toPlace
         in: query
         name: to
-        required: true
+        type: string
+      - description: Destination place id (e.g. RESTROOM-01) — exactly one of to or
+          toPlace
+        in: query
+        name: toPlace
         type: string
       - description: Skip non-accessible edges (stairs) so the route detours via the
           elevator (FR-20)
@@ -1723,19 +1791,20 @@ paths:
           schema:
             $ref: '#/definitions/navigation.Route'
         "400":
-          description: missing from or to, or accessibleOnly is not a boolean
+          description: missing from, missing or duplicated destination, or accessibleOnly
+            is not a boolean
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
         "404":
-          description: unknown node or service point, destination without a mapped
-            place, or no walkable path
+          description: unknown node, service point or place, destination without a
+            mapped place, or no walkable path
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
         "500":
           description: internal server error
           schema:
             $ref: '#/definitions/httpx.ErrorResponse'
-      summary: Get the walking route to a service point
+      summary: Get the walking route to a service point or place
       tags:
       - navigation
   /api/v1/places:

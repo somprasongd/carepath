@@ -41,7 +41,7 @@ func TestGetNodeCarriesFloorAndCoordinate(t *testing.T) {
 			ID: "I-1302/node-blood-collection", FloorID: "I-1302", X: 165, Y: 405,
 			NodeType: "PLACE_ENTRY",
 		},
-	}}, nil)
+	}}, nil, nil)
 
 	node, err := svc.GetNode(context.Background(), "I-1302/node-blood-collection")
 	if err != nil {
@@ -53,7 +53,7 @@ func TestGetNodeCarriesFloorAndCoordinate(t *testing.T) {
 }
 
 func TestGetNodeUnknownIDPropagatesNotFound(t *testing.T) {
-	svc := NewService(&fakeRepo{nodes: map[string]NavNode{}}, nil)
+	svc := NewService(&fakeRepo{nodes: map[string]NavNode{}}, nil, nil)
 
 	if _, err := svc.GetNode(context.Background(), "I-1301/node-nope"); !errors.Is(err, ErrNodeNotFound) {
 		t.Fatalf("error = %v, want ErrNodeNotFound", err)
@@ -64,7 +64,7 @@ func TestListEdgesCarriesCost(t *testing.T) {
 	svc := NewService(&fakeRepo{edges: []NavEdge{
 		{ID: "a>b", FromNodeID: "a", ToNodeID: "b", EdgeType: "CORRIDOR", Distance: 200, Accessible: true},
 		{ID: "b>a", FromNodeID: "b", ToNodeID: "a", EdgeType: "CORRIDOR", Distance: 200, Accessible: true},
-	}}, nil)
+	}}, nil, nil)
 
 	edges, err := svc.ListEdges(context.Background())
 	if err != nil {
@@ -138,7 +138,7 @@ func TestRouteToServicePointEndsAtPlaceEntry(t *testing.T) {
 	entry := "I-1301/node-pharmacy"
 	svc := NewService(routeTestGraph(), pharmacyServicePoints(&hospitalmap.Place{
 		ID: "PHARMACY-01", FloorID: "I-1301", Name: "Pharmacy", EntryNodeID: &entry,
-	}))
+	}), nil)
 
 	route, err := svc.RouteToServicePoint(context.Background(), "I-1301/node-reception", "PHARMACY", RouteOptions{})
 	if err != nil {
@@ -156,7 +156,7 @@ func TestRouteToServicePointEndsAtPlaceEntry(t *testing.T) {
 }
 
 func TestRouteToServicePointUnknownCodePropagatesNotFound(t *testing.T) {
-	svc := NewService(routeTestGraph(), pharmacyServicePoints(nil))
+	svc := NewService(routeTestGraph(), pharmacyServicePoints(nil), nil)
 
 	if _, err := svc.RouteToServicePoint(context.Background(), "I-1301/node-reception", "XRAY", RouteOptions{}); !errors.Is(err, servicepoint.ErrNotFound) {
 		t.Fatalf("error = %v, want servicepoint.ErrNotFound", err)
@@ -167,7 +167,7 @@ func TestRouteToServicePointUnknownFromNode(t *testing.T) {
 	entry := "I-1301/node-pharmacy"
 	svc := NewService(routeTestGraph(), pharmacyServicePoints(&hospitalmap.Place{
 		ID: "PHARMACY-01", FloorID: "I-1301", Name: "Pharmacy", EntryNodeID: &entry,
-	}))
+	}), nil)
 
 	if _, err := svc.RouteToServicePoint(context.Background(), "I-1301/node-nope", "PHARMACY", RouteOptions{}); !errors.Is(err, ErrNodeNotFound) {
 		t.Fatalf("error = %v, want ErrNodeNotFound", err)
@@ -186,7 +186,7 @@ func TestRouteToServicePointUnmappedDestination(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewService(routeTestGraph(), pharmacyServicePoints(tt.place))
+			svc := NewService(routeTestGraph(), pharmacyServicePoints(tt.place), nil)
 
 			if _, err := svc.RouteToServicePoint(context.Background(), "I-1301/node-reception", "PHARMACY", RouteOptions{}); !errors.Is(err, ErrDestinationUnmapped) {
 				t.Fatalf("error = %v, want ErrDestinationUnmapped", err)
@@ -213,7 +213,7 @@ func TestDistancesToServicePointsRanksFromOneOrigin(t *testing.T) {
 		"CASHIER": {ID: "SP-CASHIER", Code: "CASHIER", Name: "Cashier", PlaceID: "CASHIER-01"}, // no place
 		"VOID": {ID: "SP-VOID", Code: "VOID", Name: "Void", PlaceID: "VOID-01",
 			Place: &hospitalmap.Place{ID: "VOID-01", FloorID: "I-1301", Name: "Void", EntryNodeID: &voidEntry}},
-	}})
+	}}, nil)
 
 	dist, err := svc.DistancesToServicePoints(context.Background(), "I-1301/node-reception",
 		[]string{"PHARMACY", "RECEPTION", "CASHIER", "VOID", "XRAY"}, RouteOptions{})
@@ -235,7 +235,7 @@ func TestDistancesToServicePointsUnknownOriginIsNotFound(t *testing.T) {
 	entry := "I-1301/node-pharmacy"
 	svc := NewService(routeTestGraph(), pharmacyServicePoints(&hospitalmap.Place{
 		ID: "PHARMACY-01", FloorID: "I-1301", Name: "Pharmacy", EntryNodeID: &entry,
-	}))
+	}), nil)
 
 	if _, err := svc.DistancesToServicePoints(context.Background(), "I-1301/node-nope",
 		[]string{"PHARMACY"}, RouteOptions{}); !errors.Is(err, ErrNodeNotFound) {

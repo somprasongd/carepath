@@ -112,6 +112,15 @@ export const th = {
   'queue.estimate': 'เวลารอโดยประมาณ {minutes} นาที',
   'queue.noData': 'ยังไม่มีข้อมูลเวลารอของจุดบริการนี้',
 
+  // While-you-wait amenity suggestions (features/amenity, FR-26 / #109).
+  'amenity.title': 'ใกล้ที่นี่ ระหว่างรอ',
+  'amenity.whileWaiting': 'ระหว่างรอประมาณ {minutes} นาที มีจุดที่น่าไปใกล้ ๆ ตำแหน่งคุณ',
+  'amenity.kind.RESTROOM': 'ห้องน้ำ',
+  'amenity.kind.WAITING_AREA': 'จุดนั่งพัก',
+  'amenity.kind.FOOD_STALL': 'ร้านอาหาร/เครื่องดื่ม',
+  'amenity.kind.AMENITY': 'สิ่งอำนวยความสะดวก',
+  'amenity.go': 'นำทาง',
+
   // End-of-visit summary card (features/visit/components/VisitOutcomeCard.tsx).
   'outcome.cancelled.label': 'การมาโรงพยาบาลนี้',
   'outcome.cancelled.title': 'ถูกยกเลิก',

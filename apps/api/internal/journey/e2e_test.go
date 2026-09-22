@@ -129,7 +129,7 @@ func TestIngestToPlanEndToEnd(t *testing.T) {
 	hisClient := httpclient.New(server.URL, server.Client())
 	hospitalMap := hospitalmap.NewService(hospitalmappostgres.New(database))
 	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), hospitalMap)
-	navigationGraph := navigation.NewService(navigationpostgres.New(database), servicePoints)
+	navigationGraph := navigation.NewService(navigationpostgres.New(database), servicePoints, hospitalMap)
 	locations, err := location.NewService(locationpostgres.New(database), navigationGraph)
 	if err != nil {
 		t.Fatalf("location service: %v", err)

@@ -76,7 +76,7 @@ func (f *fakeServicePoints) IsAssigned(context.Context, string, string) (bool, e
 func newTestApp(t *testing.T, repo navigation.Repo, pharmacyEntryNodeID string) *fiber.App {
 	t.Helper()
 	app := fiber.New()
-	navigation.NewHandler(navigation.NewService(repo, &fakeServicePoints{entry: pharmacyEntryNodeID})).
+	navigation.NewHandler(navigation.NewService(repo, &fakeServicePoints{entry: pharmacyEntryNodeID}, nil)).
 		Register(app.Group("/api/v1"))
 	return app
 }
@@ -374,4 +374,178 @@ func TestGraphEndpointsExposeNodesAndEdges(t *testing.T) {
 			t.Error("edges omit accessible — the wheelchair route (FR-20) depends on it")
 		}
 	})
+}
+
+// fakePlaces answers the amenity search from a fixed list, the way the
+// hospitalmap service answers from the place table (#109).
+type fakePlaces struct {
+	places []hospitalmap.Place
+}
+
+func (f *fakePlaces) GetPlace(_ context.Context, placeID string) (hospitalmap.Place, error) {
+	for _, place := range f.places {
+		if place.ID == placeID {
+			return place, nil
+		}
+	}
+	return hospitalmap.Place{}, hospitalmap.ErrPlaceNotFound
+}
+
+func (f *fakePlaces) ListPlaces(context.Context) ([]hospitalmap.Place, error) { return f.places, nil }
+
+func (f *fakePlaces) ListFloors(context.Context) ([]hospitalmap.Floor, error) { return nil, nil }
+
+func (f *fakePlaces) GetFloor(context.Context, string) (hospitalmap.Floor, error) {
+	return hospitalmap.Floor{}, hospitalmap.ErrFloorNotFound
+}
+
+func (f *fakePlaces) SetPlan(context.Context, string, string, string) error { return nil }
+
+// amenityGraph is the ground floor in miniature with two amenity anchors:
+// a restroom on the corridor (350 from reception) and a waiting area where
+// the pharmacy is (735).
+func amenityGraph() (*fakeRepo, *fakePlaces) {
+	corridor := "I-1301/node-corridor"
+	pharmacy := "I-1301/node-pharmacy"
+	repo := routableGraph()
+	places := &fakePlaces{places: []hospitalmap.Place{
+		{ID: "RESTROOM-01", FloorID: "I-1301", Name: "Restroom", PlaceType: "RESTROOM", EntryNodeID: &corridor},
+		{ID: "WAITING-01", FloorID: "I-1301", Name: "Waiting", PlaceType: "WAITING_AREA", EntryNodeID: &pharmacy},
+	}}
+	return repo, places
+}
+
+func newAmenityApp(t *testing.T, repo *fakeRepo, places *fakePlaces) *fiber.App {
+	t.Helper()
+	app := fiber.New()
+	navigation.NewHandler(navigation.NewService(repo, &fakeServicePoints{entry: "I-1301/node-pharmacy"}, places)).
+		Register(app.Group("/api/v1"))
+	return app
+}
+
+func get(t *testing.T, app *fiber.App, path string) (*http.Response, []byte) {
+	t.Helper()
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	return resp, body
+}
+
+// #109 AC: the search answers amenity places nearest-first with the place
+// payload the client already knows from /api/v1/places, plus the distance.
+func TestAmenitiesRanksNearestFirst(t *testing.T) {
+	repo, places := amenityGraph()
+	app := newAmenityApp(t, repo, places)
+
+	resp, body := get(t, app, "/api/v1/navigation/amenities?from=I-1301/node-reception")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d (%s), want 200", resp.StatusCode, body)
+	}
+	var raw struct {
+		From      string `json:"from"`
+		Amenities []struct {
+			Place    map[string]any `json:"place"`
+			Distance float64        `json:"distance"`
+		} `json:"amenities"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode %q: %v", body, err)
+	}
+	if raw.From != "I-1301/node-reception" {
+		t.Fatalf("from = %q", raw.From)
+	}
+	if len(raw.Amenities) != 2 {
+		t.Fatalf("amenities = %s, want 2", body)
+	}
+	if raw.Amenities[0].Place["id"] != "RESTROOM-01" || raw.Amenities[0].Distance != 350 {
+		t.Fatalf("nearest = %v @ %v, want RESTROOM-01 @ 350", raw.Amenities[0].Place["id"], raw.Amenities[0].Distance)
+	}
+	if raw.Amenities[1].Place["id"] != "WAITING-01" || raw.Amenities[1].Distance != 735 {
+		t.Fatalf("second = %v @ %v, want WAITING-01 @ 735", raw.Amenities[1].Place["id"], raw.Amenities[1].Distance)
+	}
+	// The place rides the /api/v1/places shape so the client needs no new
+	// vocabulary to label it (floor code for labels, type for the catalog).
+	for _, key := range []string{"id", "floorId", "name", "type", "entryNodeId"} {
+		if _, ok := raw.Amenities[0].Place[key]; !ok {
+			t.Fatalf("place payload %v lacks %q", raw.Amenities[0].Place, key)
+		}
+	}
+}
+
+// #109 AC: validation mirrors the route endpoint's — missing from, a bad
+// limit, a bad accessibleOnly and an unknown origin never reach the graph
+// as silent defaults.
+func TestAmenitiesValidation(t *testing.T) {
+	repo, places := amenityGraph()
+	app := newAmenityApp(t, repo, places)
+
+	tests := []struct {
+		name   string
+		query  string
+		status int
+	}{
+		{"missing from", "?limit=5", http.StatusBadRequest},
+		{"limit zero", "?from=I-1301/node-reception&limit=0", http.StatusBadRequest},
+		{"limit over cap", "?from=I-1301/node-reception&limit=51", http.StatusBadRequest},
+		{"limit not a number", "?from=I-1301/node-reception&limit=many", http.StatusBadRequest},
+		{"accessibleOnly typo", "?from=I-1301/node-reception&accessibleOnly=yes", http.StatusBadRequest},
+		{"unknown origin", "?from=I-1301/node-nope", http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, body := get(t, app, "/api/v1/navigation/amenities"+tt.query)
+			if resp.StatusCode != tt.status {
+				t.Fatalf("status = %d (%s), want %d", resp.StatusCode, body, tt.status)
+			}
+		})
+	}
+}
+
+// #109 AC: the route endpoint takes a place id destination — exactly one of
+// to / toPlace — and routes to the place's entry node like any destination.
+func TestRouteAcceptsPlaceDestination(t *testing.T) {
+	repo, places := amenityGraph()
+	app := newAmenityApp(t, repo, places)
+
+	resp, body := get(t, app, "/api/v1/navigation/route?from=I-1301/node-reception&toPlace=RESTROOM-01")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d (%s), want 200", resp.StatusCode, body)
+	}
+	var raw struct {
+		Nodes []struct {
+			ID string `json:"id"`
+		} `json:"nodes"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode %q: %v", body, err)
+	}
+	if last := raw.Nodes[len(raw.Nodes)-1].ID; last != "I-1301/node-corridor" {
+		t.Fatalf("route ends at %s, want I-1301/node-corridor", last)
+	}
+}
+
+func TestRouteDestinationParamValidation(t *testing.T) {
+	repo, places := amenityGraph()
+	app := newAmenityApp(t, repo, places)
+
+	tests := []struct {
+		name  string
+		query string
+	}{
+		{"both destinations", "?from=I-1301/node-reception&to=PHARMACY&toPlace=RESTROOM-01"},
+		{"neither destination", "?from=I-1301/node-reception"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, body := get(t, app, "/api/v1/navigation/route"+tt.query)
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status = %d (%s), want 400", resp.StatusCode, body)
+			}
+		})
+	}
 }

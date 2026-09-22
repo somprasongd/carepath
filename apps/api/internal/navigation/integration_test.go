@@ -34,7 +34,7 @@ func newRoutingService(t *testing.T) navigation.Service {
 	t.Cleanup(database.Close)
 	places := hospitalmap.NewService(hospitalmappostgres.New(database))
 	servicePoints := servicepoint.NewService(servicepointpostgres.New(database), places)
-	return navigation.NewService(navigationpostgres.New(database), servicePoints)
+	return navigation.NewService(navigationpostgres.New(database), servicePoints, places)
 }
 
 // The Happy Path demo journey's cross-floor leg — main entrance (ground) to

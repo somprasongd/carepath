@@ -1,5 +1,9 @@
+// Deep import on purpose: destination.ts must not pull the amenity card
+// (which reads floorplan) into a module cycle.
+import { amenityLabel, isAmenityKind } from '@/features/amenity/amenity'
 import { servicePointLabel, stepTitle, type Journey } from '@/features/visit'
 import { format, messagesFor, type Locale } from '@/i18n'
+import type { Place } from './queries'
 
 export type DestinationPlan = {
   /** AppBar title, e.g. "Directions to Medication pickup" in English. */
@@ -13,8 +17,10 @@ export type DestinationPlan = {
   floorLabel: string
   /** Stable SVG place id — the join key to data-place-id in the plan asset. */
   placeId: string
-  /** The destination's service point code — the `to` end of /navigation/route (#28). */
-  servicePointCode: string
+  /** The destination's service point code — the `to` end of /navigation/route (#28).
+   * Absent for an amenity destination (#109): amenity places have no service
+   * point, so the route rides `toPlace` on the placeId instead. */
+  servicePointCode?: string
   /** Floor-local SVG units of the place's entry node; the pin falls back to the room's centre when absent. */
   x?: number
   y?: number
@@ -88,5 +94,41 @@ export function navigatePlanForJourney(
     servicePointCode: servicePoint?.code ?? '',
     x: place.x,
     y: place.y,
+  }
+}
+
+/**
+ * The same destination-on-a-floor state for an amenity place (#109): the
+ * journey screen's while-you-wait card hands the navigate screen a
+ * `toPlace` id, and this turns the place row into a plan it can render —
+ * kind label for the name (catalog by code, ADR-0012), floor from the place,
+ * no service point, so the route rides toPlace. Unroutable places (no entry
+ * node) are as unsupported as unmapped service points are.
+ */
+export function amenityDestinationPlan(
+  place: Place | undefined,
+  locale: Locale,
+): NavigatePlan {
+  if (!place) return { state: 'no-destination' }
+  // Catalog by code, staff name as the fallback for an uncataloged kind —
+  // ADR-0012 §1's rule for every code-owned label.
+  const name = isAmenityKind(place.type) ? amenityLabel(place.type, locale) : place.name
+  const catalog = messagesFor(locale)
+  if (!place.entryNodeId) {
+    return { state: 'unsupported', title: format(catalog, 'navigate.routeTitle', { name }), name }
+  }
+  const floorLabel = place.floor
+    ? format(catalog, 'common.floor', { code: place.floor.code })
+    : place.floorId
+  return {
+    state: 'plan',
+    title: format(catalog, 'navigate.routeTitle', { name }),
+    name,
+    subtitle: format(catalog, 'navigate.subtitle', { floor: floorLabel, name, place: place.id }),
+    floorId: place.floorId,
+    floorLabel,
+    placeId: place.id,
+    x: place.x ?? undefined,
+    y: place.y ?? undefined,
   }
 }

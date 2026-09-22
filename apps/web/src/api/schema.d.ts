@@ -1742,14 +1742,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Shortest walkable route for the SVG overlay (#29). `from` is the current location's navigation node id — the nodeId of a location observation (e.g. I-1301/node-reception) — and `to` is the destination service point's code (same key as /api/v1/service-points/{code}); the server resolves it to the place's entry node before routing. */
+        /** @description Shortest walkable route for the SVG overlay (#29). `from` is the current location's navigation node id — the nodeId of a location observation (e.g. I-1301/node-reception). The destination is exactly one of `to` — a service point's code (same key as /api/v1/service-points/{code}) — or `toPlace`, a place id resolved to its entry node the same way (#109: how an amenity from /api/v1/navigation/amenities is routed; amenity places have no service point code). */
         get: {
             parameters: {
                 query: {
                     /** @description Globally unique navigation node id ("<floorId>/<localId>"). */
                     from: string;
-                    /** @description Destination service point code, e.g. PHARMACY. */
-                    to: string;
+                    /** @description Destination service point code, e.g. PHARMACY — exactly one of `to` or `toPlace` must be present. */
+                    to?: string;
+                    /** @description Destination place id, e.g. RESTROOM-01 — exactly one of `to` or `toPlace` must be present (#109). */
+                    toPlace?: string;
                     /** @description Skip edges not marked accessible (the stairs transitions) so wheelchair routes detour via the elevator instead (FR-20/US-09). Absent or false routes over the full graph. */
                     accessibleOnly?: boolean;
                 };
@@ -1768,7 +1770,7 @@ export interface paths {
                         "application/json": components["schemas"]["NavigationRoute"];
                     };
                 };
-                /** @description Missing or empty from/to, or accessibleOnly is not a boolean */
+                /** @description Missing from, missing or duplicated destination (to/toPlace), or accessibleOnly is not a boolean */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -1778,6 +1780,67 @@ export interface paths {
                     };
                 };
                 /** @description Unknown node or service point, destination without a mapped place, or no walkable path */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/navigation/amenities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Nearby amenities while the patient waits (#109 / FR-26): every amenity-typed place (restrooms, waiting areas, food stalls — the Place.type values hospitalmap counts as amenities) ranked by walking distance from one origin, nearest first. The origin is the same `from` the route endpoint takes — the current location's node id. Distances are authored SVG units, the unit NavigationRoute.totalDistance sums. Unreachable amenities are absent; none at all is an empty list, never an error. */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Globally unique navigation node id ("<floorId>/<localId>"). */
+                    from: string;
+                    /** @description Maximum amenities to return. */
+                    limit?: number;
+                    /** @description Rank by accessible routes only (stairs skipped) so a wheelchair user's nearest amenity is one they can actually walk to (FR-20). */
+                    accessibleOnly?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Amenities ranked nearest-first; empty when none is reachable */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AmenitySearch"];
+                    };
+                };
+                /** @description Missing from, limit out of range, or accessibleOnly is not a boolean */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Unknown origin node */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -2420,6 +2483,16 @@ export interface components {
             segments: components["schemas"]["NavEdge"][];
             totalDistance: number;
         };
+        /** @description The answer of GET /api/v1/navigation/amenities (#109) — amenity places ranked by walking distance from `from`, nearest first. Client display policy (which kinds to surface, the wait-long-enough gate) is the client's, per ADR-0012. */
+        AmenitySearch: {
+            from: string;
+            amenities: components["schemas"]["AmenityNearby"][];
+        };
+        /** @description One ranked amenity: the place in the same shape /api/v1/places serves (floor included, so floor labels need no second request) and its walking distance in authored SVG units — the unit NavigationRoute.totalDistance sums. */
+        AmenityNearby: {
+            place: components["schemas"]["Place"];
+            distance: number;
+        };
         /** @description One walkable point of the hospital. x/y are floor-local SVG units, so the overlay groups consecutive nodes by floorId and draws a polyline per floor. */
         NavNode: {
             id: string;
@@ -2460,7 +2533,7 @@ export interface components {
              * @description Place category from the hospital map.
              * @enum {string}
              */
-            type: "ROOM" | "COUNTER" | "WAITING_AREA" | "RESTROOM" | "ELEVATOR" | "STAIRWAY" | "RAMP" | "ENTRANCE" | "AMENITY";
+            type: "ROOM" | "COUNTER" | "WAITING_AREA" | "RESTROOM" | "ELEVATOR" | "STAIRWAY" | "RAMP" | "ENTRANCE" | "AMENITY" | "FOOD_STALL";
             x?: number;
             y?: number;
             entryNodeId?: string;

@@ -3,6 +3,7 @@ import { apiGet, apiGetText, apiPostAction, apiPostSvg } from '@/api/client'
 import type { components } from '@/api/schema'
 
 export type FloorPlanRef = components['schemas']['FloorPlanRef']
+export type Place = components['schemas']['Place']
 export type NavNode = components['schemas']['NavNode']
 export type StoredFloorPlan = components['schemas']['StoredFloorPlan']
 export type FloorPlanWarning = components['schemas']['FloorPlanWarning']
@@ -66,6 +67,26 @@ export function navNodesQueryOptions() {
 
 export function useNavNodes() {
   return useQuery(navNodesQueryOptions())
+}
+
+/**
+ * Every place on every floor (#109). Public hospital-map data — the same
+ * listing the places endpoint has always served — now needed by the patient
+ * flow: the amenity navigate entry point arrives as a `toPlace` link
+ * parameter, and the place row (floor, coordinates, entry node) turns it
+ * into a destination the navigate screen can draw. Places rarely change, so
+ * a minute of staleness is plenty.
+ */
+export function placesQueryOptions() {
+  return queryOptions({
+    queryKey: ['places'] as const,
+    queryFn: () => apiGet<Place[]>('/api/v1/places'),
+    staleTime: 60_000,
+  })
+}
+
+export function usePlaces() {
+  return useQuery(placesQueryOptions())
 }
 
 /**

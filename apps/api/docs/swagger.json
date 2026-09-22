@@ -1457,6 +1457,65 @@
                 }
             }
         },
+        "/api/v1/navigation/amenities": {
+            "get": {
+                "description": "#109/FR-26: amenity-typed places (restrooms, waiting areas, food stalls) ranked by walking distance from the origin node — one Dijkstra settle ranks them all. The origin is the current location's node id, the same `from` the route endpoint takes; unreachable amenities are absent, and no amenity at all is an empty list, never an error. Distances are authored SVG units, the unit NavigationRoute.totalDistance sums.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "navigation"
+                ],
+                "summary": "Search amenities near a location",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Current location node id (e.g. I-1301/node-reception)",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max amenities to return (default 12, max 50)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Rank by accessible routes only (stairs skipped, FR-20)",
+                        "name": "accessibleOnly",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/navigation.AmenitySearch"
+                        }
+                    },
+                    "400": {
+                        "description": "missing from, limit out of range, or accessibleOnly is not a boolean",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "unknown origin node",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/navigation/edges": {
             "get": {
                 "description": "#105/ADR-0015: the graph's directed, costed edges. Two-way connections are two rows (A→B and B→A) and a cross-floor transition is an edge whose endpoints sit on different floors, so this is the whole walkable graph, not a per-floor slice.",
@@ -1517,14 +1576,14 @@
         },
         "/api/v1/navigation/route": {
             "get": {
-                "description": "Shortest walkable route for the SVG overlay. from is the current location's navigation node id — the nodeId of a location observation (e.g. I-1301/node-reception); to is the destination service point's code, which the server resolves to the place's entry node before routing.",
+                "description": "Shortest walkable route for the SVG overlay. from is the current location's navigation node id — the nodeId of a location observation (e.g. I-1301/node-reception). The destination is exactly one of to (a service point's code, resolved to the place's entry node before routing) or toPlace (a place id, resolved the same way — how amenity destinations from /navigation/amenities are routed, #109).",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "navigation"
                 ],
-                "summary": "Get the walking route to a service point",
+                "summary": "Get the walking route to a service point or place",
                 "parameters": [
                     {
                         "type": "string",
@@ -1535,10 +1594,15 @@
                     },
                     {
                         "type": "string",
-                        "description": "Destination service point code (e.g. PHARMACY)",
+                        "description": "Destination service point code (e.g. PHARMACY) — exactly one of to or toPlace",
                         "name": "to",
-                        "in": "query",
-                        "required": true
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination place id (e.g. RESTROOM-01) — exactly one of to or toPlace",
+                        "name": "toPlace",
+                        "in": "query"
                     },
                     {
                         "type": "boolean",
@@ -1555,13 +1619,13 @@
                         }
                     },
                     "400": {
-                        "description": "missing from or to, or accessibleOnly is not a boolean",
+                        "description": "missing from, missing or duplicated destination, or accessibleOnly is not a boolean",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "unknown node or service point, destination without a mapped place, or no walkable path",
+                        "description": "unknown node, service point or place, destination without a mapped place, or no walkable path",
                         "schema": {
                             "$ref": "#/definitions/httpx.ErrorResponse"
                         }
@@ -2560,6 +2624,31 @@
                 "status": {
                     "type": "string",
                     "example": "ok"
+                }
+            }
+        },
+        "navigation.AmenityNearby": {
+            "type": "object",
+            "properties": {
+                "distance": {
+                    "type": "number"
+                },
+                "place": {
+                    "$ref": "#/definitions/hospitalmap.Place"
+                }
+            }
+        },
+        "navigation.AmenitySearch": {
+            "type": "object",
+            "properties": {
+                "amenities": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/navigation.AmenityNearby"
+                    }
+                },
+                "from": {
+                    "type": "string"
                 }
             }
         },
